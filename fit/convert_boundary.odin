@@ -3,6 +3,30 @@ package fit
 import "ingot:ui"
 
 @(private = "package")
+to_substrate :: proc(value: Substrate_Kind) -> ui.Substrate_Kind {
+	switch value {
+	case .None: return .None
+	case .Ruled: return .Ruled
+	case .Grid: return .Grid
+	case .Dots: return .Dots
+	case .Tooth: return .Tooth
+	}
+	unreachable()
+}
+
+@(private = "package")
+from_substrate :: proc(value: ui.Substrate_Kind) -> Substrate_Kind {
+	switch value {
+	case .None: return .None
+	case .Ruled: return .Ruled
+	case .Grid: return .Grid
+	case .Dots: return .Dots
+	case .Tooth: return .Tooth
+	}
+	unreachable()
+}
+
+@(private = "package")
 to_key :: proc(value: Key) -> ui.Key {
 	if result, ok := to_key_text(value); ok do return result
 	if result, ok := to_key_letter(value); ok do return result

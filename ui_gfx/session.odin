@@ -6,6 +6,8 @@ import "ingot:ui"
 Session_Config :: struct {
 	user_scale:        f32,
 	semantics_enabled: bool,
+	scale_metrics:     proc(scale: f32),
+	scale_invalidate:  proc(),
 }
 
 Session_Draw_Proc :: #type proc(session: ^Session, frame: ^ui.Ui_Frame, userdata: rawptr)
@@ -39,6 +41,7 @@ session_init_context :: proc(
 	ui.ui_runtime_init(&session.runtime)
 	adapter_init_context(&session.adapter, gfx_context, config.semantics_enabled)
 	ui.ui_runtime_apply_platform_dpi(&session.runtime, user_scale = config.user_scale)
+	ui.ui_runtime_set_scale_hooks(&session.runtime, config.scale_metrics, config.scale_invalidate)
 	if config.semantics_enabled do _ = ui.a11y_init(&session.runtime)
 	session.config = config
 	session.initialized = true

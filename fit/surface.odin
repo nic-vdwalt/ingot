@@ -69,7 +69,11 @@ Surface_Theme :: proc(surface: ^Surface) -> Theme {
 }
 
 Surface_Theme_Tokens :: proc(surface: ^Surface) -> Theme_Tokens {
-	theme := Surface_Theme(surface).inner
+	return theme_tokens(Surface_Theme(surface).inner)
+}
+
+@(private = "package")
+theme_tokens :: proc(theme: ui.Theme) -> Theme_Tokens {
 	return {
 		background_app = Color(theme.bg_app),
 		background_chat = Color(theme.bg_chat),
@@ -130,7 +134,7 @@ Surface_Theme_Tokens :: proc(surface: ^Surface) -> Theme_Tokens {
 		chalk = Color(theme.chalk),
 		highlighter = Color(theme.highlighter),
 		tape = Color(theme.tape_color),
-		substrate = Substrate_Kind(theme.substrate.kind),
+		substrate = from_substrate(theme.substrate.kind),
 		margin_rule = theme.substrate.margin_rule,
 	}
 }

@@ -560,7 +560,7 @@ Theme_Set_Substrate :: proc(theme: ^Theme, kind: Substrate_Kind, margin_rule: bo
 	assert(theme != nil, "Fit.Theme_Set_Substrate: nil theme")
 	ui.Theme_Set_Substrate(
 		&theme.inner,
-		{kind = ui.Substrate_Kind(kind), margin_rule = margin_rule},
+		{kind = to_substrate(kind), margin_rule = margin_rule},
 	)
 }
 Theme_Set_Reduced_Motion :: proc(theme: ^Theme, enabled: bool) {

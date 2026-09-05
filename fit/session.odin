@@ -6,11 +6,6 @@ import "ingot:ui_gfx"
 Session_Init :: proc(session: ^Session, config: Session_Config = {}) {
 	assert(session != nil && !session.inner.initialized, "Fit.Session_Init: invalid session")
 	ui_gfx.session_init(&session.inner, to_session_config(config))
-	ui.ui_runtime_set_scale_hooks(
-		ui_gfx.session_runtime(&session.inner),
-		config.scale_metrics,
-		config.scale_invalidate,
-	)
 }
 
 Session_Draw :: proc(session: ^Session, draw: Session_Draw_Proc, user_data: rawptr = nil) -> bool {
