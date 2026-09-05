@@ -1477,8 +1477,9 @@ draw_overlay_modal :: proc(surface: ^fit.Surface) {
 	body := fit.Surface_Modal_Begin(
 		surface,
 		&about_modal,
-		"Generic modal",
+		"Bottom modal sheet",
 		{fit.Px(surface, 420), fit.Px(surface, 190)},
+		{placement = .Bottom, dismiss_escape = true, dismiss_outside = true},
 	)
 	metrics := fit.Get_Metrics(surface)
 	fit.Text_Wrapped(

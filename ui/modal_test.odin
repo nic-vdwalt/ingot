@@ -10,7 +10,9 @@ modal_bottom_geometry_is_bounded :: proc(t: ^testing.T) {
 	for extent in extents {
 		for padding in paddings {
 			config := Modal_Config {
-				size = {200, 120}, screen = {40, 30, extent, extent}, placement = .Bottom,
+				size      = {200, 120},
+				screen    = {40, 30, extent, extent},
+				placement = .Bottom,
 			}
 			rect := modal_panel_rect(config, padding)
 			testing.expect(t, rect.w > 0 && rect.h > 0)
@@ -18,8 +20,11 @@ modal_bottom_geometry_is_bounded :: proc(t: ^testing.T) {
 			testing.expect(t, rect.x + rect.w <= 40 + extent)
 			testing.expect(t, rect.y + rect.h <= 30 + extent)
 			testing.expect_value(t, rect.x, 40 + (extent - rect.w) / 2)
-			testing.expect_value(t, rect.y + rect.h,
-				30 + extent - min(padding, (extent - rect.h) / 2))
+			testing.expect_value(
+				t,
+				rect.y + rect.h,
+				30 + extent - min(padding, (extent - rect.h) / 2),
+			)
 		}
 	}
 }

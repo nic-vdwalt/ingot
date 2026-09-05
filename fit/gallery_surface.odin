@@ -138,7 +138,7 @@ modal_config :: proc(surface: ^Surface, size: [2]i32, options: Modal_Options) ->
 		host = to_rect(options.host)
 	}
 	return {
-		placement = options.placement,
+		placement = ui.Modal_Placement(options.placement),
 		size = size,
 		screen = host,
 		dismiss = dismiss,

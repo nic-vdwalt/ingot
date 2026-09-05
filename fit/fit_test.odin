@@ -186,6 +186,12 @@ fit_surface_modal_builder_bridge_renders :: proc(t: ^testing.T) {
 		&builder,
 		fit_test_modal_draw,
 		&state,
+		options = {placement = .Bottom},
+	)
+	testing.expect_value(
+		t,
+		modal.inner.rect.y + modal.inner.rect.h,
+		i32(240) - ui.ui_frame_metrics(&frame).PADDING,
 	)
 	testing.expect_value(t, reason, Modal_Close_Reason.None)
 	testing.expect_value(t, state.calls, i32(1))

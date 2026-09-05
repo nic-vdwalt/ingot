@@ -10,6 +10,7 @@ Surface_Button :: proc(
 	rect: Rect,
 	style: Button_Style = .Secondary,
 	enabled: bool = true,
+	focus: Focus_Link = {},
 ) -> bool {
 	u := surface_ui(surface)
 	assert(widget != Widget_Id(0), "Fit.Surface_Button: zero widget")
@@ -19,6 +20,7 @@ Surface_Button :: proc(
 		label,
 		style,
 		enabled = enabled,
+		focus = focus.inner,
 		widget = ui.Widget_Id(widget),
 	)
 }
@@ -145,6 +147,7 @@ Surface_Radio :: proc(
 	value: i32,
 	selected: ^i32,
 	rect: Rect,
+	focus: Focus_Link = {},
 ) -> bool {
 	u := surface_ui(surface)
 	assert(widget != Widget_Id(0) && selected != nil, "Fit.Surface_Radio: invalid argument")
@@ -154,6 +157,7 @@ Surface_Radio :: proc(
 		label,
 		selected,
 		value,
+		focus = focus.inner,
 		widget = ui.Widget_Id(widget),
 	)
 }
