@@ -172,6 +172,25 @@ main :: proc() {
 graphics loop. It still yields only `fit.Builder`; it does not expose runtime,
 frame, adapter, paint, or platform internals.
 
+## Boundary maintenance contract
+
+`fit` owns the consumer vocabulary, `ui` owns renderer-independent behavior and
+layout, and `ui_gfx` owns graphics integration. New overloads adapt arguments to
+one canonical implementation; they must not duplicate widget behavior.
+
+Boundary types have different contracts:
+
+- Intentional aliases share one definition and use the existing API-layer
+  allowlist. Do not replace distinct consumer types with aliases for convenience.
+- Distinct enums map by meaning, not declaration order. Test every public case
+  and each flag individually as well as in combinations.
+- Value projections expose a selected public field set, not every backend field.
+- Binary storage boundaries retain their size, alignment, and layout checks.
+
+Builder actions dispatch in the activating render; delayed signals are consumed
+by a later build. Legacy bool outputs and borrowed Surface controls retain their
+existing timing. Overload unification must not erase those differences.
+
 ## API map contract
 
 The API map presents `ingot:fit` and `ingot:gfx` as parallel primary entry

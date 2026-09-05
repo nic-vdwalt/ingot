@@ -7,7 +7,12 @@ import "ingot:ui_gfx"
 @(private = "package")
 to_session_config :: proc(config: Session_Config) -> ui_gfx.Session_Config {
 	assert(config.user_scale >= 0, "Fit: negative user scale")
-	return {user_scale = config.user_scale, semantics_enabled = config.semantics_enabled}
+	return {
+		user_scale = config.user_scale,
+		semantics_enabled = config.semantics_enabled,
+		scale_metrics = config.scale_metrics,
+		scale_invalidate = config.scale_invalidate,
+	}
 }
 
 @(private = "package")

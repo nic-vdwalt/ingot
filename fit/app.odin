@@ -40,11 +40,6 @@ Init_Context :: proc(
 		)
 	}
 	if !initialized do return app_init_finish(app, callbacks, user_data, false)
-	ui.ui_runtime_set_scale_hooks(
-		ui_gfx.app_ui_runtime(&app.inner),
-		config.session.scale_metrics,
-		config.session.scale_invalidate,
-	)
 	return app_init_finish(app, callbacks, user_data, true)
 }
 
