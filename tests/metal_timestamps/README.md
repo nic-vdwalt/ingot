@@ -40,9 +40,9 @@ fragment stage, waits for it in the blit encoder, and performs only the unrelate
 nonzero post-boundary pairs, while retaining all 40 expected clear-only failures.
 Captures and manifests are `artifacts/timestamp-boundary-fence*.jsonl` and
 `artifacts/timestamp-boundary-fence*-manifest.json` (the first trial has no number).
-This is a candidate synchronization mechanism, not a production repair: it adds
-GPU work/serialization and still needs window, multi-command-buffer, delayed
-inspection, duration-semantics and overhead validation. Aesir remains the profiler.
+This historical synchronization candidate is not a production repair: later
+GPU-resolution controls below failed despite ordered boundary samples. It adds
+GPU work/serialization. Do not integrate it. Aesir remains the profiler.
 
 `--fence-boundary --split-commands` separates render and boundary encoders into
 80 actual command-buffer submissions for 40 cases. Two trials produced 80 ordered
@@ -80,5 +80,47 @@ The inspected v29.0.3 Metal command source still maps vertex-start to begin and
 fragment-end to end. Registry crate/source and binary provenance must still be
 verified before claiming an exact binary-source match.
 
-Step 1 remains in progress. Do not treat fixture completion as implementation of
-the six-step profiling plan.
+## Render-counter publication controls
+
+The current source resolves only render sample indices 0–3 on the GPU and compares
+those values with CPU resolution after completion. The measured interval is index
+0 (vertex start) through index 3 (fragment end), not the vertex-only pair 0/1.
+
+```sh
+swift tests/metal_timestamps/native.swift --gpu-resolve
+swift tests/metal_timestamps/native.swift --gpu-resolve --split-commands
+swift tests/metal_timestamps/native.swift --gpu-resolve --split-commands \
+  --resolve-after-completion
+swift tests/metal_timestamps/native.swift --gpu-resolve --fence-boundary --empty-fence
+```
+
+All are correctness-only controls. `--resolve-after-completion` waits on the CPU
+before submitting resolution; it is not a production repair. The fence-only
+control inserts no copy or dummy draw. Preserve existing artifacts when rerunning.
+
+| Artifact suffix after `artifacts/timestamp-render-` | Cases | GPU/CPU mismatches | Drawn reversed intervals |
+|---|---:|---:|---:|
+| `range-control.jsonl` | 40 | 40 | 32 |
+| `split-nowait-control.jsonl` | 40 | 9 | 1 |
+| `completed-control.jsonl` | 40 | 0 | 0 |
+| `completed-repeat.jsonl` | 40 | 0 | 0 |
+| `range-fence-only-control.jsonl` | 40 | 28 | 21 |
+
+All commands completed without errors. Both completed-render controls retain eight
+clear-only reversed intervals despite exact GPU/CPU agreement. The fence-only run
+has seven clear mismatches and one reversed GPU clear interval; its CPU samples
+have eight reversed clear intervals. Stale but ordered prior-pass arrays also
+occur, so checking only interval order cannot establish freshness.
+
+Source archive: `artifacts/timestamp-render-range-source.swift`, SHA-256
+`5c0a669410c8770752ca958c3baec32a1ef1e5ff3f4705b1d9e4f78181078467`.
+Each of the five JSONL artifacts has an adjacent `-postrun-manifest.json` containing
+capture/source/evaluator hashes, verified source identity, device, topology flags
+and automated results. These are explicitly post-run verification, not pre-build
+provenance; historical compiler and executable identities were not recorded.
+Prior source archives and manifests remain unchanged. See `investigation.md` for
+the documentation review and limits on attributing these mechanisms to game passes.
+
+Evidence retention does not complete the parent game-reproduction gate. Exact
+window/ocean replay, callback retirement, telemetry repair and Aesir qualification
+remain outstanding. No native control establishes production timing or 120 Hz.

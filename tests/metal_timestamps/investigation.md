@@ -135,6 +135,7 @@ own boundary counters. With identical source and workloads:
 | Separate command, no completion wait | 40 | 9 | 1 |
 | Separate command, render completed before resolve | 40 | 0 | 0 |
 | Repeat of completed-render control | 40 | 0 | 0 |
+| Same command, fragment fence only, no copy | 40 | 28 | 21 |
 
 All command statuses were completed without errors. In both completed-render
 runs, all eight clear-only cases still had reversed begin/end pairs, even though
@@ -161,12 +162,42 @@ still failed in the same-command fenced trial. Do not integrate that candidate a
 a production repair. No new fallback, dummy draw, timestamp clamp or vertex-end
 substitution is authorized by this finding.
 
-Next discriminating control: a separate resolve command submitted only after render
-completion, used solely to test publication/ordering. Compare all four counters and
-retain clear-only unwritten-stage behavior separately. Then inspect whether an
-explicit supported synchronization primitive can provide that visibility without a
-CPU stall or workload change. If not, expose unreliable timing rather than changing
-measured semantics invisibly.
+The completed-render control above has now passed its diagnostic comparison, not
+its production gate. The fence-only control still disagrees in 28/40 cases, with
+21 drawn reversed intervals, seven clear mismatches, one reversed GPU clear pair
+and eight reversed CPU clear pairs. All render and boundary commands completed
+without errors. No copy or other dummy workload was encoded. A fragment fence
+alone therefore does not establish counter freshness in this fixture.
+
+The measured interval compares start-vertex index 0 with end-fragment index 3,
+not vertex indices 0/1. In fence-only capture line 22, GPU samples are
+`[216304900438791,216304900450041,0,0]`; CPU fragment end is `216304900464541`.
+Line 3 instead returns a completely stale but ordered prior-draw array. Neither
+ordered vertex counters nor an ordered full array establishes current-pass freshness.
+
+The exact source is preserved as `artifacts/timestamp-render-range-source.swift`,
+with SHA `5c0a669410c8770752ca958c3baec32a1ef1e5ff3f4705b1d9e4f78181078467`.
+The fence-only capture is `artifacts/timestamp-render-range-fence-only-control.jsonl`,
+SHA `f18fd9663d800d60d28bed346717e8276139019c8c7c95e20778f77ac269a83c`.
+All five render-control captures have adjacent `-postrun-manifest.json` files.
+These record automated evaluator results, source/capture/evaluator hashes, device
+metadata and uniform topology flags. They are post-run verification, not pre-build
+provenance: historical Swift compiler and binary identities were not recorded.
+Swift does not link wgpu. Existing archives and comparison manifests are preserved.
+
+Apple's reviewed documentation distinguishes CPU resolution after pass completion
+from GPU blit resolution, without specifying a counter-publication fence requirement:
+- https://developer.apple.com/documentation/metal/converting-a-gpus-counter-data-into-a-readable-format
+- https://developer.apple.com/documentation/metal/mtlblitcommandencoder/resolvecounters(_:range:destinationbuffer:destinationoffset:)
+- https://developer.apple.com/documentation/metal/mtlcountersamplebuffer/resolvecounterrange(_:)
+- https://developer.apple.com/documentation/metal/mtlrendercommandencoder/samplecounters(samplebuffer:sampleindex:barrier:)
+
+Encoder-local sampling barriers do not isolate other passes. No explicit clear-only
+fragment-slot guarantee was found. These documentation gaps do not establish valid
+usage or a driver bug. Pinned Metal `command.rs:829–850` resolves on a blit encoder
+without a counter-specific fence; `991–1003` maps vertex start and fragment end.
+Exact game replay and supported interval semantics remain required before selecting
+any repair. If unavailable, expose unreliable timing rather than changing semantics.
 
 ## Callback dispatch audit: pinned sources, not a retirement proof
 
@@ -190,8 +221,8 @@ Current diagnostic regressions cover all reversed pairs, owned snapshot copies,
 multisampled render attachment counts, depth/clear metadata, and abandoned encoder
 handle reuse. Generic command and screenshot QueueSubmit calls now participate in
 the ordinal stream. These are metadata repairs, not GPU freshness or callback
-lifetime repairs. 345 gfx tests pass enabled and disabled; four Python evaluator
-tests pass. The full repository check currently stops at provenance approval for
+lifetime repairs. Previously verified: 346 gfx tests enabled and disabled;
+five Python evaluator tests pass. The full repository check currently stops at provenance approval for
 six already-tracked isolated build artifacts. The root style scan also traverses
 archived source trees; those archives must not be reformatted as production code.
 
@@ -207,5 +238,8 @@ archived source trees; those archives must not be reformatted as production code
 - Concurrent repository revisions changed during investigation. Capture-specific
   source manifests, not current HEAD alone, must be used for reproducibility.
 
-Verification so far: 342 Ingot tests with diagnostics enabled and disabled; focused
-ForgeCore identity decode test; four Python evaluator tests. No 120 Hz conclusion.
+Verification so far: 346 Ingot tests with diagnostics enabled and disabled; focused
+ForgeCore identity decode test; 62 Aesir memwatch tests; five Python evaluator tests.
+The Aesir startup-missing-sidecar regression reproduces a persistent read error
+after later successful reads, but neither fixes production collection nor proves
+the historical capture's error was ENOENT. No 120 Hz conclusion.
