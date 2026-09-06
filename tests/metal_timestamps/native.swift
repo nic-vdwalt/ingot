@@ -13,6 +13,8 @@ let fenceBoundary = CommandLine.arguments.contains("--fence-boundary")
 let splitCommands = CommandLine.arguments.contains("--split-commands")
 let emptyFence = CommandLine.arguments.contains("--empty-fence")
 let gpuResolve = CommandLine.arguments.contains("--gpu-resolve")
+let resolveAfterCompletion = CommandLine.arguments.contains("--resolve-after-completion")
+precondition(!resolveAfterCompletion || (gpuResolve && splitCommands))
 let resolvedCounters = device.makeBuffer(length: 48, options: .storageModeShared)!
 precondition(!emptyFence || fenceBoundary)
 let boundaryFence = device.makeFence()!
@@ -112,6 +114,10 @@ for fresh in [false, true] {
             if splitCommands {
                 command.commit()
                 commandSubmissions += 1
+                if resolveAfterCompletion {
+                    command.waitUntilCompleted()
+                    precondition(command.status == .completed && command.error == nil)
+                }
             }
             let blitDescriptor = MTLBlitPassDescriptor()
             let blitSamples = blitDescriptor.sampleBufferAttachments[0]!
@@ -134,7 +140,7 @@ for fresh in [false, true] {
                           destinationBytesPerImage: 640 * 480 * 4)
             }
             if gpuResolve {
-                blit.resolveCounters(counters, range: 0..<6,
+                blit.resolveCounters(counters, range: 0..<4,
                                      destinationBuffer: resolvedCounters, destinationOffset: 0)
             }
             blit.endEncoding()
@@ -146,7 +152,7 @@ for fresh in [false, true] {
             let data = try counters.resolveCounterRange(0..<6)!
             let ticks = data.withUnsafeBytes { Array($0.bindMemory(to: UInt64.self)) }
             let gpuTicks = gpuResolve ? Array(UnsafeBufferPointer(
-                start: resolvedCounters.contents().assumingMemoryBound(to: UInt64.self), count: 6)) : []
+                start: resolvedCounters.contents().assumingMemoryBound(to: UInt64.self), count: 4)) : []
             try emit(["kind": "sample", "case": name, "fresh": fresh,
                       "repetition": repetition, "submission": submission,
                       "draw_encoded": name != "clear", "ticks": Array(ticks.prefix(4)),
@@ -154,6 +160,7 @@ for fresh in [false, true] {
                       "dependent_boundary": dependentBoundary,
                       "fence_boundary": fenceBoundary, "empty_fence": emptyFence,
                       "split_commands": splitCommands, "gpu_resolve": gpuResolve,
+                      "resolve_after_completion": resolveAfterCompletion,
                       "gpu_resolved_ticks": gpuTicks,
                       "command_submissions": commandSubmissions,
                       "boundary_status": boundaryCommand.status.rawValue,

@@ -46,7 +46,8 @@ def evaluate(records):
     drawn_resolve_reversed = 0
     for sample in resolved:
         gpu_ticks = sample["gpu_resolved_ticks"]
-        assert len(gpu_ticks) == 6, sample
+        assert len(gpu_ticks) in (4, 6), sample
+        assert all(isinstance(tick, int) and tick >= 0 for tick in gpu_ticks), sample
         resolve_mismatches += gpu_ticks[:4] != sample["ticks"]
         drawn_resolve_reversed += sample["case"] != "clear" and gpu_ticks[3] < gpu_ticks[0]
     return {"submissions": len(samples), "command_submissions": command_submissions,

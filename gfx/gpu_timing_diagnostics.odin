@@ -14,6 +14,7 @@ _gpu_timing_diagnostic_render_pass :: proc(
 	pass: wg.RenderPassEncoder,
 	color: wg.RenderPassColorAttachment,
 	target: ^Gpu_3D_Target,
+	depth: wg.RenderPassDepthStencilAttachment = {},
 ) {
 	assert(ctx != nil)
 	when GPU_TIMING_DIAGNOSTICS {
@@ -35,32 +36,46 @@ _gpu_timing_diagnostic_render_pass :: proc(
 			target.texture.texture.id,
 			target.texture.depth.id,
 		)
+		bindings := &ctx.gpu_timing.diagnostics[0].bindings[ctx.gpu_timing.active_slot]
+		record := &bindings[writes.beginningOfPassWriteIndex / 2].record
+		record.sample_count = _gpu_3d_sample_count(target.antialiasing)
+		record.depth_load = depth.depthLoadOp
+		record.depth_store = depth.depthStoreOp
+		record.depth_clear = depth.depthClearValue
+		record.depth_read_only = depth.depthReadOnly
+		record.color_clear = color.clearValue
 	}
 }
 
 Gpu_Timing_Diagnostic :: struct {
-	epoch:           u64,
-	frame:           u64,
-	generation:      u64,
-	map_request:     u64,
-	encoder_id:      u64,
-	submit_ordinal:  u64,
-	resolve_ordinal: u64,
-	begin_tick:      u64,
-	end_tick:        u64,
-	draw_count:      u32,
-	query_begin:     u32,
-	slot_index:      u32,
-	load:            wg.LoadOp,
-	store:           wg.StoreOp,
-	label:           Gpu_Timing_Label,
-	width:           u32,
-	height:          u32,
-	format:          wg.TextureFormat,
-	depth_format:    wg.TextureFormat,
-	sample_count:    u32,
-	callback_status: wg.MapAsyncStatus,
-	collection_id:   u64,
+	epoch:              u64,
+	frame:              u64,
+	generation:         u64,
+	map_request:        u64,
+	encoder_id:         u64,
+	submit_ordinal:     u64,
+	resolve_ordinal:    u64,
+	resolve_encoder_id: u64,
+	begin_tick:         u64,
+	end_tick:           u64,
+	draw_count:         u32,
+	query_begin:        u32,
+	slot_index:         u32,
+	load:               wg.LoadOp,
+	store:              wg.StoreOp,
+	label:              Gpu_Timing_Label,
+	width:              u32,
+	height:             u32,
+	format:             wg.TextureFormat,
+	depth_format:       wg.TextureFormat,
+	depth_load:         wg.LoadOp,
+	depth_store:        wg.StoreOp,
+	depth_clear:        f32,
+	depth_read_only:    wg.Bool,
+	color_clear:        wg.Color,
+	sample_count:       u32,
+	callback_status:    wg.MapAsyncStatus,
+	collection_id:      u64,
 }
 
 Gpu_Timing_Diagnostic_Binding :: struct {
@@ -86,6 +101,8 @@ Gpu_Timing_Diagnostic_Snapshot :: struct {
 	failures:          [GPU_TIMING_DIAGNOSTIC_CAPACITY]Gpu_Timing_Diagnostic,
 	failure_count:     u32,
 	dropped:           u64,
+	encoder_overflow: u64,
+	missing_encoder: u64,
 	categories:        [GPU_TIMING_DIAGNOSTIC_CAPACITY]Gpu_Timing_Diagnostic_Category,
 	category_count:    u32,
 	category_overflow: u64,
@@ -103,6 +120,8 @@ Gpu_Timing_Diagnostics :: struct {
 	submit_ordinal:    u64,
 	failure_count:     u32,
 	dropped:           u64,
+	encoder_overflow: u64,
+	missing_encoder: u64,
 	resolve_encoder:   [GPU_TIMING_FRAME_SLOTS]wg.CommandEncoder,
 	resolve_ordinal:   [GPU_TIMING_FRAME_SLOTS]u64,
 }
@@ -116,6 +135,8 @@ context_gpu_timing_diagnostics :: proc(ctx: ^Context) -> Gpu_Timing_Diagnostic_S
 			failures = state.failures,
 			failure_count = state.failure_count,
 			dropped = state.dropped,
+			encoder_overflow = state.encoder_overflow,
+			missing_encoder = state.missing_encoder,
 			categories = state.categories,
 			category_count = state.category_count,
 			category_overflow = state.category_overflow,
@@ -134,7 +155,8 @@ _gpu_timing_diagnostic_attachment :: proc(
 	when GPU_TIMING_DIAGNOSTICS {
 		if ctx.gpu_timing.active_slot < 0 do return
 		assert(query_begin < GPU_TIMING_QUERY_COUNT)
-		record := &ctx.gpu_timing.diagnostics[0].bindings[ctx.gpu_timing.active_slot][query_begin / 2].record
+		bindings := &ctx.gpu_timing.diagnostics[0].bindings[ctx.gpu_timing.active_slot]
+		record := &bindings[query_begin / 2].record
 		if color_id == 0 {
 			record.width = ctx.config.width
 			record.height = ctx.config.height
@@ -166,7 +188,7 @@ _gpu_timing_diagnostic_encoder_created :: proc(
 			entry = {encoder, state.encoder_next}
 			return
 		}
-		state.dropped += 1
+		state.encoder_overflow += 1
 	}
 }
 
@@ -176,8 +198,19 @@ _gpu_timing_diagnostic_encoder_retire :: proc(
 ) {
 	assert(state != nil)
 	when GPU_TIMING_DIAGNOSTICS {
+		if encoder == nil do return
 		for &entry in state.encoders {
 			if entry.handle == encoder do entry = {}
+		}
+		for &bindings in state.bindings {
+			for &binding in bindings {
+				if binding.encoder != encoder do continue
+				binding.encoder = nil
+				binding.pass = nil
+			}
+		}
+		for &pending in state.resolve_encoder {
+			if pending == encoder do pending = nil
 		}
 	}
 }
@@ -210,7 +243,7 @@ _gpu_timing_diagnostic_bind :: proc(
 				break
 			}
 		}
-		if identity == 0 do state.dropped += 1
+		if identity == 0 do state.missing_encoder += 1
 		state.bindings[slot][pair] = {
 			encoder = encoder,
 			pass = pass,
@@ -239,10 +272,17 @@ _gpu_timing_diagnostic_submit :: proc(state: ^Gpu_Timing_Diagnostics, encoder: w
 	when GPU_TIMING_DIAGNOSTICS {
 		state.submit_ordinal += 1
 		ensure(state.submit_ordinal != 0)
-		_gpu_timing_diagnostic_encoder_retire(state, encoder)
 		for &pending, index in state.resolve_encoder {
 			if pending == encoder {
 				state.resolve_ordinal[index] = state.submit_ordinal
+				identity: u64
+				for entry in state.encoders {
+					if entry.handle == encoder do identity = entry.id
+				}
+				if identity == 0 do state.missing_encoder += 1
+				for &binding in state.bindings[index] {
+					binding.record.resolve_encoder_id = identity
+				}
 				pending = nil
 			}
 		}
@@ -255,6 +295,7 @@ _gpu_timing_diagnostic_submit :: proc(state: ^Gpu_Timing_Diagnostics, encoder: w
 				}
 			}
 		}
+		_gpu_timing_diagnostic_encoder_retire(state, encoder)
 	}
 }
 

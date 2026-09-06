@@ -1,0 +1,14 @@
+== Odin toolchain ==
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
+Odin toolchain: dev-2026-08-nightly:902106f
+== repository hygiene ==
+large tracked file lacks provenance approval: artifacts/timing-odin-control/odin
+large tracked file lacks provenance approval: artifacts/timing-source-control/build/game.dylib
+large tracked file lacks provenance approval: artifacts/timing-source-control/build/game_45950_0.dylib
+large tracked file lacks provenance approval: artifacts/timing-source-control/build/game_47743_0.dylib
+large tracked file lacks provenance approval: artifacts/timing-source-control/game.dylib
+large tracked file lacks provenance approval: artifacts/timing-vendor-control/wgpu/lib/wgpu-macos-aarch64-release/lib/libwgpu_native.a

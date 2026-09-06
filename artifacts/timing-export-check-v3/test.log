@@ -1,0 +1,178 @@
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/planet_waterfield_test.odin(7:2) Warning: Declaration of 'field' may cause a stack overflow due to its type 'Planet_Waterfield' having a size of 262240 bytes 
+	field: Planet_Waterfield 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/client/ruins_test.odin(9:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: shared.World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(11:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/planet_waterfield_test.odin(24:2) Warning: Declaration of 'field' may cause a stack overflow due to its type 'Planet_Waterfield' having a size of 262240 bytes 
+	field: Planet_Waterfield 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(24:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/planet_waterfield_test.odin(34:2) Warning: Declaration of 'field' may cause a stack overflow due to its type 'Planet_Waterfield' having a size of 262240 bytes 
+	field: Planet_Waterfield 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/client/ruins_test.odin(30:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: shared.World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(43:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/planet_waterfield_test.odin(50:2) Warning: Declaration of 'field' may cause a stack overflow due to its type 'Planet_Waterfield' having a size of 262240 bytes 
+	field: Planet_Waterfield 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/climate_radiation_test.odin(49:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(55:2) Warning: Declaration of 'field' may cause a stack overflow due to its type 'Planet_Waterfield' having a size of 262240 bytes 
+	field: Planet_Waterfield 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(55:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/client/ruins_test.odin(50:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: shared.World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(75:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(90:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(99:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(106:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(123:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(154:2) Warning: Declaration of 'world_a' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_a: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(155:2) Warning: Declaration of 'world_b' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_b: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(138:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(160:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(186:2) Warning: Declaration of 'world_a' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_a, world_b: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(186:11) Warning: Declaration of 'world_b' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_a, world_b: World 
+	         ^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(206:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(274:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/waterfield_test.odin(227:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(321:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(333:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(364:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(408:2) Warning: Declaration of 'occupied_world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	occupied_world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(438:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(488:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(535:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(580:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(612:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/ocean_test.odin(585:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(661:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(679:2) Warning: Declaration of 'world_a' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_a: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(680:2) Warning: Declaration of 'world_b' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_b: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(720:3) Warning: Declaration of 'world_a' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_a, world_b: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(720:12) Warning: Declaration of 'world_b' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_a, world_b: World 
+	         ^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(737:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(760:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(796:3) Warning: Declaration of 'world_a' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_a: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(797:3) Warning: Declaration of 'world_b' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_b: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(828:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(855:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(873:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(923:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(951:3) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/terrain_test.odin(885:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(992:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(1035:2) Warning: Declaration of 'world_a' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_a, world_b: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/sim_test.odin(1035:11) Warning: Declaration of 'world_b' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world_a, world_b: World 
+	         ^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/terrain_test.odin(943:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+/Users/nicolasvanderwalt_1/Development/git/ingot/artifacts/timing-export-check-v3/shared/terrain_test.odin(1030:2) Warning: Declaration of 'world' may cause a stack overflow due to its type 'World' having a size of 303056 bytes 
+	world: World 
+	^ 
+[INFO ] --- [2026-09-06 16:40:41] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 16:40:41] The random seed sent to every test is: 7819237745617. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 16:40:41] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 16:40:41] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 1 test in 1.662ms. The test was successful.
+

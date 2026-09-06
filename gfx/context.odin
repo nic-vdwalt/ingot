@@ -23,7 +23,7 @@ context_begin_gpu_commands_named :: proc(ctx: ^Context, name: string) -> (Gpu_Co
 	assert(ctx.lifecycle == .Ready, "context_begin_gpu_commands: context is not ready")
 	assert(ctx.device != nil, "context_begin_gpu_commands: initialized context requires device")
 	assert(!ctx.frame.has_frame, "context_begin_gpu_commands: frame is open")
-	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
+	encoder := _gpu_timing_command_encoder(ctx, name)
 	if encoder == nil do return {}, false
 	return {
 			owner = ctx,
@@ -45,8 +45,19 @@ context_submit_gpu_commands :: proc(commands: ^Gpu_Command_List) -> bool {
 	if commands.epoch != commands.owner.epoch do return false
 	_gpu_timing_encoder_end(commands.owner, commands.encoder, commands.timing)
 	command := wg.CommandEncoderFinish(commands.encoder, nil)
-	if command == nil do return false
+	if command == nil {
+		when GPU_TIMING_DIAGNOSTICS {
+			_gpu_timing_diagnostic_encoder_retire(
+				&commands.owner.gpu_timing.diagnostics[0],
+				commands.encoder,
+			)
+		}
+		return false
+	}
 	wg.QueueSubmit(commands.owner.queue, {command})
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_diagnostic_submit(&commands.owner.gpu_timing.diagnostics[0], commands.encoder)
+	}
 	wg.CommandBufferRelease(command)
 	wg.CommandEncoderRelease(commands.encoder)
 	commands^ = {}

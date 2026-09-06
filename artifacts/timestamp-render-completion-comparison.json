@@ -1,0 +1,76 @@
+{
+  "timestamp-render-range-control": {
+    "sha256": "0bb5708e76047eb63517ba0b7229564c694dc513772dac8b350da38ccebf0060",
+    "counts": {
+      "cases": 40,
+      "draw_mismatch": 8,
+      "draw_reversed": 8,
+      "clear_mismatch": 8,
+      "clipped_mismatch": 8,
+      "clipped_reversed": 8,
+      "discard_mismatch": 8,
+      "discard_reversed": 8,
+      "depth_mismatch": 8,
+      "depth_reversed": 8
+    },
+    "device": {
+      "blit_sampling": false,
+      "device": "Apple M2 Max",
+      "draw_sampling": false,
+      "kind": "device",
+      "os": "Version 15.6.1 (Build 24G90)",
+      "source_sha256": "5c0a669410c8770752ca958c3baec32a1ef1e5ff3f4705b1d9e4f78181078467",
+      "stage_sampling": true
+    }
+  },
+  "timestamp-render-split-nowait-control": {
+    "sha256": "8888846ab0bb357681f1b2137e94fea20de02a4591c791fe64ec7a0f979dc364",
+    "counts": {
+      "cases": 40,
+      "clear_mismatch": 8,
+      "draw_mismatch": 1,
+      "draw_reversed": 1
+    },
+    "device": {
+      "blit_sampling": false,
+      "device": "Apple M2 Max",
+      "draw_sampling": false,
+      "kind": "device",
+      "os": "Version 15.6.1 (Build 24G90)",
+      "source_sha256": "5c0a669410c8770752ca958c3baec32a1ef1e5ff3f4705b1d9e4f78181078467",
+      "stage_sampling": true
+    }
+  },
+  "timestamp-render-completed-control": {
+    "sha256": "1530546bab8e827913b8713b69e6502f3417282e0f2ff62e93a8c1ae00739cea",
+    "counts": {
+      "cases": 40,
+      "clear_reversed": 8
+    },
+    "device": {
+      "blit_sampling": false,
+      "device": "Apple M2 Max",
+      "draw_sampling": false,
+      "kind": "device",
+      "os": "Version 15.6.1 (Build 24G90)",
+      "source_sha256": "5c0a669410c8770752ca958c3baec32a1ef1e5ff3f4705b1d9e4f78181078467",
+      "stage_sampling": true
+    }
+  },
+  "timestamp-render-completed-repeat": {
+    "sha256": "3cebdea7ac4ce0542017ac77abdabd0753e7402164cee63b2ea8802d1bdb1b86",
+    "counts": {
+      "cases": 40,
+      "clear_reversed": 8
+    },
+    "device": {
+      "blit_sampling": false,
+      "device": "Apple M2 Max",
+      "draw_sampling": false,
+      "kind": "device",
+      "os": "Version 15.6.1 (Build 24G90)",
+      "source_sha256": "5c0a669410c8770752ca958c3baec32a1ef1e5ff3f4705b1d9e4f78181078467",
+      "stage_sampling": true
+    }
+  }
+}

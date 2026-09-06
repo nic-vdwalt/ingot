@@ -130,7 +130,7 @@ _screenshot_copy :: proc(
 		&{usage = {.CopyDst, .MapRead}, size = u64(padded_bpr * height)},
 	)
 	if staging == nil do return nil
-	encoder := wg.DeviceCreateCommandEncoder(ctx.device, nil)
+	encoder := _gpu_timing_command_encoder(ctx, "screenshot")
 	if encoder == nil {
 		wg.BufferRelease(staging)
 		return nil
@@ -146,7 +146,18 @@ _screenshot_copy :: proc(
 	extent := wg.Extent3D{u32(width), u32(height), 1}
 	wg.CommandEncoderCopyTextureToBuffer(encoder, &source, &destination, &extent)
 	command := wg.CommandEncoderFinish(encoder, nil)
+	if command == nil {
+		when GPU_TIMING_DIAGNOSTICS {
+			_gpu_timing_diagnostic_encoder_retire(&ctx.gpu_timing.diagnostics[0], encoder)
+		}
+		wg.CommandEncoderRelease(encoder)
+		wg.BufferRelease(staging)
+		return nil
+	}
 	wg.QueueSubmit(ctx.queue, {command})
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_diagnostic_submit(&ctx.gpu_timing.diagnostics[0], encoder)
+	}
 	wg.CommandBufferRelease(command)
 	wg.CommandEncoderRelease(encoder)
 	return staging

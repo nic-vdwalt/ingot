@@ -1609,7 +1609,7 @@ context_begin_gpu_3d_named :: proc(
 			timestampWrites = writes.querySet != nil ? &writes : nil,
 		},
 	)
-	_gpu_timing_diagnostic_render_pass(ctx, writes, encoder, pass, color, target)
+	_gpu_timing_diagnostic_render_pass(ctx, writes, encoder, pass, color, target, depth)
 	resources.next_pass_generation += 1
 	if resources.next_pass_generation == 0 do resources.next_pass_generation = 1
 	resources.active_pass_generation = resources.next_pass_generation

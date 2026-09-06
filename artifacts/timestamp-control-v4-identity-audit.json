@@ -1,0 +1,44 @@
+{
+  "scope": "Post-capture identity audit of v4; not pre-build immutable provenance",
+  "revision": "6aed50955d934ac36049ba8d002034841633ae02",
+  "build_command": "WGPU_NATIVE_VERSION=v29.0.1.1 cargo build --release --locked",
+  "rustc": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+  "registry_sources_verified": {
+    "wgpu-hal": {
+      "version": "29.0.3",
+      "package_checksum": "31f8e1a9e7a8512f276f7c62e018c7fa8d60954303fed2e5750114332049193f",
+      "verified_files": 84
+    },
+    "wgpu-core": {
+      "version": "29.0.3",
+      "package_checksum": "02da3ad1b568337f25513b317870960ef87073ea0945502e44b864b67a8c77b7",
+      "verified_files": 84
+    },
+    "wgpu-types": {
+      "version": "29.0.3",
+      "package_checksum": "a9bcc31518a0e9735aefebedb5f7a9ef3ed1c42549c9f4c882fa9060ceaac639",
+      "verified_files": 35
+    }
+  },
+  "build_used_vendor_replacement": false,
+  "installed_artifact_source_proven": false,
+  "compiled_source_immutability_proven": false,
+  "sha256": {
+    "artifacts/wgpu-native-control/target/release/libwgpu_native.a": "d923b0330e61053baac096a457ce14e8ac27a1e591336ecfbf428486c1feb7b6",
+    "artifacts/wgpu-native-control/Cargo.lock": "9f780c3e7e792c19ae22e708cf899eb177b5696c9ab61215c6ae235adcecbdb0",
+    "artifacts/wgpu-native-control/Cargo.toml": "19dcd681749325f7b5a8b12f524188d0cfa079ea1d76beb8f251e17bb77164cf",
+    "artifacts/timing-source-control/planetforger_timing.bin": "b607171e4b80d7d300c5626564abdf612a5b365aad5a9eab8a711bcd4b82fc11",
+    "artifacts/timing-source-control/build/game.dylib": "8146074b905fb7e1d50b46dd44e11759a1f5ee1bc64d50ed2cb853798bb38751",
+    "artifacts/timestamp-aesir-capture": "9d880174ca87945bc79073c5e2d2817f79b90f00a38793dc0d078363fd1bc6b0",
+    "artifacts/timing-odin-control/odin": "5baf1357026c5eab3e6a729f951e9caeacd192df2bf7a5be58107cb830f9110b",
+    "artifacts/timestamp-control-v4.tel": "664deb340b0e0f1e1a77ca19a9679ffed0f93bd58873e46228535a1d04a6deb4",
+    "artifacts/timestamp-control-v4.tel.timing.json": "012f78c9a86292cbb1ce7f35b1b34f9bd8c96a27c22f7d5f4fb193de4ebd59b5",
+    "artifacts/aesir-profile-1788705605-49211-318566150224791.jsonl": "5484ebd7673ce6b92ec481eb55b6b6f29bca0933cc9854787215be87b3b2600f"
+  },
+  "limitations": [
+    "Dependency exports and source snapshot predate tagged relink.",
+    "Source archive taken after initial compilation; loaded assets and foreign inputs not exhaustively archived.",
+    "Aesir executable capture-time source revision not established.",
+    "Current hashes identify surviving artifacts, not independent proof they were unchanged since capture."
+  ]
+}

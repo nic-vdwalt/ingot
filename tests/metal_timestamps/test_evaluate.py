@@ -49,6 +49,25 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(result["post_boundary_missing"], 1)
         self.assertEqual(result["post_boundary_overlapping"], 1)
 
+    def test_gpu_resolve_current_and_prior_samples(self):
+        for width in (4, 6):
+            samples = matrix()
+            for sample in samples:
+                sample["gpu_resolve"] = True
+                sample["gpu_resolved_ticks"] = sample["ticks"] + [0] * (width - 4)
+            result = evaluate(samples)
+            self.assertEqual(result["gpu_resolve_mismatches"], 0)
+            self.assertEqual(result["drawn_gpu_resolve_reversed"], 0)
+            self.assertEqual(result["known_clear_failures"], 8)
+            samples[2]["gpu_resolved_ticks"] = samples[0]["gpu_resolved_ticks"][:]
+            result = evaluate(samples)
+            self.assertEqual(result["gpu_resolve_mismatches"], 1)
+            self.assertEqual(result["drawn_gpu_resolve_reversed"], 0)
+            samples[2]["gpu_resolved_ticks"][0] = samples[2]["ticks"][0]
+            result = evaluate(samples)
+            self.assertEqual(result["drawn_gpu_resolve_reversed"], 1)
+            self.assertFalse(result["production_repair_validated"])
+
     def test_rejects_incomplete_or_failed_submissions(self):
         samples = matrix()
         for field, value in (("command_submissions", 1), ("boundary_status", 5),
