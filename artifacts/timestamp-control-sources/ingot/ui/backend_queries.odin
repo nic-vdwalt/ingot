@@ -1,0 +1,243 @@
+package ui
+
+frame_input :: proc(frame: ^Ui_Frame) -> ^Ui_Input {
+	assert(frame != nil, "frame_input: nil frame")
+	if frame.input == nil do return &frame.input_default
+	return frame.input
+}
+
+frame_viewport :: proc(frame: ^Ui_Frame) -> Rect_I32 {
+	assert(frame != nil, "frame_viewport: nil frame")
+	input := frame_input(frame)
+	return {0, 0, i32(input.screen_size.x), i32(input.screen_size.y)}
+}
+
+frame_time :: proc(frame: ^Ui_Frame) -> f32 {
+	return frame_input(frame).frame_time
+}
+
+frame_timestamp :: proc(frame: ^Ui_Frame) -> f64 {
+	return frame_input(frame).time
+}
+
+frame_dpi_scale :: proc(frame: ^Ui_Frame) -> f32 {
+	return frame_input(frame).dpi_scale
+}
+
+frame_fps :: proc(frame: ^Ui_Frame) -> i32 {
+	return frame_input(frame).fps
+}
+
+frame_monitor_refresh :: proc(frame: ^Ui_Frame) -> i32 {
+	return frame_input(frame).monitor_refresh
+}
+
+get_mouse_position :: proc(frame: ^Ui_Frame) -> Vector2 {
+	return frame_input(frame).mouse_position
+}
+
+get_mouse_delta :: proc(frame: ^Ui_Frame) -> Vector2 {
+	return frame_input(frame).mouse_delta
+}
+
+frame_pointer_events :: proc(frame: ^Ui_Frame) -> []Pointer_Event {
+	assert(frame != nil, "frame_pointer_events: nil frame")
+	input := frame_input(frame)
+	assert(
+		input.pointer_event_count >= 0 && input.pointer_event_count <= INPUT_POINTER_EVENT_CAP,
+		"frame_pointer_events: pointer event count out of range",
+	)
+	return input.pointer_events[:input.pointer_event_count]
+}
+
+frame_pointer_events_overflowed :: proc(frame: ^Ui_Frame) -> bool {
+	assert(frame != nil, "frame_pointer_events_overflowed: nil frame")
+	return frame_input(frame).pointer_events_overflowed
+}
+
+get_mouse_wheel_move :: proc(frame: ^Ui_Frame) -> f32 {
+	if !modal_keyboard_visible(frame) do return 0
+	return frame_input(frame).mouse_wheel.y
+}
+
+get_mouse_wheel_move_v :: proc(frame: ^Ui_Frame) -> Vector2 {
+	if !modal_keyboard_visible(frame) do return {}
+	return frame_input(frame).mouse_wheel
+}
+
+is_key_pressed :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
+	return(
+		modal_keyboard_visible(frame) &&
+		!modal_key_consumed(frame, key, .Pressed) &&
+		input_key_pressed(frame_input(frame), key) \
+	)
+}
+
+is_key_pressed_repeat :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
+	return(
+		modal_keyboard_visible(frame) &&
+		!modal_key_consumed(frame, key, .Repeated) &&
+		input_key_pressed_repeat(frame_input(frame), key) \
+	)
+}
+
+// is_key_pressed_or_repeat is the binding every navigation key must use. The
+// platform layer reports the initial keystroke and the auto-repeat ticks as
+// two separate events (GLFW PRESS lands in keys_pressed, REPEAT in
+// keys_repeat), so a widget that reads only one of them either drops the first
+// tap or never repeats while the key is held.
+is_key_pressed_or_repeat :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
+	return is_key_pressed(frame, key) || is_key_pressed_repeat(frame, key)
+}
+
+is_key_released :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
+	return(
+		modal_keyboard_visible(frame) &&
+		!modal_key_consumed(frame, key, .Released) &&
+		input_key_released(frame_input(frame), key) \
+	)
+}
+
+is_key_down :: proc(frame: ^Ui_Frame, key: KeyboardKey) -> bool {
+	return modal_keyboard_visible(frame) && input_key_down(frame_input(frame), key)
+}
+
+is_mouse_button_pressed :: proc(frame: ^Ui_Frame, button: MouseButton) -> bool {
+	return modal_keyboard_visible(frame) && input_mouse_pressed(frame_input(frame), button)
+}
+
+is_mouse_button_released :: proc(frame: ^Ui_Frame, button: MouseButton) -> bool {
+	return modal_keyboard_visible(frame) && input_mouse_released(frame_input(frame), button)
+}
+
+is_mouse_button_down :: proc(frame: ^Ui_Frame, button: MouseButton) -> bool {
+	return modal_keyboard_visible(frame) && input_mouse_down(frame_input(frame), button)
+}
+
+// frame_characters returns the printable characters typed this frame.
+//
+// The platform adapter drains the backend's character queue into Ui_Input at
+// the top of every frame, so polling the backend from view code always yields
+// nothing - the queue is already empty. Views must read this snapshot instead.
+frame_characters :: proc(frame: ^Ui_Frame) -> []rune {
+	assert(frame != nil, "frame_characters: nil frame")
+	if !modal_keyboard_visible(frame) do return nil
+	input := frame_input(frame)
+	assert(
+		input.character_count >= 0 && input.character_count <= INPUT_CHAR_CAP,
+		"frame_characters: character count out of range",
+	)
+	return input.characters[:input.character_count]
+}
+
+// frame_characters_consume discards the characters typed this frame so a key
+// that acted as a shortcut is not also typed into a text input drawn later in
+// the same frame.
+frame_characters_consume :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil, "frame_characters_consume: nil frame")
+	input := frame_input(frame)
+	assert(input != nil, "frame_characters_consume: nil input")
+	input.character_count = 0
+}
+
+key_pressed_consume :: proc(frame: ^Ui_Frame, key: KeyboardKey) {
+	assert(frame != nil && frame.open, "key_pressed_consume: invalid frame")
+	modal_key_consume(frame, key, .Pressed)
+}
+
+// frame_preedit returns the in-progress IME composition (empty when not
+// composing) and the caret byte offset within it. The string aliases the
+// input snapshot - valid for this frame only. Committed text arrives via
+// frame_characters as usual; the preedit is display-only.
+frame_preedit :: proc(frame: ^Ui_Frame) -> (text: string, caret: int) {
+	assert(frame != nil, "frame_preedit: nil frame")
+	input := frame_input(frame)
+	assert(
+		input.preedit_len >= 0 && input.preedit_len <= INPUT_PREEDIT_CAP,
+		"frame_preedit: preedit length out of range",
+	)
+	assert(
+		input.preedit_caret >= 0 && input.preedit_caret <= input.preedit_len,
+		"frame_preedit: preedit caret out of range",
+	)
+	return string(input.preedit[:input.preedit_len]), input.preedit_caret
+}
+
+// frame_user_input_active reports whether the user touched the mouse or
+// keyboard this frame, so a caller can stay at full frame rate instead of
+// dropping into the event-driven idle strategy mid-gesture.
+//
+// This must read the Ui_Input snapshot for the same reason as
+// frame_characters: the backend queues have already been drained.
+frame_user_input_active :: proc(frame: ^Ui_Frame) -> bool {
+	assert(frame != nil, "frame_user_input_active: nil frame")
+	input := frame_input(frame)
+	assert(input != nil, "frame_user_input_active: nil input")
+	if input.mouse_delta != {0, 0} do return true
+	if input.pointer_event_count > 0 || input.pointer_events_overflowed do return true
+	if input.mouse_wheel != {0, 0} do return true
+	if input.character_count > 0 do return true
+	for down in input.mouse_down {
+		if down do return true
+	}
+	for pressed in input.keys_pressed {
+		if pressed do return true
+	}
+	for down in input.keys_down {
+		if down do return true
+	}
+	return false
+}
+
+request_redraw :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil, "request_redraw: nil frame")
+	if frame.output != nil do frame.output.platform.request_redraw = true
+}
+
+request_redraw_in :: proc(frame: ^Ui_Frame, seconds: f64) {
+	assert(frame != nil, "request_redraw_in: nil frame")
+	assert(seconds >= 0, "request_redraw_in: negative delay")
+	if frame.output == nil do return
+	if frame.output.platform.redraw_after == 0 || seconds < frame.output.platform.redraw_after {
+		frame.output.platform.redraw_after = seconds
+	}
+}
+
+set_text_input_rect :: proc(frame: ^Ui_Frame, x, y, width, height: i32) {
+	assert(frame != nil && frame.output != nil, "set_text_input_rect: invalid frame")
+	assert(width >= 0 && height >= 0, "set_text_input_rect: negative size")
+	frame.output.platform.text_input_rect = {f32(x), f32(y), f32(width), f32(height)}
+	frame.output.platform.text_input_active = true
+}
+
+sync_web_submit_button :: proc(
+	frame: ^Ui_Frame,
+	form_id, label: string,
+	x, y, width, height, style, font_size: i32,
+	enabled: bool,
+) -> bool {
+	assert(frame != nil && frame.output != nil, "sync_web_submit_button: invalid frame")
+	assert(width >= 0 && height >= 0, "sync_web_submit_button: negative size")
+	_ = form_id
+	_ = style
+	_ = font_size
+	output := &frame.output.platform
+	if output.control_count >= PLATFORM_CONTROL_CAP {
+		output.controls_dropped += 1
+		return false
+	}
+	if len(label) > PLATFORM_TEXT_CAP - output.control_text_len {
+		output.controls_dropped += 1
+		return false
+	}
+	control := &output.controls[output.control_count]
+	control.kind = .Submit_Button
+	control.rect = {f32(x), f32(y), f32(width), f32(height)}
+	control.text_offset = output.control_text_len
+	control.text_length = len(label)
+	control.disabled = !enabled
+	copy(output.control_text[output.control_text_len:], transmute([]u8)label)
+	output.control_text_len += len(label)
+	output.control_count += 1
+	return false
+}

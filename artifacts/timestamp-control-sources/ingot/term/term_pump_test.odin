@@ -1,0 +1,156 @@
+package term
+
+import "core:testing"
+import "core:unicode/utf8"
+import lv "ingot:libvterm"
+import "ingot:pty"
+import "ingot:testx"
+
+@(test)
+utf8_holdback_examples :: proc(t: ^testing.T) {
+	// "é" = C3 A9. A buffer ending after C3 must hold back that lead byte.
+	buf := []u8{'a', 0xC3}
+	testing.expect_value(t, _utf8_complete_prefix(buf), 1)
+	// Complete sequence: nothing held back.
+	full := []u8{'a', 0xC3, 0xA9}
+	testing.expect_value(t, _utf8_complete_prefix(full), 3)
+	// Pure ASCII: full length.
+	ascii := []u8{'h', 'i'}
+	testing.expect_value(t, _utf8_complete_prefix(ascii), 2)
+	// Split 3-byte lead (0xE2 starts a 3-byte sequence): held at the lead.
+	three := []u8{'x', 0xE2, 0x82}
+	testing.expect_value(t, _utf8_complete_prefix(three), 1)
+	// Split 4-byte lead (0xF0): held at the lead.
+	four := []u8{0xF0, 0x9F}
+	testing.expect_value(t, _utf8_complete_prefix(four), 0)
+}
+
+// Property: cutting a valid UTF-8 stream at a random byte boundary and applying
+// _utf8_complete_prefix never splits a multi-byte rune - the completed prefix
+// always ends on a rune boundary, and the held-back tail is < 4 bytes.
+@(test)
+utf8_holdback_fuzz :: proc(t: ^testing.T) {
+	p := testx.prng_make(0xF00D)
+	for _ in 0 ..< 4000 {
+		// Build a valid UTF-8 string from random runes (incl. multibyte).
+		b := make([dynamic]u8, context.temp_allocator)
+		nrunes := testx.int_range(&p, 0, 12)
+		for _ in 0 ..< nrunes {
+			r := rune(testx.int_range(&p, 0x20, 0x2FFF))
+			enc, n := utf8.encode_rune(r)
+			for i in 0 ..< n do append(&b, enc[i])
+		}
+		buf := b[:]
+		if len(buf) == 0 do continue
+		cut := testx.int_range(&p, 0, len(buf) + 1)
+		prefix := _utf8_complete_prefix(buf[:cut])
+		testing.expect(t, prefix <= cut, "prefix cannot exceed buffer")
+		testing.expect(t, cut - prefix < 4, "held-back tail must be < 4 bytes")
+		// The completed prefix ends on a rune boundary of the original stream.
+		if prefix < len(buf) {
+			testing.expect(
+				t,
+				(buf[prefix] & 0xC0) != 0x80,
+				"completed prefix must end on a rune boundary",
+			)
+		}
+		free_all(context.temp_allocator)
+	}
+}
+
+// Property: for FULLY ARBITRARY bytes - including malformed UTF-8 (stray
+// continuation bytes, overlong leads, 0xFE/0xFF) - the completed prefix stays
+// within [0, len] and at most 3 bytes are ever held back. This is the
+// hostile-input counterpart of utf8_holdback_fuzz, which only feeds valid
+// streams.
+@(test)
+utf8_holdback_arbitrary_bytes :: proc(t: ^testing.T) {
+	p := testx.prng_make(0xBAD5EED)
+	for _ in 0 ..< 50_000 {
+		buf := testx.random_bytes(&p, 64)
+		prefix := _utf8_complete_prefix(buf)
+		testing.expect(t, prefix >= 0, "prefix must be non-negative")
+		testing.expect(t, prefix <= len(buf), "prefix cannot exceed buffer")
+		testing.expect(t, len(buf) - prefix < 4, "held-back tail must be < 4 bytes")
+		free_all(context.temp_allocator)
+	}
+}
+
+@(test)
+output_queue_wraparound_is_bounded :: proc(t: ^testing.T) {
+	when pty.INGOT_PTY_SIM {
+		return
+	} else {
+		ts := new(Term_Instance)
+		defer free(ts)
+		ts.pty_running = true
+		ts.output_head = TERM_OUTPUT_QUEUE_CAP - 1
+		ts.output_queue[ts.output_head].len = 0
+		ts.output_count = 1
+		bytes := term_pump(ts)
+		testing.expect_value(t, bytes, 0)
+		testing.expect_value(t, ts.output_head, 0)
+		testing.expect_value(t, ts.output_count, 0)
+	}
+}
+
+@(test)
+output_queue_publishes_before_pump :: proc(t: ^testing.T) {
+	when pty.INGOT_PTY_SIM {
+		return
+	} else {
+		ts := new(Term_Instance)
+		defer free(ts)
+		ts.pty_running = true
+		ts.output_queue[0].data[0] = 'x'
+		ts.output_queue[0].len = 1
+		ts.output_count = 1
+		bytes := term_pump(ts)
+		testing.expect_value(t, bytes, 1)
+		testing.expect_value(t, ts.output_count, 0)
+	}
+}
+
+@(test)
+cursor_properties_and_position_follow_terminal_input :: proc(t: ^testing.T) {
+	ts := new(Term_Instance)
+	defer free(ts)
+	testing.expect(t, term_init_emulator(ts, 80, 24))
+	defer term_free_emulator(ts)
+	testing.expect(t, ts.cursor_visible)
+	testing.expect(t, ts.cursor_blink)
+	testing.expect_value(t, ts.cursor_shape, Cursor_Shape.Block)
+	_test_ingest(ts, "ABC")
+	_test_expect_cursor(t, ts, 0, 3)
+	_test_ingest(ts, "\x1b[2;5H")
+	_test_expect_cursor(t, ts, 1, 4)
+	_test_ingest(ts, "\x1b[?25l\x1b[?12l\x1b[4 q")
+	testing.expect(t, !ts.cursor_visible)
+	testing.expect(t, !ts.cursor_blink)
+	testing.expect_value(t, ts.cursor_shape, Cursor_Shape.Underline)
+	_test_ingest(ts, "\x1b[?25h\x1b[?12h")
+	testing.expect(t, ts.cursor_visible)
+	testing.expect(t, ts.cursor_blink)
+	_test_ingest(ts, "\x1b[6 q")
+	testing.expect(t, !ts.cursor_blink)
+	testing.expect_value(t, ts.cursor_shape, Cursor_Shape.Bar_Left)
+	_test_ingest(ts, "\x1b[2 q")
+	testing.expect(t, !ts.cursor_blink)
+	testing.expect_value(t, ts.cursor_shape, Cursor_Shape.Block)
+}
+
+_test_ingest :: proc(ts: ^Term_Instance, input: string) {
+	assert(ts != nil)
+	assert(len(input) <= len(ts.read_buf))
+	copy(ts.read_buf[:len(input)], transmute([]u8)input)
+	_term_ingest(ts, len(input), true)
+}
+
+_test_expect_cursor :: proc(t: ^testing.T, ts: ^Term_Instance, row, col: i32) {
+	assert(t != nil)
+	assert(ts != nil)
+	position: lv.VTerm_Pos
+	lv.vterm_state_get_cursorpos(ts.state, &position)
+	testing.expect_value(t, position.row, row)
+	testing.expect_value(t, position.col, col)
+}

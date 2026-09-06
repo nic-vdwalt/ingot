@@ -1,0 +1,66 @@
+== Odin toolchain ==
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
+Odin toolchain: dev-2026-08-nightly:902106f
+== repository hygiene ==
+repository hygiene: PASS
+== gfx context ownership guard ==
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 0.001s
+
+OK
+== gfx @(init) ordering guard ==
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.000s
+
+OK
+== gfx expected-assert isolation guard ==
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.001s
+
+OK
+== assertion discipline ==
+..................................
+----------------------------------------------------------------------
+Ran 34 tests in 0.246s
+
+OK
+== UI API layers ==
+...........................
+----------------------------------------------------------------------
+Ran 27 tests in 0.021s
+
+OK
+== widget capabilities ==
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.137s
+
+OK
+widget capabilities: PASS
+== package boundaries ==}]}},{
+package boundaries: PASS
+== UI design tokens ==
+...................
+----------------------------------------------------------------------
+Ran 19 tests in 0.001s
+
+OK
+== checking action ==
+== checking asset ==
+== checking box3d_workers ==
+== checking ecs ==
+== checking gfx ==
+== checking procgen ==
+== checking scene ==
+== checking scene_gfx ==
+== checking ui ==
+/Users/nicolasvanderwalt_1/Development/git/ingot/ui/virtual_list_test.odin(39:6) Error: 'iteration' declared but not used 
+	for iteration in 0 ..< 4 { 
+	    ^ 

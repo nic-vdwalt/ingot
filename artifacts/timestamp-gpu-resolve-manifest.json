@@ -1,0 +1,31 @@
+{
+  "submissions": 40,
+  "command_submissions": 40,
+  "gpu_resolve_samples": 40,
+  "gpu_resolve_mismatches": 23,
+  "drawn_gpu_resolve_reversed": 15,
+  "known_clear_failures": 8,
+  "post_boundary_samples": 40,
+  "post_boundary_missing": 0,
+  "post_boundary_overlapping": 0,
+  "post_boundary_reversed": 0,
+  "production_repair_validated": false,
+  "source_identity_verified": true,
+  "sha256": {
+    "/Users/nicolasvanderwalt_1/Development/git/ingot/tests/metal_timestamps/evaluate.py": "06628ce35e4053d186f557ad435e19fbd6a2a9e0e76d37bcaaf9c5e7cc74444c",
+    "/Users/nicolasvanderwalt_1/Development/git/ingot/tests/metal_timestamps/native.swift": "9faeffc8428e9427a08132e29c347d7cc1f7bf23fa2101b277a2c7dfbea843c6",
+    "artifacts/timestamp-gpu-resolve.jsonl": "98991e128499d6c7db8438e6b43aa6b59c7dbc7d5f27fb860a598b16a908c6ff",
+    "../tools/wgpu-455571728/lib/libwgpu_native.a": "7d8b688a6b55f0728c847e1c3b028d07ccb1009d8cea4833a6186a5775384248"
+  },
+  "ingot_revision": "f8588dd9229e1ccfa1b166b0b27c6c61d8682442",
+  "tracked_diff_sha256": "729a4ffce6dcd0f5ae1a3bc4084ef13622e49c137c192753603443fb70a0053e",
+  "device": {
+    "blit_sampling": false,
+    "device": "Apple M2 Max",
+    "draw_sampling": false,
+    "kind": "device",
+    "os": "Version 15.6.1 (Build 24G90)",
+    "source_sha256": "9faeffc8428e9427a08132e29c347d7cc1f7bf23fa2101b277a2c7dfbea843c6",
+    "stage_sampling": true
+  }
+}

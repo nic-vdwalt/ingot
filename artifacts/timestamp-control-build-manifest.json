@@ -1,0 +1,12 @@
+{
+  "revision": "6aed50955d934ac36049ba8d002034841633ae02",
+  "build_command": "cargo build --release --locked",
+  "rustc": "rustc 1.93.1 (01f6ddf75 2026-02-11)",
+  "sha256": {
+    "ingot/artifacts/wgpu-native-control/Cargo.lock": "9f780c3e7e792c19ae22e708cf899eb177b5696c9ab61215c6ae235adcecbdb0",
+    "ingot/artifacts/wgpu-native-control/Cargo.toml": "19dcd681749325f7b5a8b12f524188d0cfa079ea1d76beb8f251e17bb77164cf",
+    "ingot/artifacts/wgpu-native-control/target/release/libwgpu_native.a": "5af7049a871f4496575b11dfb00f85f28b88ca8d2565e9147dc25c26d7518177",
+    "tools/wgpu-455571728/lib/libwgpu_native.a": "7d8b688a6b55f0728c847e1c3b028d07ccb1009d8cea4833a6186a5775384248"
+  },
+  "installed_artifact_source_proven": false
+}

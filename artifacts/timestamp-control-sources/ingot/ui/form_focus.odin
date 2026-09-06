@@ -1,0 +1,64 @@
+// Keyboard focus cycling for forms. The caller owns a single int focus slot;
+// widget ids are 1-BASED (1..count) and 0 means "nothing focused". Tab moves
+// forward, Shift+Tab backward, both wrapping. Widgets pair the slot with
+// Focus_Opt (focus_ring.odin) for focus-visible rings and Space/Enter
+// activation.
+package ui
+
+
+form_focus_next :: proc(current, count: int, backwards: bool) -> int {
+	assert(count > 0)
+	assert(current >= 0)
+	if current < 1 || current > count {
+		return count if backwards else 1
+	}
+	if backwards {
+		return count if current == 1 else current - 1
+	}
+	return 1 if current == count else current + 1
+}
+
+focus_order_index :: proc(ids: []Focus_Id, active: Focus_Id) -> int {
+	assert(len(ids) > 0, "focus_order_index: empty order")
+	assert(len(ids) <= MAX_FOCUSABLES, "focus_order_index: order exceeds limit")
+	for id, index in ids {
+		assert(id != FOCUS_ID_NONE, "focus_order_index: zero id")
+		if id == active do return index
+	}
+	return -1
+}
+
+focus_order_next :: proc(ids: []Focus_Id, active: Focus_Id, backwards: bool) -> Focus_Id {
+	assert(len(ids) > 0, "focus_order_next: empty order")
+	assert(len(ids) <= MAX_FOCUSABLES, "focus_order_next: order exceeds limit")
+	current := focus_order_index(ids, active)
+	if current < 0 do return ids[len(ids) - 1] if backwards else ids[0]
+	if backwards do return ids[len(ids) - 1] if current == 0 else ids[current - 1]
+	return ids[0] if current == len(ids) - 1 else ids[current + 1]
+}
+
+form_focus_cycle :: proc(frame: ^Ui_Frame, focus: ^int, count: int) {
+	assert(focus != nil)
+	assert(count > 0)
+	if frame == nil || frame.input == nil do return
+	if !is_key_pressed(frame, .TAB) do return
+	backwards := is_key_down(frame, .LEFT_SHIFT) || is_key_down(frame, .RIGHT_SHIFT)
+	focus^ = form_focus_next(focus^, count, backwards)
+	assert(focus^ >= 1)
+	assert(focus^ <= count)
+}
+
+form_focus_input :: proc(frame: ^Ui_Frame, focus: ^int, id: int, x, y, w, h: i32) {
+	assert(focus != nil)
+	assert(id > 0)
+	assert(w > 0)
+	assert(h > 0)
+	if !is_mouse_button_pressed(frame, .LEFT) do return
+	rect := Rectangle{f32(x), f32(y), f32(w), f32(h)}
+	mouse_screen := get_mouse_position(frame)
+	mouse_local := frame_to_local(frame, mouse_screen)
+	if point_in_rect(mouse_local, rect) && !route_occluded(frame, mouse_screen) {
+		focus^ = id
+		assert(focus^ == id)
+	}
+}

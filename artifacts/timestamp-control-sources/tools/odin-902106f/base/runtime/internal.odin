@@ -1,0 +1,1172 @@
+#+vet !cast
+package runtime
+
+import "base:intrinsics"
+
+@(private="file")
+IS_WASM :: ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32
+
+@(private)
+RUNTIME_LINKAGE :: "strong"   when ODIN_USE_SEPARATE_MODULES else
+				   "internal" when ODIN_NO_ENTRY_POINT && (ODIN_BUILD_MODE == .Static || ODIN_BUILD_MODE == .Dynamic || ODIN_BUILD_MODE == .Object) else
+				   "strong"   when ODIN_BUILD_MODE == .Dynamic else
+				   "strong"   when !ODIN_NO_CRT else
+				   "internal"
+RUNTIME_REQUIRE :: false // !ODIN_TILDE
+
+@(private)
+__float16 :: f16 when __ODIN_LLVM_F16_SUPPORTED else u16
+
+HAS_HARDWARE_SIMD :: false when (ODIN_ARCH == .amd64 || ODIN_ARCH == .i386) && !intrinsics.has_target_feature("sse2") else
+	false when (ODIN_ARCH == .arm64 || ODIN_ARCH == .arm32) && !intrinsics.has_target_feature("neon") else
+	false when (ODIN_ARCH == .wasm64p32 || ODIN_ARCH == .wasm32) && !intrinsics.has_target_feature("simd128") else
+	false when (ODIN_ARCH == .riscv64) && !intrinsics.has_target_feature("v") else
+	true
+
+// Size of a native SIMD register for the current compilation target
+NATIVE_SIMD_BIT_WIDTH ::
+	512 when (ODIN_ARCH == .amd64) && intrinsics.has_target_feature("avx512f") else
+	256 when (ODIN_ARCH == .amd64) && (intrinsics.has_target_feature("avx2") || intrinsics.has_target_feature("avx")) else
+	// Fallback for no hardware SIMD, but also SSE, NEON, SVE, RVV and WASM SIMD128.
+	128
+
+@(private)
+byte_slice :: #force_inline proc "contextless" (data: rawptr, len: int) -> []byte #no_bounds_check {
+	return ([^]byte)(data)[:max(len, 0)]
+}
+
+@(require_results)
+align_forward_uint :: #force_inline proc "odin" (ptr, align: uint) -> uint {
+	assert(is_power_of_two_uint(align))
+	return (ptr + align-1) & ~(align-1)
+}
+
+@(require_results)
+align_forward_int :: #force_inline proc "odin" (ptr, align: int) -> int {
+	assert(is_power_of_two_int(align))
+	return int(align_forward_uint(uint(ptr), uint(align)))
+}
+
+@(require_results)
+align_forward_uintptr :: #force_inline proc "odin" (ptr, align: uintptr) -> uintptr {
+	return uintptr(align_forward_uint(uint(ptr), uint(align)))
+}
+
+align_forward :: proc {
+	align_forward_int,
+	align_forward_uint,
+	align_forward_uintptr,
+}
+
+@(require_results)
+is_power_of_two_int :: #force_inline proc "contextless" (x: int) -> bool {
+	if x <= 0 {
+		return false
+	}
+	return (x & (x-1)) == 0
+}
+
+@(require_results)
+is_power_of_two_uint :: #force_inline proc "contextless" (x: uint) -> bool {
+	if x == 0 {
+		return false
+	}
+	return (x & (x-1)) == 0
+}
+
+@(require_results)
+is_power_of_two_uintptr :: #force_inline proc "contextless" (x: uintptr) -> bool {
+	return is_power_of_two_uint(uint(x))
+}
+
+is_power_of_two :: proc {
+	is_power_of_two_int,
+	is_power_of_two_uint,
+	is_power_of_two_uintptr,
+}
+
+mem_zero :: proc "contextless" (data: rawptr, len: int) -> rawptr {
+	if data == nil {
+		return nil
+	}
+	if len <= 0 {
+		return data
+	}
+	intrinsics.mem_zero(data, len)
+	return data
+}
+
+mem_copy :: proc "contextless" (dst, src: rawptr, len: int) -> rawptr {
+	if src != nil && dst != src && len > 0 {
+		// NOTE(bill): This _must_ be implemented like C's memmove
+		intrinsics.mem_copy(dst, src, len)
+	}
+	return dst
+}
+
+mem_copy_non_overlapping :: proc "contextless" (dst, src: rawptr, len: int) -> rawptr {
+	if src != nil && dst != src && len > 0 {
+		// NOTE(bill): This _must_ be implemented like C's memcpy
+		intrinsics.mem_copy_non_overlapping(dst, src, len)
+	}
+	return dst
+}
+
+DEFAULT_ALIGNMENT :: 2*align_of(rawptr)
+
+mem_alloc_bytes :: #force_no_inline proc(size: int, alignment: int = DEFAULT_ALIGNMENT, allocator := context.allocator, loc := #caller_location) -> ([]byte, Allocator_Error) {
+	assert(is_power_of_two_int(alignment), "Alignment must be a power of two", loc)
+	if size == 0 || allocator.procedure == nil{
+		return nil, nil
+	}
+	return allocator.procedure(allocator.data, .Alloc, size, alignment, nil, 0, loc)
+}
+
+mem_alloc :: #force_no_inline proc(size: int, alignment: int = DEFAULT_ALIGNMENT, allocator := context.allocator, loc := #caller_location) -> ([]byte, Allocator_Error) {
+	assert(is_power_of_two_int(alignment), "Alignment must be a power of two", loc)
+	if size == 0 || allocator.procedure == nil {
+		return nil, nil
+	}
+	return allocator.procedure(allocator.data, .Alloc, size, alignment, nil, 0, loc)
+}
+
+mem_alloc_non_zeroed :: #force_no_inline proc(size: int, alignment: int = DEFAULT_ALIGNMENT, allocator := context.allocator, loc := #caller_location) -> ([]byte, Allocator_Error) {
+	assert(is_power_of_two_int(alignment), "Alignment must be a power of two", loc)
+	if size == 0 || allocator.procedure == nil {
+		return nil, nil
+	}
+	return allocator.procedure(allocator.data, .Alloc_Non_Zeroed, size, alignment, nil, 0, loc)
+}
+
+@builtin
+mem_free :: #force_no_inline proc(ptr: rawptr, allocator := context.allocator, loc := #caller_location) -> Allocator_Error {
+	if ptr == nil || allocator.procedure == nil {
+		return nil
+	}
+	_, err := allocator.procedure(allocator.data, .Free, 0, 0, ptr, 0, loc)
+	return err
+}
+
+mem_free_with_size :: #force_no_inline proc(ptr: rawptr, byte_count: int, allocator := context.allocator, loc := #caller_location) -> Allocator_Error {
+	if ptr == nil || allocator.procedure == nil {
+		return nil
+	}
+	_, err := allocator.procedure(allocator.data, .Free, 0, 0, ptr, byte_count, loc)
+	return err
+}
+
+mem_free_bytes :: #force_no_inline proc(bytes: []byte, allocator := context.allocator, loc := #caller_location) -> Allocator_Error {
+	if bytes == nil || allocator.procedure == nil {
+		return nil
+	}
+	_, err := allocator.procedure(allocator.data, .Free, 0, 0, raw_data(bytes), len(bytes), loc)
+	return err
+}
+
+@builtin
+mem_free_all :: #force_no_inline proc(allocator := context.allocator, loc := #caller_location) -> (err: Allocator_Error) {
+	if allocator.procedure != nil {
+		_, err = allocator.procedure(allocator.data, .Free_All, 0, 0, nil, 0, loc)
+	}
+	return
+}
+
+_mem_resize :: #force_no_inline proc(ptr: rawptr, old_size, new_size: int, alignment: int = DEFAULT_ALIGNMENT, allocator := context.allocator, should_zero: bool, loc := #caller_location) -> (data: []byte, err: Allocator_Error) {
+	assert(is_power_of_two_int(alignment), "Alignment must be a power of two", loc)
+	if allocator.procedure == nil {
+		return nil, nil
+	}
+	if new_size == 0 {
+		if ptr != nil {
+			_, err = allocator.procedure(allocator.data, .Free, 0, 0, ptr, old_size, loc)
+			return
+		}
+		return
+	} else if ptr == nil {
+		if should_zero {
+			return allocator.procedure(allocator.data, .Alloc, new_size, alignment, nil, 0, loc)
+		} else {
+			return allocator.procedure(allocator.data, .Alloc_Non_Zeroed, new_size, alignment, nil, 0, loc)
+		}
+	} else if old_size == new_size && uintptr(ptr) % uintptr(alignment) == 0 {
+		data = ([^]byte)(ptr)[:old_size]
+		return
+	}
+
+	if should_zero {
+		data, err = allocator.procedure(allocator.data, .Resize, new_size, alignment, ptr, old_size, loc)
+	} else {
+		data, err = allocator.procedure(allocator.data, .Resize_Non_Zeroed, new_size, alignment, ptr, old_size, loc)
+	}
+	if err == .Mode_Not_Implemented {
+		if should_zero {
+			data, err = allocator.procedure(allocator.data, .Alloc, new_size, alignment, nil, 0, loc)
+		} else {
+			data, err = allocator.procedure(allocator.data, .Alloc_Non_Zeroed, new_size, alignment, nil, 0, loc)
+		}
+		if err != nil {
+			return
+		}
+		copy(data, ([^]byte)(ptr)[:old_size])
+		_, err = allocator.procedure(allocator.data, .Free, 0, 0, ptr, old_size, loc)
+	}
+	return
+}
+
+mem_resize :: proc(ptr: rawptr, old_size, new_size: int, alignment: int = DEFAULT_ALIGNMENT, allocator := context.allocator, loc := #caller_location) -> (data: []byte, err: Allocator_Error) {
+	assert(is_power_of_two_int(alignment), "Alignment must be a power of two", loc)
+	return _mem_resize(ptr, old_size, new_size, alignment, allocator, true, loc)
+}
+non_zero_mem_resize :: proc(ptr: rawptr, old_size, new_size: int, alignment: int = DEFAULT_ALIGNMENT, allocator := context.allocator, loc := #caller_location) -> (data: []byte, err: Allocator_Error) {
+	assert(is_power_of_two_int(alignment), "Alignment must be a power of two", loc)
+	return _mem_resize(ptr, old_size, new_size, alignment, allocator, false, loc)
+}
+
+conditional_mem_zero :: proc "contextless" (data: rawptr, n_: int) #no_bounds_check {
+	// When acquiring memory from the OS for the first time it's likely that the
+	// OS already gives the zero page mapped multiple times for the request. The
+	// actual allocation does not have physical pages allocated to it until those
+	// pages are written to which causes a page-fault. This is often called COW
+	// (Copy on Write)
+	//
+	// You do not want to actually zero out memory in this case because it would
+	// cause a bunch of page faults decreasing the speed of allocations and
+	// increase the amount of actual resident physical memory used.
+	//
+	// Instead a better technique is to check if memory is zerored before zeroing
+	// it. This turns out to be an important optimization in practice, saving
+	// nearly half (or more) the amount of physical memory used by an application.
+	// This is why every implementation of calloc in libc does this optimization.
+	//
+	// It may seem counter-intuitive but most allocations in an application are
+	// wasted and never used. When you consider something like a [dynamic]T which
+	// always doubles in capacity on resize but you rarely ever actually use the
+	// full capacity of a dynamic array it means you have a lot of resident waste
+	// if you actually zeroed the remainder of the memory.
+	//
+	// Keep in mind the OS is already guaranteed to give you zeroed memory by
+	// mapping in this zero page multiple times so in the best case there is no
+	// need to actually zero anything. As for testing all this memory for a zero
+	// value, it costs nothing because the the same zero page is used for the
+	// whole allocation and will exist in L1 cache for the entire zero checking
+	// process.
+
+	if n_ <= 0 {
+		return
+	}
+	n := uint(n_)
+
+	n_words := n / size_of(uintptr)
+	p_words := ([^]uintptr)(data)[:n_words]
+	p_bytes := ([^]byte)(data)[size_of(uintptr) * n_words:n]
+	for &p_word in p_words {
+		if p_word != 0 {
+			p_word = 0
+		}
+	}
+	for &p_byte in p_bytes {
+		if p_byte != 0 {
+			p_byte = 0
+		}
+	}
+}
+
+memory_equal :: proc "contextless" (x, y: rawptr, n: int) -> bool {
+	switch {
+	case n == 0: return true
+	case x == y: return true
+	}
+	a, b := cast([^]byte)x, cast([^]byte)y
+
+	n := uint(n)
+	i := uint(0)
+	m := uint(0)
+
+	if n >= 8 {
+		when HAS_HARDWARE_SIMD {
+			// Avoid using 256-bit SIMD on platforms where its emulation is
+			// likely to be less than ideal.
+			when ODIN_ARCH == .amd64 && intrinsics.has_target_feature("avx2") {
+				m = n / 32 * 32
+				for /**/; i < m; i += 32 {
+					load_a := intrinsics.unaligned_load(cast(^#simd[32]u8)&a[i])
+					load_b := intrinsics.unaligned_load(cast(^#simd[32]u8)&b[i])
+					ne := intrinsics.simd_lanes_ne(load_a, load_b)
+					if intrinsics.simd_reduce_or(ne) != 0 {
+						return false
+					}
+				}
+			}
+		}
+
+		m = (n-i) / 16 * 16
+		for /**/; i < m; i += 16 {
+			load_a := intrinsics.unaligned_load(cast(^#simd[16]u8)&a[i])
+			load_b := intrinsics.unaligned_load(cast(^#simd[16]u8)&b[i])
+			ne := intrinsics.simd_lanes_ne(load_a, load_b)
+			if intrinsics.simd_reduce_or(ne) != 0 {
+				return false
+			}
+		}
+
+		m = (n-i) / size_of(uintptr) * size_of(uintptr)
+		for /**/; i < m; i += size_of(uintptr) {
+			if intrinsics.unaligned_load(cast(^uintptr)&a[i]) != intrinsics.unaligned_load(cast(^uintptr)&b[i]) {
+				return false
+			}
+		}
+	}
+
+	for /**/; i < n; i += 1 {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+memory_compare :: proc "contextless" (x, y: rawptr, n: int) -> int #no_bounds_check {
+	switch {
+	case x == y:   return 0
+	case x == nil: return -1
+	case y == nil: return +1
+	}
+	a, b := cast([^]byte)x, cast([^]byte)y
+
+	n := uint(n)
+	i := uint(0)
+	m := uint(0)
+
+	when HAS_HARDWARE_SIMD {
+		when ODIN_ARCH == .amd64 && intrinsics.has_target_feature("avx2") {
+			m = n / 32 * 32
+			for /**/; i < m; i += 32 {
+				load_a := intrinsics.unaligned_load(cast(^#simd[32]u8)&a[i])
+				load_b := intrinsics.unaligned_load(cast(^#simd[32]u8)&b[i])
+				comparison := intrinsics.simd_lanes_ne(load_a, load_b)
+				if intrinsics.simd_reduce_or(comparison) != 0 {
+					sentinel: #simd[32]u8 = u8(0xFF)
+					indices := intrinsics.simd_indices(#simd[32]u8)
+					index_select := intrinsics.simd_select(comparison, indices, sentinel)
+					index_reduce := cast(uint)intrinsics.simd_reduce_min(index_select)
+					return -1 if a[i+index_reduce] < b[i+index_reduce] else +1
+				}
+			}
+		}
+	}
+
+	m = (n-i) / 16 * 16
+	for /**/; i < m; i += 16 {
+		load_a := intrinsics.unaligned_load(cast(^#simd[16]u8)&a[i])
+		load_b := intrinsics.unaligned_load(cast(^#simd[16]u8)&b[i])
+		comparison := intrinsics.simd_lanes_ne(load_a, load_b)
+		if intrinsics.simd_reduce_or(comparison) != 0 {
+			sentinel: #simd[16]u8 = u8(0xFF)
+			indices := intrinsics.simd_indices(#simd[16]u8)
+			index_select := intrinsics.simd_select(comparison, indices, sentinel)
+			index_reduce := cast(uint)intrinsics.simd_reduce_min(index_select)
+			return -1 if a[i+index_reduce] < b[i+index_reduce] else +1
+		}
+	}
+
+	// 64-bit SIMD is faster than using a `uintptr` to detect a difference then
+	// re-iterating with the byte-by-byte loop, at least on AMD64.
+	m = (n-i) / 8 * 8
+	for /**/; i < m; i += 8 {
+		load_a := intrinsics.unaligned_load(cast(^#simd[8]u8)&a[i])
+		load_b := intrinsics.unaligned_load(cast(^#simd[8]u8)&b[i])
+		comparison := intrinsics.simd_lanes_ne(load_a, load_b)
+		if intrinsics.simd_reduce_or(comparison) != 0 {
+			sentinel: #simd[8]u8 = u8(0xFF)
+			indices := intrinsics.simd_indices(#simd[8]u8)
+			index_select := intrinsics.simd_select(comparison, indices, sentinel)
+			index_reduce := cast(uint)intrinsics.simd_reduce_min(index_select)
+			return -1 if a[i+index_reduce] < b[i+index_reduce] else +1
+		}
+	}
+
+	for /**/; i < n; i += 1 {
+		if a[i] ~ b[i] != 0 {
+			return -1 if int(a[i]) - int(b[i]) < 0 else +1
+		}
+	}
+	return 0
+}
+
+memory_compare_zero :: proc "contextless" (a: rawptr, n: int) -> int #no_bounds_check {
+	n := uint(n)
+	i := uint(0)
+	m := uint(0)
+
+	// Because we're comparing against zero, we never return -1, as that would
+	// indicate the compared value is less than zero.
+	//
+	// Note that a zero return value here means equality.
+
+	bytes := ([^]u8)(a)
+
+	if n >= 8 {
+		when HAS_HARDWARE_SIMD {
+			when ODIN_ARCH == .amd64 && intrinsics.has_target_feature("avx2") {
+				scanner32: #simd[32]u8
+				m = n / 32 * 32
+				for /**/; i < m; i += 32 {
+					load := intrinsics.unaligned_load(cast(^#simd[32]u8)&bytes[i])
+					ne := intrinsics.simd_lanes_ne(scanner32, load)
+					if intrinsics.simd_reduce_or(ne) > 0 {
+						return 1
+					}
+				}
+			}
+		}
+
+		scanner16: #simd[16]u8
+		m = (n-i) / 16 * 16
+		for /**/; i < m; i += 16 {
+			load := intrinsics.unaligned_load(cast(^#simd[16]u8)&bytes[i])
+			ne := intrinsics.simd_lanes_ne(scanner16, load)
+			if intrinsics.simd_reduce_or(ne) != 0 {
+				return 1
+			}
+		}
+
+		m = (n-i) / size_of(uintptr) * size_of(uintptr)
+		for /**/; i < m; i += size_of(uintptr) {
+			if intrinsics.unaligned_load(cast(^uintptr)&bytes[i]) != 0 {
+				return 1
+			}
+		}
+	}
+
+	for /**/; i < n; i += 1 {
+		if bytes[i] != 0 {
+			return 1
+		}
+	}
+	return 0
+}
+
+memory_prefix_length :: proc "contextless" (x, y: rawptr, n: int) -> (idx: int) #no_bounds_check {
+	switch {
+	case x == y:   return n
+	case x == nil: return 0
+	case y == nil: return 0
+	}
+	a, b := cast([^]byte)x, cast([^]byte)y
+
+	n := uint(n)
+	i := uint(0)
+	m := uint(0)
+
+	when HAS_HARDWARE_SIMD {
+		when ODIN_ARCH == .amd64 && intrinsics.has_target_feature("avx2") {
+			m = n / 32 * 32
+			for /**/; i < m; i += 32 {
+				load_a := intrinsics.unaligned_load(cast(^#simd[32]u8)&a[i])
+				load_b := intrinsics.unaligned_load(cast(^#simd[32]u8)&b[i])
+				comparison := intrinsics.simd_lanes_ne(load_a, load_b)
+				if intrinsics.simd_reduce_or(comparison) != 0 {
+					sentinel: #simd[32]u8 = u8(0xFF)
+					indices := intrinsics.simd_indices(#simd[32]u8)
+					index_select := intrinsics.simd_select(comparison, indices, sentinel)
+					index_reduce := cast(uint)intrinsics.simd_reduce_min(index_select)
+					return int(i + index_reduce)
+				}
+			}
+		}
+	}
+
+	m = (n-i) / 16 * 16
+	for /**/; i < m; i += 16 {
+		load_a := intrinsics.unaligned_load(cast(^#simd[16]u8)&a[i])
+		load_b := intrinsics.unaligned_load(cast(^#simd[16]u8)&b[i])
+		comparison := intrinsics.simd_lanes_ne(load_a, load_b)
+		if intrinsics.simd_reduce_or(comparison) != 0 {
+			sentinel: #simd[16]u8 = u8(0xFF)
+			indices := intrinsics.simd_indices(#simd[16]u8)
+			index_select := intrinsics.simd_select(comparison, indices, sentinel)
+			index_reduce := cast(uint)intrinsics.simd_reduce_min(index_select)
+			return int(i + index_reduce)
+		}
+	}
+
+	// 64-bit SIMD is faster than using a `uintptr` to detect a difference then
+	// re-iterating with the byte-by-byte loop, at least on AMD64.
+	m = (n-i) / 8 * 8
+	for /**/; i < m; i += 8 {
+		load_a := intrinsics.unaligned_load(cast(^#simd[8]u8)&a[i])
+		load_b := intrinsics.unaligned_load(cast(^#simd[8]u8)&b[i])
+		comparison := intrinsics.simd_lanes_ne(load_a, load_b)
+		if intrinsics.simd_reduce_or(comparison) != 0 {
+			sentinel: #simd[8]u8 = u8(0xFF)
+			indices := intrinsics.simd_indices(#simd[8]u8)
+			index_select := intrinsics.simd_select(comparison, indices, sentinel)
+			index_reduce := cast(uint)intrinsics.simd_reduce_min(index_select)
+			return int(i + index_reduce)
+		}
+	}
+
+	for /**/; i < n; i += 1 {
+		if a[i] ~ b[i] != 0 {
+			return int(i)
+		}
+	}
+	return int(n)
+}
+
+string_eq :: proc "contextless" (lhs, rhs: string) -> bool {
+	x := transmute(Raw_String)lhs
+	y := transmute(Raw_String)rhs
+	if x.len != y.len {
+		return false
+	}
+	return #force_inline memory_equal(x.data, y.data, x.len)
+}
+
+string_cmp :: proc "contextless" (a, b: string) -> int {
+	x := transmute(Raw_String)a
+	y := transmute(Raw_String)b
+
+	ret := memory_compare(x.data, y.data, min(x.len, y.len))
+	if ret == 0 && x.len != y.len {
+		return -1 if x.len < y.len else +1
+	}
+	return ret
+}
+
+
+string16_eq :: proc "contextless" (lhs, rhs: string16) -> bool {
+	x := transmute(Raw_String16)lhs
+	y := transmute(Raw_String16)rhs
+	if x.len != y.len {
+		return false
+	}
+	return #force_inline memory_equal(x.data, y.data, x.len*size_of(u16))
+}
+
+string16_cmp :: proc "contextless" (a, b: string16) -> int {
+	x := transmute(Raw_String16)a
+	y := transmute(Raw_String16)b
+
+	ret := memory_compare(x.data, y.data, min(x.len, y.len)*size_of(u16))
+	if ret == 0 && x.len != y.len {
+		return -1 if x.len < y.len else +1
+	}
+	return ret
+}
+
+string_ne :: #force_inline proc "contextless" (a, b: string) -> bool { return !string_eq(a, b) }
+string_lt :: #force_inline proc "contextless" (a, b: string) -> bool { return string_cmp(a, b) < 0 }
+string_gt :: #force_inline proc "contextless" (a, b: string) -> bool { return string_cmp(a, b) > 0 }
+string_le :: #force_inline proc "contextless" (a, b: string) -> bool { return string_cmp(a, b) <= 0 }
+string_ge :: #force_inline proc "contextless" (a, b: string) -> bool { return string_cmp(a, b) >= 0 }
+
+string16_ne :: #force_inline proc "contextless" (a, b: string16) -> bool { return !string16_eq(a, b) }
+string16_lt :: #force_inline proc "contextless" (a, b: string16) -> bool { return string16_cmp(a, b) < 0 }
+string16_gt :: #force_inline proc "contextless" (a, b: string16) -> bool { return string16_cmp(a, b) > 0 }
+string16_le :: #force_inline proc "contextless" (a, b: string16) -> bool { return string16_cmp(a, b) <= 0 }
+string16_ge :: #force_inline proc "contextless" (a, b: string16) -> bool { return string16_cmp(a, b) >= 0 }
+
+
+cstring_len :: proc "contextless" (s: cstring) -> int {
+	p0 := uintptr((^byte)(s))
+	p := p0
+	for p != 0 && (^byte)(p)^ != 0 {
+		p += 1
+	}
+	return int(p - p0)
+}
+
+cstring16_len :: proc "contextless" (s: cstring16) -> int {
+	p := ([^]u16)(s)
+	n := 0
+	for p != nil && p[0] != 0 {
+		p = p[1:]
+		n += 1
+	}
+	return n
+}
+
+cstring_to_string :: proc "contextless" (s: cstring) -> string {
+	if s == nil {
+		return ""
+	}
+	ptr := (^byte)(s)
+	n := cstring_len(s)
+	return transmute(string)Raw_String{ptr, n}
+}
+
+cstring16_to_string16 :: proc "contextless" (s: cstring16) -> string16 {
+	if s == nil {
+		return ""
+	}
+	ptr := (^u16)(s)
+	n := cstring16_len(s)
+	return transmute(string16)Raw_String16{ptr, n}
+}
+
+
+cstring_eq :: proc "contextless" (lhs, rhs: cstring) -> bool {
+	x := ([^]byte)(lhs)
+	y := ([^]byte)(rhs)
+	if x == y {
+		return true
+	}
+	if (x == nil) ~ (y == nil) {
+		return false
+	}
+	xn := cstring_len(lhs)
+	yn := cstring_len(rhs)
+	if xn != yn {
+		return false
+	}
+	return #force_inline memory_equal(x, y, xn)
+}
+
+cstring_cmp :: proc "contextless" (lhs, rhs: cstring) -> int {
+	x := ([^]byte)(lhs)
+	y := ([^]byte)(rhs)
+	if x == y {
+		return 0
+	}
+	if (x == nil) ~ (y == nil) {
+		return -1 if x == nil else +1
+	}
+	xn := cstring_len(lhs)
+	yn := cstring_len(rhs)
+	ret := memory_compare(x, y, min(xn, yn))
+	if ret == 0 && xn != yn {
+		return -1 if xn < yn else +1
+	}
+	return ret
+}
+
+cstring_ne :: #force_inline proc "contextless" (a, b: cstring) -> bool { return !cstring_eq(a, b) }
+cstring_lt :: #force_inline proc "contextless" (a, b: cstring) -> bool { return cstring_cmp(a, b) < 0 }
+cstring_gt :: #force_inline proc "contextless" (a, b: cstring) -> bool { return cstring_cmp(a, b) > 0 }
+cstring_le :: #force_inline proc "contextless" (a, b: cstring) -> bool { return cstring_cmp(a, b) <= 0 }
+cstring_ge :: #force_inline proc "contextless" (a, b: cstring) -> bool { return cstring_cmp(a, b) >= 0 }
+
+cstring16_eq :: proc "contextless" (lhs, rhs: cstring16) -> bool {
+	x := ([^]u16)(lhs)
+	y := ([^]u16)(rhs)
+	if x == y {
+		return true
+	}
+	if (x == nil) ~ (y == nil) {
+		return false
+	}
+	xn := cstring16_len(lhs)
+	yn := cstring16_len(rhs)
+	if xn != yn {
+		return false
+	}
+	return #force_inline memory_equal(x, y, xn*size_of(u16))
+}
+
+cstring16_cmp :: proc "contextless" (lhs, rhs: cstring16) -> int {
+	x := ([^]u16)(lhs)
+	y := ([^]u16)(rhs)
+	if x == y {
+		return 0
+	}
+	if (x == nil) ~ (y == nil) {
+		return -1 if x == nil else +1
+	}
+	xn := cstring16_len(lhs)
+	yn := cstring16_len(rhs)
+	ret := memory_compare(x, y, min(xn, yn)*size_of(u16))
+	if ret == 0 && xn != yn {
+		return -1 if xn < yn else +1
+	}
+	return ret
+}
+
+cstring16_ne :: #force_inline proc "contextless" (a, b: cstring16) -> bool { return !cstring16_eq(a, b) }
+cstring16_lt :: #force_inline proc "contextless" (a, b: cstring16) -> bool { return cstring16_cmp(a, b) < 0 }
+cstring16_gt :: #force_inline proc "contextless" (a, b: cstring16) -> bool { return cstring16_cmp(a, b) > 0 }
+cstring16_le :: #force_inline proc "contextless" (a, b: cstring16) -> bool { return cstring16_cmp(a, b) <= 0 }
+cstring16_ge :: #force_inline proc "contextless" (a, b: cstring16) -> bool { return cstring16_cmp(a, b) >= 0 }
+
+complex32_eq :: #force_inline proc "contextless"  (a, b: complex32)  -> bool { return real(a) == real(b) && imag(a) == imag(b) }
+complex32_ne :: #force_inline proc "contextless"  (a, b: complex32)  -> bool { return real(a) != real(b) || imag(a) != imag(b) }
+
+complex64_eq :: #force_inline proc "contextless"  (a, b: complex64)  -> bool { return real(a) == real(b) && imag(a) == imag(b) }
+complex64_ne :: #force_inline proc "contextless"  (a, b: complex64)  -> bool { return real(a) != real(b) || imag(a) != imag(b) }
+
+complex128_eq :: #force_inline proc "contextless" (a, b: complex128) -> bool { return real(a) == real(b) && imag(a) == imag(b) }
+complex128_ne :: #force_inline proc "contextless" (a, b: complex128) -> bool { return real(a) != real(b) || imag(a) != imag(b) }
+
+
+quaternion64_eq :: #force_inline proc "contextless"  (a, b: quaternion64)  -> bool { return real(a) == real(b) && imag(a) == imag(b) && jmag(a) == jmag(b) && kmag(a) == kmag(b) }
+quaternion64_ne :: #force_inline proc "contextless"  (a, b: quaternion64)  -> bool { return real(a) != real(b) || imag(a) != imag(b) || jmag(a) != jmag(b) || kmag(a) != kmag(b) }
+
+quaternion128_eq :: #force_inline proc "contextless"  (a, b: quaternion128)  -> bool { return real(a) == real(b) && imag(a) == imag(b) && jmag(a) == jmag(b) && kmag(a) == kmag(b) }
+quaternion128_ne :: #force_inline proc "contextless"  (a, b: quaternion128)  -> bool { return real(a) != real(b) || imag(a) != imag(b) || jmag(a) != jmag(b) || kmag(a) != kmag(b) }
+
+quaternion256_eq :: #force_inline proc "contextless" (a, b: quaternion256) -> bool { return real(a) == real(b) && imag(a) == imag(b) && jmag(a) == jmag(b) && kmag(a) == kmag(b) }
+quaternion256_ne :: #force_inline proc "contextless" (a, b: quaternion256) -> bool { return real(a) != real(b) || imag(a) != imag(b) || jmag(a) != jmag(b) || kmag(a) != kmag(b) }
+
+
+string_decode_rune :: proc "contextless" (s: string) -> (rune, int) #no_bounds_check {
+	// NOTE(bill): Duplicated here to remove dependency on package unicode/utf8
+
+	@(static, rodata) accept_sizes := [256]u8{
+		0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x00-0x0f
+		0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x10-0x1f
+		0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x20-0x2f
+		0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x30-0x3f
+		0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x40-0x4f
+		0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x50-0x5f
+		0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x60-0x6f
+		0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x70-0x7f
+
+		0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, // 0x80-0x8f
+		0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, // 0x90-0x9f
+		0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, // 0xa0-0xaf
+		0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, // 0xb0-0xbf
+		0xf1, 0xf1, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, // 0xc0-0xcf
+		0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, // 0xd0-0xdf
+		0x13, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x23, 0x03, 0x03, // 0xe0-0xef
+		0x34, 0x04, 0x04, 0x04, 0x44, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, // 0xf0-0xff
+	}
+	Accept_Range :: struct {lo, hi: u8}
+
+	@(static, rodata) accept_ranges := [5]Accept_Range{
+		{0x80, 0xbf},
+		{0xa0, 0xbf},
+		{0x80, 0x9f},
+		{0x90, 0xbf},
+		{0x80, 0x8f},
+	}
+
+	MASKX :: 0b0011_1111
+	MASK2 :: 0b0001_1111
+	MASK3 :: 0b0000_1111
+	MASK4 :: 0b0000_0111
+
+	LOCB :: 0b1000_0000
+	HICB :: 0b1011_1111
+
+
+	RUNE_ERROR :: '\ufffd'
+
+	n := len(s)
+	if n < 1 {
+		return RUNE_ERROR, 0
+	}
+	s0 := s[0]
+	x := accept_sizes[s0]
+	if x >= 0xF0 {
+		mask := rune(x) << 31 >> 31 // NOTE(bill): Create 0x0000 or 0xffff.
+		return rune(s[0])&~mask | RUNE_ERROR&mask, 1
+	}
+	sz := x & 7
+	accept := accept_ranges[x>>4]
+	if n < int(sz) {
+		return RUNE_ERROR, 1
+	}
+	b1 := s[1]
+	if b1 < accept.lo || accept.hi < b1 {
+		return RUNE_ERROR, 1
+	}
+	if sz == 2 {
+		return rune(s0&MASK2)<<6 | rune(b1&MASKX), 2
+	}
+	b2 := s[2]
+	if b2 < LOCB || HICB < b2 {
+		return RUNE_ERROR, 1
+	}
+	if sz == 3 {
+		return rune(s0&MASK3)<<12 | rune(b1&MASKX)<<6 | rune(b2&MASKX), 3
+	}
+	b3 := s[3]
+	if b3 < LOCB || HICB < b3 {
+		return RUNE_ERROR, 1
+	}
+	return rune(s0&MASK4)<<18 | rune(b1&MASKX)<<12 | rune(b2&MASKX)<<6 | rune(b3&MASKX), 4
+}
+
+string_decode_last_rune :: proc "contextless" (s: string) -> (rune, int) #no_bounds_check {
+	RUNE_ERROR :: '\ufffd'
+	RUNE_SELF  :: 0x80
+	UTF_MAX    :: 4
+
+	r: rune
+	size: int
+	start, end, limit: int
+
+	end = len(s)
+	if end == 0 {
+		return RUNE_ERROR, 0
+	}
+	start = end-1
+	r = rune(s[start])
+	if r < RUNE_SELF {
+		return r, 1
+	}
+
+	limit = max(end - UTF_MAX, 0)
+
+	for start-=1; start >= limit; start-=1 {
+		if (s[start] & 0xc0) != RUNE_SELF {
+			break
+		}
+	}
+
+	start = max(start, 0)
+	r, size = string_decode_rune(s[start:end])
+	if start+size != end {
+		return RUNE_ERROR, 1
+	}
+	return r, size
+}
+
+
+string16_decode_rune :: proc "contextless" (s: string16) -> (rune, int) #no_bounds_check {
+	REPLACEMENT_CHAR :: '\ufffd'
+	_surr1           :: 0xd800
+	_surr2           :: 0xdc00
+	_surr3           :: 0xe000
+	_surr_self       :: 0x10000
+
+	r := rune(REPLACEMENT_CHAR)
+
+	if len(s) < 1 {
+		return r, 0
+	}
+
+	w := 1
+	switch c := s[0]; {
+	case c < _surr1, _surr3 <= c:
+		r = rune(c)
+	case _surr1 <= c && c < _surr2 && 1 < len(s) &&
+		_surr2 <= s[1] && s[1] < _surr3:
+		r1, r2 := rune(c), rune(s[1])
+		if _surr1 <= r1 && r1 < _surr2 && _surr2 <= r2 && r2 < _surr3 {
+			r = (r1-_surr1)<<10 | (r2 - _surr2) + _surr_self
+		}
+		w += 1
+	}
+	return r, w
+}
+
+string16_decode_last_rune :: proc "contextless" (s: string16) -> (rune, int) #no_bounds_check {
+	REPLACEMENT_CHAR :: '\ufffd'
+	_surr1           :: 0xd800
+	_surr2           :: 0xdc00
+	_surr3           :: 0xe000
+	_surr_self       :: 0x10000
+
+	r := rune(REPLACEMENT_CHAR)
+
+	if len(s) < 1 {
+		return r, 0
+	}
+
+	n := len(s)-1
+	c := s[n]
+	w := 1
+	if _surr2 <= c && c < _surr3 {
+		if n >= 1 {
+			r1 := rune(s[n-1])
+			r2 := rune(c)
+			if _surr1 <= r1 && r1 < _surr2 {
+				r = (r1-_surr1)<<10 | (r2 - _surr2) + _surr_self
+			}
+			w = 2
+		}
+	} else if c < _surr1 || _surr3 <= c {
+		r = rune(c)
+	}
+	return r, w
+}
+
+
+
+abs_complex32 :: #force_inline proc "contextless" (x: complex32) -> f16 {
+	p, q := abs(real(x)), abs(imag(x))
+	if p < q {
+		p, q = q, p
+	}
+	if p == 0 {
+		return 0
+	}
+	q = q / p
+	return p * f16(intrinsics.sqrt(f32(1 + q*q)))
+}
+abs_complex64 :: #force_inline proc "contextless" (x: complex64) -> f32 {
+	p, q := abs(real(x)), abs(imag(x))
+	if p < q {
+		p, q = q, p
+	}
+	if p == 0 {
+		return 0
+	}
+	q = q / p
+	return p * intrinsics.sqrt(1 + q*q)
+}
+abs_complex128 :: #force_inline proc "contextless" (x: complex128) -> f64 {
+	p, q := abs(real(x)), abs(imag(x))
+	if p < q {
+		p, q = q, p
+	}
+	if p == 0 {
+		return 0
+	}
+	q = q / p
+	return p * intrinsics.sqrt(1 + q*q)
+}
+abs_quaternion64 :: #force_inline proc "contextless" (x: quaternion64) -> f16 {
+	r, i, j, k := real(x), imag(x), jmag(x), kmag(x)
+	return f16(intrinsics.sqrt(f32(r*r + i*i + j*j + k*k)))
+}
+abs_quaternion128 :: #force_inline proc "contextless" (x: quaternion128) -> f32 {
+	r, i, j, k := real(x), imag(x), jmag(x), kmag(x)
+	return intrinsics.sqrt(r*r + i*i + j*j + k*k)
+}
+abs_quaternion256 :: #force_inline proc "contextless" (x: quaternion256) -> f64 {
+	r, i, j, k := real(x), imag(x), jmag(x), kmag(x)
+	return intrinsics.sqrt(r*r + i*i + j*j + k*k)
+}
+
+
+quo_complex32 :: proc "contextless" (n, m: complex32) -> complex32 {
+	nr, ni := f32(real(n)), f32(imag(n))
+	mr, mi := f32(real(m)), f32(imag(m))
+
+	e, f: f32
+
+	if abs(mr) >= abs(mi) {
+		ratio := mi / mr
+		denom := mr + ratio*mi
+		e = (nr + ni*ratio) / denom
+		f = (ni - nr*ratio) / denom
+	} else {
+		ratio := mr / mi
+		denom := mi + ratio*mr
+		e = (nr*ratio + ni) / denom
+		f = (ni*ratio - nr) / denom
+	}
+
+	return complex(f16(e), f16(f))
+}
+
+
+quo_complex64 :: proc "contextless" (n, m: complex64) -> complex64 {
+	e, f: f32
+
+	if abs(real(m)) >= abs(imag(m)) {
+		ratio := imag(m) / real(m)
+		denom := real(m) + ratio*imag(m)
+		e = (real(n) + imag(n)*ratio) / denom
+		f = (imag(n) - real(n)*ratio) / denom
+	} else {
+		ratio := real(m) / imag(m)
+		denom := imag(m) + ratio*real(m)
+		e = (real(n)*ratio + imag(n)) / denom
+		f = (imag(n)*ratio - real(n)) / denom
+	}
+
+	return complex(e, f)
+}
+
+quo_complex128 :: proc "contextless" (n, m: complex128) -> complex128 {
+	e, f: f64
+
+	if abs(real(m)) >= abs(imag(m)) {
+		ratio := imag(m) / real(m)
+		denom := real(m) + ratio*imag(m)
+		e = (real(n) + imag(n)*ratio) / denom
+		f = (imag(n) - real(n)*ratio) / denom
+	} else {
+		ratio := real(m) / imag(m)
+		denom := imag(m) + ratio*real(m)
+		e = (real(n)*ratio + imag(n)) / denom
+		f = (imag(n)*ratio - real(n)) / denom
+	}
+
+	return complex(e, f)
+}
+
+mul_quaternion64 :: proc "contextless" (q, r: quaternion64) -> quaternion64 {
+	q0, q1, q2, q3 := f32(real(q)), f32(imag(q)), f32(jmag(q)), f32(kmag(q))
+	r0, r1, r2, r3 := f32(real(r)), f32(imag(r)), f32(jmag(r)), f32(kmag(r))
+
+	t0 := r0*q0 - r1*q1 - r2*q2 - r3*q3
+	t1 := r0*q1 + r1*q0 - r2*q3 + r3*q2
+	t2 := r0*q2 + r1*q3 + r2*q0 - r3*q1
+	t3 := r0*q3 - r1*q2 + r2*q1 + r3*q0
+
+	return quaternion(w=f16(t0), x=f16(t1), y=f16(t2), z=f16(t3))
+}
+
+mul_quaternion128 :: proc "contextless" (q, r: quaternion128) -> quaternion128 {
+	q0, q1, q2, q3 := real(q), imag(q), jmag(q), kmag(q)
+	r0, r1, r2, r3 := real(r), imag(r), jmag(r), kmag(r)
+
+	t0 := r0*q0 - r1*q1 - r2*q2 - r3*q3
+	t1 := r0*q1 + r1*q0 - r2*q3 + r3*q2
+	t2 := r0*q2 + r1*q3 + r2*q0 - r3*q1
+	t3 := r0*q3 - r1*q2 + r2*q1 + r3*q0
+
+	return quaternion(w=t0, x=t1, y=t2, z=t3)
+}
+
+mul_quaternion256 :: proc "contextless" (q, r: quaternion256) -> quaternion256 {
+	q0, q1, q2, q3 := real(q), imag(q), jmag(q), kmag(q)
+	r0, r1, r2, r3 := real(r), imag(r), jmag(r), kmag(r)
+
+	t0 := r0*q0 - r1*q1 - r2*q2 - r3*q3
+	t1 := r0*q1 + r1*q0 - r2*q3 + r3*q2
+	t2 := r0*q2 + r1*q3 + r2*q0 - r3*q1
+	t3 := r0*q3 - r1*q2 + r2*q1 + r3*q0
+
+	return quaternion(w=t0, x=t1, y=t2, z=t3)
+}
+
+quo_quaternion64 :: proc "contextless" (q, r: quaternion64) -> quaternion64 {
+	q0, q1, q2, q3 := f32(real(q)), f32(imag(q)), f32(jmag(q)), f32(kmag(q))
+	r0, r1, r2, r3 := f32(real(r)), f32(imag(r)), f32(jmag(r)), f32(kmag(r))
+
+	invmag2 := 1.0 / (r0*r0 + r1*r1 + r2*r2 + r3*r3)
+
+	t0 := (r0*q0 + r1*q1 + r2*q2 + r3*q3) * invmag2
+	t1 := (r0*q1 - r1*q0 - r2*q3 - r3*q2) * invmag2
+	t2 := (r0*q2 - r1*q3 - r2*q0 + r3*q1) * invmag2
+	t3 := (r0*q3 + r1*q2 + r2*q1 - r3*q0) * invmag2
+
+	return quaternion(w=f16(t0), x=f16(t1), y=f16(t2), z=f16(t3))
+}
+
+quo_quaternion128 :: proc "contextless" (q, r: quaternion128) -> quaternion128 {
+	q0, q1, q2, q3 := real(q), imag(q), jmag(q), kmag(q)
+	r0, r1, r2, r3 := real(r), imag(r), jmag(r), kmag(r)
+
+	invmag2 := 1.0 / (r0*r0 + r1*r1 + r2*r2 + r3*r3)
+
+	t0 := (r0*q0 + r1*q1 + r2*q2 + r3*q3) * invmag2
+	t1 := (r0*q1 - r1*q0 - r2*q3 - r3*q2) * invmag2
+	t2 := (r0*q2 - r1*q3 - r2*q0 + r3*q1) * invmag2
+	t3 := (r0*q3 + r1*q2 + r2*q1 - r3*q0) * invmag2
+
+	return quaternion(w=t0, x=t1, y=t2, z=t3)
+}
+
+quo_quaternion256 :: proc "contextless" (q, r: quaternion256) -> quaternion256 {
+	q0, q1, q2, q3 := real(q), imag(q), jmag(q), kmag(q)
+	r0, r1, r2, r3 := real(r), imag(r), jmag(r), kmag(r)
+
+	invmag2 := 1.0 / (r0*r0 + r1*r1 + r2*r2 + r3*r3)
+
+	t0 := (r0*q0 + r1*q1 + r2*q2 + r3*q3) * invmag2
+	t1 := (r0*q1 - r1*q0 - r2*q3 - r3*q2) * invmag2
+	t2 := (r0*q2 - r1*q3 - r2*q0 + r3*q1) * invmag2
+	t3 := (r0*q3 + r1*q2 + r2*q1 - r3*q0) * invmag2
+
+	return quaternion(w=t0, x=t1, y=t2, z=t3)
+}
+
+@(link_name="__truncsfhf2", linkage=RUNTIME_LINKAGE, require=RUNTIME_REQUIRE)
+truncsfhf2 :: proc "c" (value: f32) -> __float16 {
+	v: struct #raw_union { i: u32, f: f32 }
+	i, s, e, m: i32
+
+	v.f = value
+	i = i32(v.i)
+
+	s =  (i >> 16) & 0x00008000
+	e = ((i >> 23) & 0x000000ff) - (127 - 15)
+	m =   i        & 0x007fffff
+
+
+	if e <= 0 {
+		if e < -10 {
+			return transmute(__float16)u16(s)
+		}
+		m = (m | 0x00800000) >> u32(1 - e)
+
+		if m & 0x00001000 != 0 {
+			m += 0x00002000
+		}
+
+		return transmute(__float16)u16(s | (m >> 13))
+	} else if e == 0xff - (127 - 15) {
+		if m == 0 {
+			return transmute(__float16)u16(s | 0x7c00) /* NOTE(bill): infinity */
+		} else {
+			/* NOTE(bill): NAN */
+			m >>= 13
+			return transmute(__float16)u16(s | 0x7c00 | m | i32(m == 0))
+		}
+	} else {
+		if m & 0x00001000 != 0 {
+			m += 0x00002000
+			if (m & 0x00800000) != 0 {
+				m = 0
+				e += 1
+			}
+		}
+
+		if e > 30 {
+			f := i64(1e12)
+			for j := 0; j < 10; j += 1 {
+				/* NOTE(bill): Cause overflow */
+				g := intrinsics.volatile_load(&f)
+				g *= g
+				intrinsics.volatile_store(&f, g)
+			}
+
+			return transmute(__float16)u16(s | 0x7c00)
+		}
+
+		return transmute(__float16)u16(s | (e << 10) | (m >> 13))
+	}
+}
+
+@(link_name="__aeabi_d2h", linkage=RUNTIME_LINKAGE, require=RUNTIME_REQUIRE)
+aeabi_d2h :: proc "c" (value: f64) -> __float16 {
+	return truncsfhf2(f32(value))
+}
+
+@(link_name="__truncdfhf2", linkage=RUNTIME_LINKAGE, require=RUNTIME_REQUIRE)
+truncdfhf2 :: proc "c" (value: f64) -> __float16 {
+	return truncsfhf2(f32(value))
+}
+
+@(link_name="__gnu_h2f_ieee", linkage=RUNTIME_LINKAGE, require=RUNTIME_REQUIRE)
+gnu_h2f_ieee :: proc "c" (value_: __float16) -> f32 {
+	fp32 :: struct #raw_union { u: u32, f: f32 }
+
+	value := transmute(u16)value_
+	v: fp32
+	magic, inf_or_nan: fp32
+	magic.u = u32((254 - 15) << 23)
+	inf_or_nan.u = u32((127 + 16) << 23)
+
+	v.u = u32(value & 0x7fff) << 13
+	v.f *= magic.f
+	if v.f >= inf_or_nan.f {
+		v.u |= 255 << 23
+	}
+	v.u |= u32(value & 0x8000) << 16
+	return v.f
+}
+
+
+@(link_name="__gnu_f2h_ieee", linkage=RUNTIME_LINKAGE, require=RUNTIME_REQUIRE)
+gnu_f2h_ieee :: proc "c" (value: f32) -> __float16 {
+	return truncsfhf2(value)
+}
+
+@(link_name="__extendhfsf2", linkage=RUNTIME_LINKAGE, require=RUNTIME_REQUIRE)
+extendhfsf2 :: proc "c" (value: __float16) -> f32 {
+	return gnu_h2f_ieee(value)
+}
+
+when .Address in ODIN_SANITIZER_FLAGS {
+	foreign {
+		@(require)
+		__asan_unpoison_memory_region :: proc "system" (address: rawptr, size: uint) ---
+	}
+}

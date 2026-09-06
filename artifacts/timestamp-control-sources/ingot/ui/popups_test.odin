@@ -1,0 +1,208 @@
+#+build !js
+package ui
+
+// Unit tests for popup input routing: the backdrop claim must occlude every
+// point outside the panel while leaving the panel's own area interactive.
+
+import "core:testing"
+
+@(test)
+route_claim_backdrop_occludes_only_outside_panel :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	frame.runtime = &runtime
+	frame.open = true
+	route_reset(&frame)
+	defer route_reset(&frame)
+
+	screen_w, screen_h: i32 = 800, 600
+	panel := Rect_I32{300, 200, 200, 200}
+	route_claim_backdrop(&frame, panel, screen_w, screen_h)
+	// Claims apply on the following frame.
+	route_begin_frame(&frame)
+
+	// Inside the panel stays interactive, including its edges.
+	testing.expect(t, !route_occluded(&frame, Vector2{400, 300}), "panel center must stay live")
+	testing.expect(t, !route_occluded(&frame, Vector2{300, 200}), "panel corner must stay live")
+	testing.expect(
+		t,
+		!route_occluded(&frame, Vector2{499, 399}),
+		"panel inner edge must stay live",
+	)
+
+	// Every band around the panel is claimed.
+	testing.expect(t, route_occluded(&frame, Vector2{400, 100}), "above panel must be occluded")
+	testing.expect(t, route_occluded(&frame, Vector2{400, 500}), "below panel must be occluded")
+	testing.expect(t, route_occluded(&frame, Vector2{100, 300}), "left of panel must be occluded")
+	testing.expect(t, route_occluded(&frame, Vector2{700, 300}), "right of panel must be occluded")
+	testing.expect(t, route_occluded(&frame, Vector2{0, 0}), "corner must be occluded")
+}
+
+@(test)
+route_claim_backdrop_handles_fullscreen_panel :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	frame.runtime = &runtime
+	frame.open = true
+	route_reset(&frame)
+	defer route_reset(&frame)
+
+	// A panel covering the whole screen leaves four zero-area bands, which
+	// must not claim anything or trip the negative-rect assertion.
+	route_claim_backdrop(&frame, Rect_I32{0, 0, 400, 300}, 400, 300)
+	route_begin_frame(&frame)
+	testing.expect(t, !route_occluded(&frame, Vector2{200, 150}), "full-screen panel stays live")
+	testing.expect(t, !route_occluded(&frame, Vector2{0, 0}), "no band should occlude")
+}
+
+@(test)
+popup_layout_clamps_to_offset_viewport :: proc(t: ^testing.T) {
+	viewport := Rect_I32{20, 10, 280, 190}
+	layout := popup_layout({290, 190}, 120, 80, viewport)
+	testing.expect_value(t, layout.rect, Rectangle{180, 120, 120, 80})
+	testing.expect_value(t, layout.content_w, i32(120))
+	testing.expect_value(t, layout.content_h, i32(80))
+	testing.expect(t, !layout.constrained)
+
+	constrained := popup_layout({0, 0}, 400, 300, viewport)
+	testing.expect_value(t, constrained.rect, Rectangle{20, 10, 280, 190})
+	testing.expect(t, constrained.constrained)
+}
+
+@(test)
+popup_placement_flips_and_clamps :: proc(t: ^testing.T) {
+	viewport := Rect_I32{0, 0, 300, 200}
+	below := popup_placed_layout(
+		{
+			anchor = {100, 20, 40, 20},
+			viewport = viewport,
+			preferred_size = {120, 80},
+			placement = .Auto,
+		},
+	)
+	testing.expect_value(t, below.rect, Rectangle{100, 40, 120, 80})
+	above := popup_placed_layout(
+		{
+			anchor = {100, 170, 40, 20},
+			viewport = viewport,
+			preferred_size = {120, 80},
+			placement = .Auto,
+		},
+	)
+	testing.expect_value(t, above.rect, Rectangle{100, 90, 120, 80})
+}
+
+@(test)
+popup_ignores_opening_click_and_reports_escape :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	input := Ui_Input {
+		screen_size = {300, 200},
+	}
+	input.mouse_pressed[0] = true
+	frame: Ui_Frame
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime, &input)
+	config := Popup_Config {
+		anchor          = {20, 20, 1, 1},
+		viewport        = {0, 0, 300, 200},
+		preferred_size  = {120, 80},
+		placement       = .Point,
+		dismiss_escape  = true,
+		dismiss_outside = true,
+	}
+	state: Popup_State
+	popup_open(&frame, &state, Popup_Id(1), config)
+	_ = popup_begin(&frame, &state, config)
+	popup_end(&state)
+	testing.expect(t, popup_is_open(&state))
+	input.keys_pressed[input_key_index(.ESCAPE)] = true
+	_ = popup_begin(&frame, &state, config)
+	popup_end(&state)
+	testing.expect(t, !popup_is_open(&state))
+	testing.expect_value(t, popup_take_close(&state), Popup_Close_Reason.Escape)
+	ui_frame_end(&frame)
+}
+
+@(test)
+tooltip_wrapped_at_waits_then_emits_multiline_overlay :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	input := Ui_Input {
+		mouse_position = {20, 20},
+		screen_size    = {120, 80},
+	}
+	frame := Ui_Frame {
+		output = output,
+	}
+	ui_frame_begin(&frame, &runtime, &input)
+	defer ui_frame_end(&frame)
+	state: Tooltip_State
+	target := Rect_I32{10, 10, 40, 20}
+	text := "one two three four"
+	tooltip_wrapped_at(&frame, &state, target, text, 120, 80, {max_width = 48})
+	testing.expect_value(t, overlay_cmd_count(&frame), 0)
+	input.time = TOOLTIP_DELAY
+	tooltip_wrapped_at(&frame, &state, target, text, 120, 80, {max_width = 48})
+	list := &output.overlay
+	testing.expect_value(t, list.count, 5)
+	testing.expect_value(t, list.commands[0].rect.x, f32(32))
+	testing.expect_value(t, list.commands[0].rect.y, f32(0))
+	testing.expect_value(t, list.commands[0].rect.width, f32(44))
+	testing.expect_value(t, list.commands[0].rect.height, f32(80))
+}
+
+@(test)
+context_menu_clamps_and_claims_in_screen_space :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	sem_enable(&runtime, true)
+	output := new(Ui_Output)
+	defer free(output)
+	input := Ui_Input {
+		screen_size = {300, 200},
+	}
+	frame := Ui_Frame {
+		output = output,
+	}
+	ui_frame_begin(&frame, &runtime, &input)
+	defer {
+		ui_frame_end(&frame)
+		ui_frame_destroy(&frame)
+	}
+	ui_frame_pane_push(&frame, {180.5, 120.25})
+	defer ui_frame_pane_pop(&frame)
+	state := Context_Menu_State {
+		open        = true,
+		just_opened = true,
+		selected    = 99,
+		anchor_x    = 100,
+		anchor_y    = 100,
+	}
+	items := []Menu_Item{{label = "Skip", disabled = true}, {label = "One"}}
+	_ = context_menu(&frame, &state, items, {20, 10, 280, 190})
+	menu_w := context_menu_width_frame(&frame, items, 280)
+	menu_h := context_menu_height_frame(&frame, items)
+	expected := Rectangle{f32(300 - menu_w), f32(200 - menu_h), f32(menu_w), f32(menu_h)}
+	testing.expect_value(t, state.selected, 1)
+	testing.expect_value(t, output.overlay.commands[0].rect, expected)
+	testing.expect_value(t, sem_frame(&frame).nodes[0].rect.y, i32(expected.y) + 4)
+	route_begin_frame(&frame)
+	testing.expect(t, route_occluded(&frame, {expected.x + 1, expected.y + 1}))
+}
