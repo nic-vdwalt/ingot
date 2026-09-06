@@ -1,13 +1,24 @@
 import Metal
 import Foundation
+import CryptoKit
 
 let device = MTLCreateSystemDefaultDevice()!
 let counterSet = device.counterSets!.first { $0.name == "timestamp" }!
 let queue = device.makeCommandQueue()!
+let copySource = device.makeBuffer(length: 256, options: .storageModeShared)!
+let copyDestination = device.makeBuffer(length: 256, options: .storageModeShared)!
+let copyBoundary = CommandLine.arguments.contains("--copy-boundary")
+let dependentBoundary = CommandLine.arguments.contains("--dependent-boundary")
+let fenceBoundary = CommandLine.arguments.contains("--fence-boundary")
+let splitCommands = CommandLine.arguments.contains("--split-commands")
+let emptyFence = CommandLine.arguments.contains("--empty-fence")
+precondition(!emptyFence || fenceBoundary)
+let boundaryFence = device.makeFence()!
+let textureReadback = device.makeBuffer(length: 640 * 480 * 4, options: .storageModeShared)!
 func makeCounters() throws -> MTLCounterSampleBuffer {
     let descriptor = MTLCounterSampleBufferDescriptor()
     descriptor.counterSet = counterSet
-    descriptor.sampleCount = 4
+    descriptor.sampleCount = 6
     descriptor.storageMode = .shared
     return try device.makeCounterSampleBuffer(descriptor: descriptor)
 }
@@ -54,12 +65,15 @@ func emit(_ record: [String: Any]) throws {
     let bytes = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
     print(String(decoding: bytes, as: UTF8.self))
 }
-try emit(["kind": "device", "device": device.name,
+let sourceBytes = try Data(contentsOf: URL(fileURLWithPath: #filePath))
+let sourceHash = SHA256.hash(data: sourceBytes).map { String(format: "%02x", $0) }.joined()
+try emit(["kind": "device", "device": device.name, "source_sha256": sourceHash,
           "os": ProcessInfo.processInfo.operatingSystemVersionString,
           "stage_sampling": device.supportsCounterSampling(.atStageBoundary),
           "draw_sampling": device.supportsCounterSampling(.atDrawBoundary),
           "blit_sampling": device.supportsCounterSampling(.atBlitBoundary)])
 var submission = 0
+var commandSubmissions = 0
 for fresh in [false, true] {
     let reused = try makeCounters()
     for repetition in 0..<4 {
@@ -90,18 +104,55 @@ for fresh in [false, true] {
                 if name == "depth" { encoder.setDepthStencilState(depthState) }
                 encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             }
+            if fenceBoundary { encoder.updateFence(boundaryFence, after: .fragment) }
             encoder.endEncoding()
-            command.commit()
+            let boundaryCommand = splitCommands ? queue.makeCommandBuffer()! : command
+            if splitCommands {
+                command.commit()
+                commandSubmissions += 1
+            }
+            let blitDescriptor = MTLBlitPassDescriptor()
+            let blitSamples = blitDescriptor.sampleBufferAttachments[0]!
+            blitSamples.sampleBuffer = counters
+            blitSamples.startOfEncoderSampleIndex = 4
+            blitSamples.endOfEncoderSampleIndex = 5
+            let blit = boundaryCommand.makeBlitCommandEncoder(descriptor: blitDescriptor)!
+            if fenceBoundary { blit.waitForFence(boundaryFence) }
+            if copyBoundary || (fenceBoundary && !emptyFence) {
+                blit.copy(from: copySource, sourceOffset: 0, to: copyDestination,
+                          destinationOffset: 0, size: 256)
+            }
+            if dependentBoundary {
+                blit.copy(from: name == "depth" ? depthTexture : texture,
+                          sourceSlice: 0, sourceLevel: 0,
+                          sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+                          sourceSize: MTLSize(width: 640, height: 480, depth: 1),
+                          to: textureReadback, destinationOffset: 0,
+                          destinationBytesPerRow: 640 * 4,
+                          destinationBytesPerImage: 640 * 480 * 4)
+            }
+            blit.endEncoding()
+            boundaryCommand.commit()
+            commandSubmissions += 1
             submission += 1
+            boundaryCommand.waitUntilCompleted()
             command.waitUntilCompleted()
-            let data = try counters.resolveCounterRange(0..<4)!
+            let data = try counters.resolveCounterRange(0..<6)!
             let ticks = data.withUnsafeBytes { Array($0.bindMemory(to: UInt64.self)) }
             try emit(["kind": "sample", "case": name, "fresh": fresh,
                       "repetition": repetition, "submission": submission,
-                      "draw_encoded": name != "clear", "ticks": ticks,
+                      "draw_encoded": name != "clear", "ticks": Array(ticks.prefix(4)),
+                      "post_blit_ticks": Array(ticks.suffix(2)), "copy_boundary": copyBoundary,
+                      "dependent_boundary": dependentBoundary,
+                      "fence_boundary": fenceBoundary, "empty_fence": emptyFence,
+                      "split_commands": splitCommands,
+                      "command_submissions": commandSubmissions,
+                      "boundary_status": boundaryCommand.status.rawValue,
+                      "boundary_error": boundaryCommand.error.map { String(describing: $0) } ?? "",
                       "status": command.status.rawValue,
                       "error": command.error.map { String(describing: $0) } ?? ""])
             precondition(command.status == .completed && command.error == nil)
+            precondition(boundaryCommand.status == .completed && boundaryCommand.error == nil)
             if name == "draw" {
                 precondition(ticks[0] > 0 && ticks[3] >= ticks[0])
             }
