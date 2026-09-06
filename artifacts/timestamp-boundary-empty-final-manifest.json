@@ -1,0 +1,24 @@
+{
+  "submissions": 40,
+  "known_clear_failures": 8,
+  "post_boundary_samples": 40,
+  "post_boundary_missing": 40,
+  "post_boundary_overlapping": 40,
+  "production_repair_validated": false,
+  "sha256": {
+    "/Users/nicolasvanderwalt_1/Development/git/ingot/tests/metal_timestamps/evaluate.py": "fa16cceedcb3d2b586c80e2f6004fbffb7a885300f7c79499d7677b8d3360a70",
+    "/Users/nicolasvanderwalt_1/Development/git/ingot/tests/metal_timestamps/native.swift": "9050d8e26f7d0749120d5afdff3a1dfffc5ca0c94a9f3f109b9a691b441558dc",
+    "artifacts/timestamp-boundary-empty-final.jsonl": "39d4521939ce3cb51700ff70ca08b2a41c8c52740e2827709423898bce57bccb",
+    "../tools/wgpu-455571728/lib/libwgpu_native.a": "7d8b688a6b55f0728c847e1c3b028d07ccb1009d8cea4833a6186a5775384248"
+  },
+  "ingot_revision": "c5354994bca9c09d7e069cbc76dacadcc21d61fe",
+  "tracked_diff_sha256": "ff957400ac811eb726185cfc2a47eac5fe9504e970eebf48c7069760291297a4",
+  "device": {
+    "blit_sampling": false,
+    "device": "Apple M2 Max",
+    "draw_sampling": false,
+    "kind": "device",
+    "os": "Version 15.6.1 (Build 24G90)",
+    "stage_sampling": true
+  }
+}

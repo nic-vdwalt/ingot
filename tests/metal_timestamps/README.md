@@ -22,8 +22,49 @@ On Apple M2 Max/macOS 15.6.1, all eight clear-only passes reproduced unwritten
 fragment ends. Drawn, clipped, discard and depth-only cases produced ordered stage
 samples. Stage-boundary sampling was supported; draw/blit-boundary sampling was
 not. These results do not validate a production repair or prove freshness for all
-possible workloads. Window targets, delayed callbacks, multiple encoders per
-submission and the game's production topology remain required follow-up cases.
+possible workloads. Window targets, delayed callbacks and the game's production
+multi-command-buffer topology remain required follow-up cases.
+
+The fixture now appends a blit encoder with stage timestamps. In the final three
+40-submission trials:
+- Default empty blit: all 40 post-pass sample pairs remained zero.
+- `--copy-boundary`: a 256-byte unrelated buffer copy wrote timestamps, but its
+  start overlapped rendering in all 40 cases. Encoding order is not a GPU dependency.
+- `--dependent-boundary`: copying the rendered texture to a buffer produced
+  ordered post-pass samples in all 40 cases. This introduces a full-target readback
+  and changes the workload, so it is not a production timing repair.
+
+A subsequent `--fence-boundary` experiment updates an `MTLFence` after the render
+fragment stage, waits for it in the blit encoder, and performs only the unrelated
+256-byte copy. Five independent 40-submission trials produced 200 ordered,
+nonzero post-boundary pairs, while retaining all 40 expected clear-only failures.
+Captures and manifests are `artifacts/timestamp-boundary-fence*.jsonl` and
+`artifacts/timestamp-boundary-fence*-manifest.json` (the first trial has no number).
+This is a candidate synchronization mechanism, not a production repair: it adds
+GPU work/serialization and still needs window, multi-command-buffer, delayed
+inspection, duration-semantics and overhead validation. Aesir remains the profiler.
+
+`--fence-boundary --split-commands` separates render and boundary encoders into
+80 actual command-buffer submissions for 40 cases. Two trials produced 80 ordered
+pairs with no missing or reversed boundaries. This is only a two-buffer fixture,
+not yet the complete production topology. Conversely, `--fence-boundary --empty-fence`
+removes the copy and produced 39 reversed boundary pairs and one overlapping pair
+in 40 cases: a fence alone does not make empty encoder samples trustworthy.
+The evaluator now reports reversed pairs separately rather than overlooking them.
+These captures are `artifacts/timestamp-fence-split*.jsonl` and
+`artifacts/timestamp-fence-empty.jsonl`.
+
+New captures include the running source's SHA-256. The evaluator rejects a source
+mismatch before writing a manifest; use `--source` with an archived source when
+reviewing older captures. Legacy captures without a source hash explicitly report
+`source_identity_verified=false`. Preserved sources are
+`artifacts/timestamp-fence-source.swift` (five original fence trials) and
+`artifacts/timestamp-split-source.swift` (source-hashed split trial).
+Run evaluator regressions with
+`python3 -m unittest discover -s tests/metal_timestamps -p 'test_*.py'`.
+
+The evaluator reports missing/overlapping/reversed post-boundary samples without
+treating an ordered copy result as validation of pass-duration semantics.
 
 The manifest records fixture/capture/library SHA-256, Ingot revision and tracked
 diff hash. The supplied library path is a dependency artifact identity, not proof
@@ -32,8 +73,12 @@ which library a separately built game linked.
 
 Backend source lookup on 2026-09-06 resolved wgpu-native v29.0.1.1 to commit
 `6aed50955d934ac36049ba8d002034841633ae02`. Its Cargo.toml uses registry dependencies
-wgpu-hal/core/types 29.0.1, not a wgpu submodule. Inspect Cargo.lock and crate source
-checksums before asserting an exact binary/source match or building a patch.
+with minimum versions 29.0.1, not a wgpu submodule. The release Cargo.lock actually
+selects **29.0.3** for wgpu-hal/core/types. The wgpu-hal registry checksum is
+`31f8e1a9e7a8512f276f7c62e018c7fa8d60954303fed2e5750114332049193f`.
+The inspected v29.0.3 Metal command source still maps vertex-start to begin and
+fragment-end to end. Registry crate/source and binary provenance must still be
+verified before claiming an exact binary-source match.
 
 Step 1 remains in progress. Do not treat fixture completion as implementation of
 the six-step profiling plan.

@@ -1,0 +1,8 @@
+[INFO ] --- [2026-09-06 11:36:37] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 11:36:37] The random seed sent to every test is: 7381391431161. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 11:36:37] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 11:36:37] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+[INFO ] --- [2026-09-06 11:36:37] [gpu3d_fuzz_test.odin:142:gpu_3d_deterministic_simulation()] gpu_3d_dts seed=1788694597669817000 iterations=500
+
+Finished 339 tests in 172.72ms. All tests were successful.
+

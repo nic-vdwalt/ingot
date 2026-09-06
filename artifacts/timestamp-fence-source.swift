@@ -1,6 +1,5 @@
 import Metal
 import Foundation
-import CryptoKit
 
 let device = MTLCreateSystemDefaultDevice()!
 let counterSet = device.counterSets!.first { $0.name == "timestamp" }!
@@ -10,9 +9,6 @@ let copyDestination = device.makeBuffer(length: 256, options: .storageModeShared
 let copyBoundary = CommandLine.arguments.contains("--copy-boundary")
 let dependentBoundary = CommandLine.arguments.contains("--dependent-boundary")
 let fenceBoundary = CommandLine.arguments.contains("--fence-boundary")
-let splitCommands = CommandLine.arguments.contains("--split-commands")
-let emptyFence = CommandLine.arguments.contains("--empty-fence")
-precondition(!emptyFence || fenceBoundary)
 let boundaryFence = device.makeFence()!
 let textureReadback = device.makeBuffer(length: 640 * 480 * 4, options: .storageModeShared)!
 func makeCounters() throws -> MTLCounterSampleBuffer {
@@ -65,15 +61,12 @@ func emit(_ record: [String: Any]) throws {
     let bytes = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
     print(String(decoding: bytes, as: UTF8.self))
 }
-let sourceBytes = try Data(contentsOf: URL(fileURLWithPath: #filePath))
-let sourceHash = SHA256.hash(data: sourceBytes).map { String(format: "%02x", $0) }.joined()
-try emit(["kind": "device", "device": device.name, "source_sha256": sourceHash,
+try emit(["kind": "device", "device": device.name,
           "os": ProcessInfo.processInfo.operatingSystemVersionString,
           "stage_sampling": device.supportsCounterSampling(.atStageBoundary),
           "draw_sampling": device.supportsCounterSampling(.atDrawBoundary),
           "blit_sampling": device.supportsCounterSampling(.atBlitBoundary)])
 var submission = 0
-var commandSubmissions = 0
 for fresh in [false, true] {
     let reused = try makeCounters()
     for repetition in 0..<4 {
@@ -106,19 +99,14 @@ for fresh in [false, true] {
             }
             if fenceBoundary { encoder.updateFence(boundaryFence, after: .fragment) }
             encoder.endEncoding()
-            let boundaryCommand = splitCommands ? queue.makeCommandBuffer()! : command
-            if splitCommands {
-                command.commit()
-                commandSubmissions += 1
-            }
             let blitDescriptor = MTLBlitPassDescriptor()
             let blitSamples = blitDescriptor.sampleBufferAttachments[0]!
             blitSamples.sampleBuffer = counters
             blitSamples.startOfEncoderSampleIndex = 4
             blitSamples.endOfEncoderSampleIndex = 5
-            let blit = boundaryCommand.makeBlitCommandEncoder(descriptor: blitDescriptor)!
+            let blit = command.makeBlitCommandEncoder(descriptor: blitDescriptor)!
             if fenceBoundary { blit.waitForFence(boundaryFence) }
-            if copyBoundary || (fenceBoundary && !emptyFence) {
+            if copyBoundary || fenceBoundary {
                 blit.copy(from: copySource, sourceOffset: 0, to: copyDestination,
                           destinationOffset: 0, size: 256)
             }
@@ -132,10 +120,8 @@ for fresh in [false, true] {
                           destinationBytesPerImage: 640 * 480 * 4)
             }
             blit.endEncoding()
-            boundaryCommand.commit()
-            commandSubmissions += 1
+            command.commit()
             submission += 1
-            boundaryCommand.waitUntilCompleted()
             command.waitUntilCompleted()
             let data = try counters.resolveCounterRange(0..<6)!
             let ticks = data.withUnsafeBytes { Array($0.bindMemory(to: UInt64.self)) }
@@ -144,15 +130,10 @@ for fresh in [false, true] {
                       "draw_encoded": name != "clear", "ticks": Array(ticks.prefix(4)),
                       "post_blit_ticks": Array(ticks.suffix(2)), "copy_boundary": copyBoundary,
                       "dependent_boundary": dependentBoundary,
-                      "fence_boundary": fenceBoundary, "empty_fence": emptyFence,
-                      "split_commands": splitCommands,
-                      "command_submissions": commandSubmissions,
-                      "boundary_status": boundaryCommand.status.rawValue,
-                      "boundary_error": boundaryCommand.error.map { String(describing: $0) } ?? "",
+                      "fence_boundary": fenceBoundary,
                       "status": command.status.rawValue,
                       "error": command.error.map { String(describing: $0) } ?? ""])
             precondition(command.status == .completed && command.error == nil)
-            precondition(boundaryCommand.status == .completed && boundaryCommand.error == nil)
             if name == "draw" {
                 precondition(ticks[0] > 0 && ticks[3] >= ticks[0])
             }

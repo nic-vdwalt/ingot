@@ -47,7 +47,19 @@ Gpu_Frame_Timing_Detail :: struct {
 	valid:            bool,
 }
 
+Gpu_Timing_Map_Request :: struct {
+	slot:        ^Gpu_Timing_Slot,
+	generation:  u64,
+	submission:  u64,
+	query_count: u32,
+	readback:    wg.Buffer,
+}
+
 Gpu_Timing_Slot :: struct {
+	map_request: Gpu_Timing_Map_Request,
+	generation:  u64,
+	submission:  u64,
+	resolved:    bool,
 	epoch:       u64,
 	query_set:   wg.QuerySet,
 	resolve:     wg.Buffer,
@@ -62,6 +74,8 @@ Gpu_Timing_Slot :: struct {
 }
 
 Gpu_Timing_Invalid_Pair :: struct {
+	generation:  u64,
+	submission:  u64,
 	begin_tick:  u64,
 	end_tick:    u64,
 	slot_index:  u32,
@@ -87,6 +101,8 @@ Gpu_Timing_Health :: struct {
 }
 
 Gpu_Timing_State :: struct {
+	generation:       u64,
+	submission:       u64,
 	completed:        [GPU_TIMING_COMPLETION_CAPACITY]Gpu_Frame_Timing_Detail,
 	completed_head:   u32,
 	completed_count:  u32,
@@ -172,6 +188,11 @@ _gpu_timing_frame_begin :: proc(ctx: ^Context) {
 	if !ctx.gpu_timing.available do return
 	for &slot, index in ctx.gpu_timing.slots {
 		if slot.in_flight do continue
+		ctx.gpu_timing.generation += 1
+		assert(ctx.gpu_timing.generation != 0)
+		slot.generation = ctx.gpu_timing.generation
+		slot.submission = 0
+		slot.resolved = false
 		slot.frame_index = ctx.stats_current.frame_index
 		slot.epoch = ctx.epoch
 		slot.query_count = 0
@@ -206,7 +227,7 @@ _gpu_timing_pair_reserve :: proc(
 	if state == nil || !state.available do return {}
 	if state.active_slot < 0 || state.active_slot >= GPU_TIMING_FRAME_SLOTS do return {}
 	slot := &state.slots[state.active_slot]
-	if slot.in_flight do return {}
+	if slot.in_flight || slot.resolved do return {}
 	if slot.query_count > GPU_TIMING_QUERY_COUNT - 2 {
 		state.health.pair_exhaustion += 1
 		return {}
@@ -263,6 +284,8 @@ _gpu_timing_frame_resolve :: proc(ctx: ^Context, encoder: wg.CommandEncoder) {
 	if ctx == nil || encoder == nil || ctx.gpu_timing.active_slot < 0 do return
 	slot := &ctx.gpu_timing.slots[ctx.gpu_timing.active_slot]
 	if slot.query_count == 0 do return
+	assert(!slot.in_flight && !slot.resolved)
+	slot.resolved = true
 	bytes := u64(slot.query_count) * size_of(u64)
 	wg.CommandEncoderResolveQuerySet(encoder, slot.query_set, 0, slot.query_count, slot.resolve, 0)
 	wg.CommandEncoderCopyBufferToBuffer(encoder, slot.resolve, 0, slot.readback, 0, bytes)
@@ -273,13 +296,24 @@ _gpu_timing_frame_submitted :: proc(ctx: ^Context) {
 	slot := &ctx.gpu_timing.slots[ctx.gpu_timing.active_slot]
 	ctx.gpu_timing.active_slot = -1
 	if slot.query_count == 0 do return
+	assert(slot.resolved && !slot.in_flight)
+	ctx.gpu_timing.submission += 1
+	assert(ctx.gpu_timing.submission != 0)
+	slot.submission = ctx.gpu_timing.submission
 	slot.in_flight = true
+	slot.map_request = {
+		slot        = slot,
+		generation  = slot.generation,
+		submission  = slot.submission,
+		query_count = slot.query_count,
+		readback    = slot.readback,
+	}
 	wg.BufferMapAsync(
 		slot.readback,
 		{.Read},
 		0,
 		uint(u64(slot.query_count) * size_of(u64)),
-		{mode = .AllowSpontaneos, callback = _gpu_timing_map_done, userdata1 = slot},
+		{mode = .AllowSpontaneos, callback = _gpu_timing_map_done, userdata1 = &slot.map_request},
 	)
 }
 
@@ -373,6 +407,8 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 				)
 				if invalid && !ctx.gpu_timing.health.first_invalid_pair.valid {
 					ctx.gpu_timing.health.first_invalid_pair = {
+						generation  = slot.generation,
+						submission  = slot.submission,
 						begin_tick  = slot.ticks[pair_index * 2],
 						end_tick    = slot.ticks[pair_index * 2 + 1],
 						slot_index  = u32(slot_index),
@@ -447,6 +483,21 @@ _gpu_timing_drain :: proc(
 	return count, health
 }
 
+_gpu_timing_map_request_matches :: proc(request: Gpu_Timing_Map_Request) -> bool {
+	if request.slot == nil do return false
+	slot := request.slot
+	return(
+		slot.in_flight &&
+		slot.generation == request.generation &&
+		slot.submission == request.submission &&
+		slot.query_count == request.query_count &&
+		slot.readback == request.readback &&
+		request.query_count > 0 &&
+		request.query_count <= GPU_TIMING_QUERY_COUNT &&
+		request.query_count % 2 == 0 \
+	)
+}
+
 _gpu_timing_map_done :: proc "c" (
 	status: wg.MapAsyncStatus,
 	message: wg.StringView,
@@ -455,12 +506,15 @@ _gpu_timing_map_done :: proc "c" (
 	context = runtime.default_context()
 	_ = message
 	_ = userdata2
-	slot := cast(^Gpu_Timing_Slot)userdata1
-	if slot == nil do return
+	request_pointer := cast(^Gpu_Timing_Map_Request)userdata1
+	if request_pointer == nil do return
+	request := request_pointer^
+	slot := request.slot
+	if slot == nil || !_gpu_timing_map_request_matches(request) do return
 	ok := status == .Success
 	if ok {
-		bytes := uint(u64(slot.query_count) * size_of(u64))
-		mapped := wg.BufferGetConstMappedRange(slot.readback, 0, bytes)
+		bytes := uint(u64(request.query_count) * size_of(u64))
+		mapped := wg.BufferGetConstMappedRange(request.readback, 0, bytes)
 		if mapped == nil {
 			ok = false
 		} else {
