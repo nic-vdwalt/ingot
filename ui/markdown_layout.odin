@@ -24,8 +24,8 @@ markdown_layout_add_run :: proc(
 	}
 	run := Markdown_Layout_Run {
 		bounds       = {x, y, 0, height},
-		hit_top = y,
-		hit_bottom = y + height,
+		hit_top      = y,
+		hit_bottom   = y + height,
 		font_size    = size,
 		style        = style,
 		source_start = source_start,
@@ -157,7 +157,7 @@ Markdown_Layout_Stop :: struct {
 
 Markdown_Layout_Run :: struct {
 	bounds:                   Rect_I32,
-	hit_top, hit_bottom: i32,
+	hit_top, hit_bottom:      i32,
 	font_size:                i32,
 	style:                    Markdown_Layout_Style,
 	text_start, text_end:     int,
@@ -181,10 +181,10 @@ Markdown_Layout_Decoration :: struct {
 }
 
 Markdown_Layout_Block :: struct {
-	start, end: int,
-	y: i32,
+	start, end:     int,
+	y:              i32,
 	first_line_end: int,
-	bottom: i32,
+	bottom:         i32,
 }
 
 Markdown_Layout :: struct {
@@ -198,6 +198,7 @@ Markdown_Layout :: struct {
 	width, content_w, content_h: i32,
 	status:                      Markdown_Prepare_Status,
 	initialized:                 bool,
+	trailing_hit_height:         i32,
 }
 
 markdown_layout_init :: proc(layout: ^Markdown_Layout, allocator := context.allocator) {
@@ -245,23 +246,27 @@ markdown_layout_source_y :: proc(layout: ^Markdown_Layout, offset: int) -> i32 {
 markdown_layout_hit_test :: proc(layout: ^Markdown_Layout, x, y, mouse_x, mouse_y: i32) -> int {
 	assert(layout != nil && layout.initialized)
 	assert(layout.content_h >= 0)
-	if len(layout.runs) == 0 do return -1
+	if len(layout.source) == 0 || mouse_y < y do return -1
 	local_x, local_y := i64(mouse_x) - i64(x), i64(mouse_y) - i64(y)
+	if local_y >= i64(layout.content_h) {
+		if local_y < i64(layout.content_h) + i64(layout.trailing_hit_height) do return len(layout.source)
+		return -1
+	}
 	best := 0
 	best_distance := max(i64)
 	block_start, block_end := 0, len(layout.source) + 1
 	for block in layout.blocks {
 		if i64(block.y) > local_y do break
 		block_start, block_end = block.start, block.end
-		if block.end > block.first_line_end + 1 && local_y >= i64(block.bottom - 5) && local_y < i64(block.bottom) {
+		if block.end > block.first_line_end + 1 &&
+		   local_y >= i64(block.bottom - 5) &&
+		   local_y < i64(block.bottom) {
 			return block.start
 		}
 	}
 	for run, index in layout.runs {
 		if run.source_start < block_start || run.source_start >= block_end do continue
-		distance :=
-			max(i64(run.hit_top) - local_y, 0) +
-			max(local_y - i64(run.hit_bottom) + 1, 0)
+		distance := max(i64(run.hit_top) - local_y, 0) + max(local_y - i64(run.hit_bottom) + 1, 0)
 		distance =
 			distance * (i64(max(i32)) + 1) +
 			max(i64(run.bounds.x) - local_x, 0) +
