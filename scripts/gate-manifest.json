@@ -62,7 +62,9 @@
     "ui.paint_command_reservation_rejects_over_consumption",
     "ui.paint_command_reservation_rejects_under_consumption",
     "ui.paint_command_reservation_rejects_reset_while_active",
-    "ui.paint_command_reservation_rejects_finalize_while_active"
+    "ui.paint_command_reservation_rejects_finalize_while_active",
+    "ui.focus_duplicate_reports_registration_indices",
+    "ui.prepared_capacity_reports_parent_and_limit"
   ],
   "examples": [
     "advanced_ui",

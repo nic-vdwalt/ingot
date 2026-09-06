@@ -1,5 +1,7 @@
 package ui
 
+import "core:fmt"
+
 MAX_PREPARED_NODES_DEFAULT :: 128
 MAX_PREPARED_NODES_HARD :: 8192
 MAX_PREPARED_NODES :: #config(INGOT_PREPARED_NODE_CAP, MAX_PREPARED_NODES_DEFAULT)
@@ -891,7 +893,19 @@ prepared_add_to :: proc(
 ) -> Prepared_Handle {
 	assert(prepared != nil && prepared.open, "prepared_add_to: description not open")
 	nodes := prepared_nodes(prepared)
-	assert(prepared.count >= 0 && prepared.count < i32(len(nodes)), "prepared_add_to: nodes full")
+	when !ODIN_DISABLE_ASSERT {
+		if prepared.count < 0 || prepared.count >= i32(len(nodes)) {
+			buffer: [256]u8
+			message := fmt.bprintf(
+				buffer[:],
+				"prepared_add_to: nodes full (parent=%d count=%d capacity=%d)",
+				parent_index,
+				prepared.count,
+				len(nodes),
+			)
+			assert(prepared.count >= 0 && prepared.count < i32(len(nodes)), message)
+		}
+	}
 	index := prepared.count
 	assert(parent_index >= -1 && parent_index < index, "prepared_add_to: invalid parent")
 	value := node

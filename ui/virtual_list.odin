@@ -1,6 +1,123 @@
 package ui
 
+import "core:math"
+import "core:mem"
+
 VIRTUAL_LIST_ITEM_COUNT_MAX :: 1_000_000
+
+Variable_List_Index :: struct {
+	heights:   [dynamic]i64,
+	tree:      [dynamic]i64,
+	total:     i64,
+	allocator: mem.Allocator,
+}
+
+Variable_List_Window :: struct {
+	first, end: int,
+	top:        i64,
+}
+
+variable_list_init :: proc(index: ^Variable_List_Index, allocator := context.allocator) {
+	assert(index != nil)
+	assert(index.allocator.procedure == nil)
+	index.allocator = allocator
+	index.heights = make([dynamic]i64, allocator)
+	index.tree = make([dynamic]i64, allocator)
+}
+
+variable_list_destroy :: proc(index: ^Variable_List_Index) {
+	assert(index != nil)
+	assert(len(index.heights) <= VIRTUAL_LIST_ITEM_COUNT_MAX)
+	delete(index.heights)
+	delete(index.tree)
+	index^ = {}
+}
+
+variable_list_reset :: proc(index: ^Variable_List_Index, heights: []i64) -> bool {
+	assert(index != nil && index.allocator.procedure != nil)
+	assert(len(index.heights) <= VIRTUAL_LIST_ITEM_COUNT_MAX)
+	if len(heights) > VIRTUAL_LIST_ITEM_COUNT_MAX do return false
+	total: i64
+	for height in heights {
+		if height < 0 || height > max(i64) - total do return false
+		total += height
+	}
+	resize(&index.heights, len(heights))
+	resize(&index.tree, len(heights) + 1)
+	copy(index.heights[:], heights)
+	for &value in index.tree do value = 0
+	for height, offset in heights {
+		position := offset + 1
+		index.tree[position] += height
+		parent := position + (position & -position)
+		if parent < len(index.tree) do index.tree[parent] += index.tree[position]
+	}
+	index.total = total
+	return true
+}
+
+variable_list_update :: proc(index: ^Variable_List_Index, offset: int, height: i64) -> bool {
+	assert(index != nil)
+	assert(len(index.heights) <= VIRTUAL_LIST_ITEM_COUNT_MAX)
+	if offset < 0 || offset >= len(index.heights) || height < 0 do return false
+	remaining := index.total - index.heights[offset]
+	if height > max(i64) - remaining do return false
+	delta := height - index.heights[offset]
+	index.heights[offset] = height
+	index.total = remaining + height
+	for position := offset + 1; position < len(index.tree); position += position & -position {
+		index.tree[position] += delta
+	}
+	return true
+}
+
+variable_list_prefix :: proc(index: ^Variable_List_Index, end: int) -> i64 {
+	assert(index != nil)
+	assert(end >= 0 && end <= len(index.heights))
+	total: i64
+	for position := end; position > 0; position -= position & -position {
+		total += index.tree[position]
+	}
+	return total
+}
+
+variable_list_lower_bound :: proc(index: ^Variable_List_Index, target: f64) -> int {
+	assert(index != nil)
+	assert(len(index.heights) <= VIRTUAL_LIST_ITEM_COUNT_MAX)
+	position := 0
+	sum: i64
+	bit := 1
+	for bit <= len(index.heights) / 2 do bit *= 2
+	for bit > 0 {
+		candidate := position + bit
+		if candidate <= len(index.heights) && f64(sum + index.tree[candidate]) <= target {
+			position = candidate
+			sum += index.tree[candidate]
+		}
+		bit /= 2
+	}
+	return position
+}
+
+variable_list_window :: proc(
+	index: ^Variable_List_Index,
+	scroll: f64,
+	height: i32,
+) -> Variable_List_Window {
+	assert(index != nil)
+	assert(len(index.heights) <= VIRTUAL_LIST_ITEM_COUNT_MAX)
+	if height <= 0 || len(index.heights) == 0 || math.is_nan(scroll) do return {}
+	first := variable_list_lower_bound(index, max(scroll, 0))
+	top := variable_list_prefix(index, first)
+	end := first
+	bottom := scroll + f64(height)
+	current := top
+	for end < len(index.heights) && f64(current) < bottom {
+		current += index.heights[end]
+		end += 1
+	}
+	return {first, end, top}
+}
 
 Virtual_List_State :: struct {
 	scroll:  f32,

@@ -122,6 +122,11 @@ gpu_timing_health_preserves_invalid_and_truncated_evidence :: proc(t: ^testing.T
 	testing.expect_value(t, health.first_invalid_pair.epoch, u64(23))
 	testing.expect_value(t, health.first_invalid_pair.frame_index, u64(45))
 	testing.expect_value(t, health.first_invalid_pair.pair_index, u32(1))
+	testing.expect_value(t, health.first_invalid_pair.begin_tick, u64(40))
+	testing.expect_value(t, health.first_invalid_pair.end_tick, u64(30))
+	testing.expect_value(t, health.first_invalid_pair.slot_index, u32(0))
+	testing.expect_value(t, health.first_invalid_pair.query_begin, u32(2))
+	testing.expect_value(t, health.first_invalid_pair.query_end, u32(3))
 	testing.expect(
 		t,
 		_gpu_timing_label_equal(

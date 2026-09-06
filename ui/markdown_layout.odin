@@ -126,6 +126,8 @@ markdown_layout_add_text :: proc(
 						stop.source = source_start + display_to_raw(spans, start + local)
 					}
 					run.source_end = layout.stops[run.stop_end - 1].source
+					run.link_start = source_start + span.raw_start
+					run.link_end = source_start + span.raw_end
 				}
 			}
 			display_start += len(span.text)
@@ -164,6 +166,7 @@ Markdown_Layout_Run :: struct {
 	source_start, source_end: int,
 	stop_start, stop_end:     int,
 	href_start, href_end:     int,
+	link_start, link_end:     int,
 }
 
 Markdown_Layout_Decoration_Kind :: enum u8 {
@@ -409,8 +412,8 @@ markdown_layout_draw_run :: proc(
 		span := Text_Span {
 			text      = text,
 			href      = string(layout.text[run.href_start:run.href_end]),
-			raw_start = run.source_start,
-			raw_end   = run.source_end,
+			raw_start = run.link_start,
+			raw_end   = run.link_end,
 			link      = true,
 		}
 		markdown_track_link(ctx, &span, x, y, run.bounds.w, run.font_size)
