@@ -825,7 +825,7 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	_assert_window_frame_contract(ctx)
 	renderer_window_projection_refresh(&ctx.rend, ctx.queue, ctx.width, ctx.height)
 	ctx.frame.view = wg.TextureCreateView(ctx.frame.surf_tex.texture, nil)
-	ctx.frame.encoder = wg.DeviceCreateCommandEncoder(ctx.device, &{label = "window"})
+	ctx.frame.encoder = _gpu_timing_command_encoder(ctx, "window")
 	ctx.frame.timing = {}
 	ctx.frame.clear_color = Color{0, 0, 0, 255}
 	ctx.frame.pass_begun = false
@@ -895,6 +895,20 @@ context_ensure_pass :: proc(ctx: ^Context) {
 			},
 		},
 	)
+	when GPU_TIMING_DIAGNOSTICS {
+		if writes.querySet != nil {
+			_gpu_timing_diagnostic_bind(
+				&ctx.gpu_timing.diagnostics[0],
+				u32(ctx.gpu_timing.active_slot),
+				writes.beginningOfPassWriteIndex / 2,
+				ctx.frame.encoder,
+				ctx.frame.pass,
+				.Clear,
+				.Store,
+			)
+			_gpu_timing_diagnostic_attachment(ctx, writes.beginningOfPassWriteIndex, 0, 0)
+		}
+	}
 	_stats_render_pass(ctx)
 	ctx.frame.pass_begun = true
 	// A new pass starts with a full-attachment scissor; restore any active clip.

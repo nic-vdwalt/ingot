@@ -848,5 +848,8 @@ _shader_flush :: proc(
 	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vbuf, vertex_offset, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderSetIndexBuffer(pass, ibuf, .Uint32, index_offset, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderDrawIndexed(pass, index_count, 1, 0, 0, 0)
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_diagnostic_draw(&ctx.gpu_timing.diagnostics[0], pass)
+	}
 	return true
 }

@@ -334,7 +334,14 @@ _stats_finish_submit :: proc(
 		if allow_submit && cmd != nil {
 			submit_started := platform_now()
 			wg.QueueSubmit(ctx.queue, {cmd})
+			when GPU_TIMING_DIAGNOSTICS {
+				_gpu_timing_diagnostic_submit(&ctx.gpu_timing.diagnostics[0], encoder)
+			}
 			submit = platform_now() - submit_started
+		} else {
+			when GPU_TIMING_DIAGNOSTICS {
+				_gpu_timing_diagnostic_encoder_retire(&ctx.gpu_timing.diagnostics[0], encoder)
+			}
 		}
 	} else {
 		cmd = wg.CommandEncoderFinish(encoder, nil)

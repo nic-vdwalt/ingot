@@ -565,6 +565,9 @@ ContextRlDrawVertexArrayInstanced :: proc(ctx: ^Context, offset, count, instance
 		wg.RenderPassEncoderSetVertexBuffer(pass, u32(i), b.buf, 0, b.size)
 	}
 	wg.RenderPassEncoderDraw(pass, u32(count), u32(instances), u32(offset), 0)
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_diagnostic_draw(&ctx.gpu_timing.diagnostics[0], pass)
+	}
 }
 
 RlDrawVertexArrayInstanced :: proc(offset, count, instances: i32) {

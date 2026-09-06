@@ -1012,6 +1012,9 @@ renderer_flush :: proc(
 	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vertex_buffer, vertex_offset, vertex_bytes)
 	wg.RenderPassEncoderSetIndexBuffer(pass, index_buffer, .Uint32, index_offset, index_bytes)
 	wg.RenderPassEncoderDrawIndexed(pass, u32(index_count), 1, 0, 0, 0)
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_diagnostic_draw(&ctx.gpu_timing.diagnostics[0], pass)
+	}
 
 	clear(&r.verts)
 	clear(&r.indices)

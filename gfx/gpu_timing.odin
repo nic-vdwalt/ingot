@@ -70,6 +70,7 @@ Gpu_Timing_Slot :: struct {
 	ticks:       [GPU_TIMING_QUERY_COUNT]u64,
 	map_done:    bool,
 	map_ok:      bool,
+	map_status:  wg.MapAsyncStatus,
 	in_flight:   bool,
 }
 
@@ -101,6 +102,7 @@ Gpu_Timing_Health :: struct {
 }
 
 Gpu_Timing_State :: struct {
+	diagnostics:      [int(GPU_TIMING_DIAGNOSTICS)]Gpu_Timing_Diagnostics,
 	generation:       u64,
 	submission:       u64,
 	completed:        [GPU_TIMING_COMPLETION_CAPACITY]Gpu_Frame_Timing_Detail,
@@ -191,6 +193,11 @@ _gpu_timing_frame_begin :: proc(ctx: ^Context) {
 		ctx.gpu_timing.generation += 1
 		assert(ctx.gpu_timing.generation != 0)
 		slot.generation = ctx.gpu_timing.generation
+		when GPU_TIMING_DIAGNOSTICS {
+			ctx.gpu_timing.diagnostics[0].bindings[index] = {}
+			ctx.gpu_timing.diagnostics[0].resolve_encoder[index] = nil
+			ctx.gpu_timing.diagnostics[0].resolve_ordinal[index] = 0
+		}
 		slot.submission = 0
 		slot.resolved = false
 		slot.frame_index = ctx.stats_current.frame_index
@@ -266,6 +273,17 @@ _gpu_timing_encoder_begin :: proc(
 	assert(ctx.gpu_timing.active_slot < GPU_TIMING_FRAME_SLOTS)
 	slot := &ctx.gpu_timing.slots[ctx.gpu_timing.active_slot]
 	wg.CommandEncoderWriteTimestamp(encoder, slot.query_set, token.query_begin)
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_diagnostic_bind(
+			&ctx.gpu_timing.diagnostics[0],
+			u32(ctx.gpu_timing.active_slot),
+			token.query_begin / 2,
+			encoder,
+			nil,
+			.Undefined,
+			.Undefined,
+		)
+	}
 	return token
 }
 
@@ -286,6 +304,9 @@ _gpu_timing_frame_resolve :: proc(ctx: ^Context, encoder: wg.CommandEncoder) {
 	if slot.query_count == 0 do return
 	assert(!slot.in_flight && !slot.resolved)
 	slot.resolved = true
+	when GPU_TIMING_DIAGNOSTICS {
+		ctx.gpu_timing.diagnostics[0].resolve_encoder[ctx.gpu_timing.active_slot] = encoder
+	}
 	bytes := u64(slot.query_count) * size_of(u64)
 	wg.CommandEncoderResolveQuerySet(encoder, slot.query_set, 0, slot.query_count, slot.resolve, 0)
 	wg.CommandEncoderCopyBufferToBuffer(encoder, slot.resolve, 0, slot.readback, 0, bytes)
@@ -405,6 +426,7 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 					slot.ticks[:],
 					slot.query_count / 2,
 				)
+				_gpu_timing_diagnostic_collect(ctx, slot_index)
 				if invalid && !ctx.gpu_timing.health.first_invalid_pair.valid {
 					ctx.gpu_timing.health.first_invalid_pair = {
 						generation  = slot.generation,
@@ -521,6 +543,7 @@ _gpu_timing_map_done :: proc "c" (
 			mem.copy(raw_data(slot.ticks[:]), raw_data(mapped), int(bytes))
 		}
 	}
+	slot.map_status = status
 	sync.atomic_store(&slot.map_ok, ok)
 	sync.atomic_store(&slot.map_done, true)
 }

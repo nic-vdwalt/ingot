@@ -154,7 +154,7 @@ context_ensure_rt_pass :: proc(ctx: ^Context) {
 	if ctx.frame.rt == 0 || ctx.frame.rt_pass_begun do return
 	view := context_texture_view(ctx, ctx.frame.rt)
 	if view == nil do return
-	ctx.frame.rt_encoder = wg.DeviceCreateCommandEncoder(ctx.device, &{label = "render-target"})
+	ctx.frame.rt_encoder = _gpu_timing_command_encoder(ctx, "render-target")
 	ctx.frame.rt_timing = {}
 	writes := _gpu_timing_pass_writes(&ctx.gpu_timing, "render-target")
 	cc := ctx.frame.rt_clear
@@ -180,6 +180,20 @@ context_ensure_rt_pass :: proc(ctx: ^Context) {
 	// attach a depth buffer here (attaching one would mismatch those pipelines).
 	// depth textures created via rlgl.LoadTextureDepth are simply unused.
 	ctx.frame.rt_pass = wg.CommandEncoderBeginRenderPass(ctx.frame.rt_encoder, &desc)
+	when GPU_TIMING_DIAGNOSTICS {
+		if writes.querySet != nil {
+			_gpu_timing_diagnostic_bind(
+				&ctx.gpu_timing.diagnostics[0],
+				u32(ctx.gpu_timing.active_slot),
+				writes.beginningOfPassWriteIndex / 2,
+				ctx.frame.rt_encoder,
+				ctx.frame.rt_pass,
+				load_op,
+				.Store,
+			)
+			_gpu_timing_diagnostic_attachment(ctx, writes.beginningOfPassWriteIndex, ctx.frame.rt, 0)
+		}
+	}
 	_stats_render_pass(ctx)
 	ctx.frame.rt_pass_begun = true
 }

@@ -12,6 +12,8 @@ let dependentBoundary = CommandLine.arguments.contains("--dependent-boundary")
 let fenceBoundary = CommandLine.arguments.contains("--fence-boundary")
 let splitCommands = CommandLine.arguments.contains("--split-commands")
 let emptyFence = CommandLine.arguments.contains("--empty-fence")
+let gpuResolve = CommandLine.arguments.contains("--gpu-resolve")
+let resolvedCounters = device.makeBuffer(length: 48, options: .storageModeShared)!
 precondition(!emptyFence || fenceBoundary)
 let boundaryFence = device.makeFence()!
 let textureReadback = device.makeBuffer(length: 640 * 480 * 4, options: .storageModeShared)!
@@ -131,6 +133,10 @@ for fresh in [false, true] {
                           destinationBytesPerRow: 640 * 4,
                           destinationBytesPerImage: 640 * 480 * 4)
             }
+            if gpuResolve {
+                blit.resolveCounters(counters, range: 0..<6,
+                                     destinationBuffer: resolvedCounters, destinationOffset: 0)
+            }
             blit.endEncoding()
             boundaryCommand.commit()
             commandSubmissions += 1
@@ -139,13 +145,16 @@ for fresh in [false, true] {
             command.waitUntilCompleted()
             let data = try counters.resolveCounterRange(0..<6)!
             let ticks = data.withUnsafeBytes { Array($0.bindMemory(to: UInt64.self)) }
+            let gpuTicks = gpuResolve ? Array(UnsafeBufferPointer(
+                start: resolvedCounters.contents().assumingMemoryBound(to: UInt64.self), count: 6)) : []
             try emit(["kind": "sample", "case": name, "fresh": fresh,
                       "repetition": repetition, "submission": submission,
                       "draw_encoded": name != "clear", "ticks": Array(ticks.prefix(4)),
                       "post_blit_ticks": Array(ticks.suffix(2)), "copy_boundary": copyBoundary,
                       "dependent_boundary": dependentBoundary,
                       "fence_boundary": fenceBoundary, "empty_fence": emptyFence,
-                      "split_commands": splitCommands,
+                      "split_commands": splitCommands, "gpu_resolve": gpuResolve,
+                      "gpu_resolved_ticks": gpuTicks,
                       "command_submissions": commandSubmissions,
                       "boundary_status": boundaryCommand.status.rawValue,
                       "boundary_error": boundaryCommand.error.map { String(describing: $0) } ?? "",

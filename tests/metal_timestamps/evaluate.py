@@ -41,7 +41,18 @@ def evaluate(records):
     missing = sum(min(sample["post_blit_ticks"]) == 0 for sample in boundaries)
     overlapping = sum(sample["post_blit_ticks"][0] < max(sample["ticks"])
                       for sample in boundaries)
+    resolved = [sample for sample in samples if sample.get("gpu_resolve")]
+    resolve_mismatches = 0
+    drawn_resolve_reversed = 0
+    for sample in resolved:
+        gpu_ticks = sample["gpu_resolved_ticks"]
+        assert len(gpu_ticks) == 6, sample
+        resolve_mismatches += gpu_ticks[:4] != sample["ticks"]
+        drawn_resolve_reversed += sample["case"] != "clear" and gpu_ticks[3] < gpu_ticks[0]
     return {"submissions": len(samples), "command_submissions": command_submissions,
+            "gpu_resolve_samples": len(resolved),
+            "gpu_resolve_mismatches": resolve_mismatches,
+            "drawn_gpu_resolve_reversed": drawn_resolve_reversed,
             "known_clear_failures": 8,
             "post_boundary_samples": len(boundaries),
             "post_boundary_missing": missing, "post_boundary_overlapping": overlapping,

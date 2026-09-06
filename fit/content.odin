@@ -27,6 +27,15 @@ Variable_List_Reset :: proc(index: ^Variable_List_Index, heights: []i64) -> bool
 	index.total = index.inner.total
 	return true
 }
+Variable_List_Append :: proc(index: ^Variable_List_Index, height: i64) -> bool {
+	assert(index != nil)
+	assert(index.inner.allocator.procedure != nil)
+	ok := ui.variable_list_append(&index.inner, height)
+	index.heights = index.inner.heights[:]
+	index.total = index.inner.total
+	return ok
+}
+
 Variable_List_Update :: proc(index: ^Variable_List_Index, offset: int, height: i64) -> bool {
 	assert(index != nil)
 	if !ui.variable_list_update(&index.inner, offset, height) do return false

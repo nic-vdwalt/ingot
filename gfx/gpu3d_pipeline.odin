@@ -747,7 +747,7 @@ context_copy_gpu_3d_target_named :: proc(
 	   source_depth.wgformat != destination_depth.wgformat {
 		return false
 	}
-	encoder := wg.DeviceCreateCommandEncoder(ctx.device, &{label = name})
+	encoder := _gpu_timing_command_encoder(ctx, name)
 	if encoder == nil do return false
 	timing := _gpu_timing_encoder_begin(ctx, encoder, name)
 	extent := wg.Extent3D{u32(width), u32(height), 1}
@@ -772,10 +772,16 @@ context_copy_gpu_3d_target_named :: proc(
 	_gpu_timing_encoder_end(ctx, encoder, timing)
 	command := wg.CommandEncoderFinish(encoder, nil)
 	if command == nil {
+		when GPU_TIMING_DIAGNOSTICS {
+			_gpu_timing_diagnostic_encoder_retire(&ctx.gpu_timing.diagnostics[0], encoder)
+		}
 		wg.CommandEncoderRelease(encoder)
 		return false
 	}
 	wg.QueueSubmit(ctx.queue, {command})
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_diagnostic_submit(&ctx.gpu_timing.diagnostics[0], encoder)
+	}
 	wg.CommandBufferRelease(command)
 	wg.CommandEncoderRelease(encoder)
 	return true
@@ -1575,7 +1581,6 @@ context_begin_gpu_3d_named :: proc(
 		if owns_stream do _stream_slot_abandon(&ctx.rend)
 		return {}, false
 	}
-
 	color := wg.RenderPassColorAttachment {
 		view          = color_view,
 		resolveTarget = resolve_view,
@@ -1592,7 +1597,7 @@ context_begin_gpu_3d_named :: proc(
 		stencilLoadOp   = .Undefined,
 		stencilStoreOp  = .Undefined,
 	}
-	encoder := wg.DeviceCreateCommandEncoder(ctx.device, &{label = name})
+	encoder := _gpu_timing_command_encoder(ctx, name)
 	writes := _gpu_timing_pass_writes(&ctx.gpu_timing, name)
 	pass := wg.CommandEncoderBeginRenderPass(
 		encoder,
@@ -1604,6 +1609,7 @@ context_begin_gpu_3d_named :: proc(
 			timestampWrites = writes.querySet != nil ? &writes : nil,
 		},
 	)
+	_gpu_timing_diagnostic_render_pass(ctx, writes, encoder, pass, color, target)
 	resources.next_pass_generation += 1
 	if resources.next_pass_generation == 0 do resources.next_pass_generation = 1
 	resources.active_pass_generation = resources.next_pass_generation
@@ -2137,6 +2143,9 @@ _gpu_3d_draw_indexed :: proc(
 	wg.RenderPassEncoderSetVertexBuffer(pass.pass, 0, entry.vertex_buffer, 0, vertex_bytes)
 	wg.RenderPassEncoderSetIndexBuffer(pass.pass, entry.index_buffer, .Uint32, 0, index_bytes)
 	wg.RenderPassEncoderDrawIndexed(pass.pass, entry.index_count, instance_count, 0, 0, 0)
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_diagnostic_draw(&pass.owner.gpu_timing.diagnostics[0], pass.pass)
+	}
 	_stats_gpu3d_draw(
 		pass.owner,
 		entry.vertex_count * instance_count,

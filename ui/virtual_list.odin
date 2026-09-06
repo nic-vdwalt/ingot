@@ -42,17 +42,59 @@ variable_list_reset :: proc(index: ^Variable_List_Index, heights: []i64) -> bool
 		if height < 0 || height > max(i64) - total do return false
 		total += height
 	}
-	resize(&index.heights, len(heights))
-	resize(&index.tree, len(heights) + 1)
-	copy(index.heights[:], heights)
-	for &value in index.tree do value = 0
+	pending: Variable_List_Index
+	variable_list_init(&pending, index.allocator)
+	defer variable_list_destroy(&pending)
+	if resize(&pending.heights, len(heights)) != nil do return false
+	if resize(&pending.tree, len(heights) + 1) != nil do return false
+	copy(pending.heights[:], heights)
+	for &value in pending.tree do value = 0
 	for height, offset in heights {
 		position := offset + 1
-		index.tree[position] += height
+		pending.tree[position] += height
 		parent := position + (position & -position)
-		if parent < len(index.tree) do index.tree[parent] += index.tree[position]
+		if parent < len(pending.tree) do pending.tree[parent] += pending.tree[position]
 	}
-	index.total = total
+	pending.total = total
+	previous := index^
+	index^ = pending
+	pending = previous
+	return true
+}
+
+variable_list_append :: proc(index: ^Variable_List_Index, height: i64) -> bool {
+	assert(index != nil && index.allocator.procedure != nil)
+	assert(len(index.heights) <= VIRTUAL_LIST_ITEM_COUNT_MAX)
+	count := len(index.heights)
+	if count == VIRTUAL_LIST_ITEM_COUNT_MAX || height < 0 || height > max(i64) - index.total {
+		return false
+	}
+	if count + 1 > cap(index.heights) {
+		capacity := min(
+			max(count + 1, max(16, cap(index.heights) * 2)),
+			VIRTUAL_LIST_ITEM_COUNT_MAX,
+		)
+		if reserve(&index.heights, capacity) != nil do return false
+	}
+	if count + 2 > cap(index.tree) {
+		capacity := min(
+			max(count + 2, max(16, cap(index.tree) * 2)),
+			VIRTUAL_LIST_ITEM_COUNT_MAX + 1,
+		)
+		if reserve(&index.tree, capacity) != nil do return false
+	}
+	position := count + 1
+	start := position - (position & -position)
+	value := index.total - variable_list_prefix(index, start) + height
+	if len(index.tree) == 0 {
+		if _, err := append(&index.tree, i64(0)); err != nil do return false
+	}
+	if _, err := append(&index.heights, height); err != nil do return false
+	if _, err := append(&index.tree, value); err != nil {
+		resize(&index.heights, count)
+		return false
+	}
+	index.total += height
 	return true
 }
 

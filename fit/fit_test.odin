@@ -7,6 +7,25 @@ import "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
+@(test)
+fit_variable_list_append_keeps_public_snapshot_current :: proc(t: ^testing.T) {
+	index: Variable_List_Index
+	Variable_List_Init(&index)
+	defer Variable_List_Destroy(&index)
+	for position in 0 ..< 257 {
+		testing.expect(t, Variable_List_Append(&index, i64(position)))
+		testing.expect_value(t, len(index.heights), position + 1)
+		testing.expect_value(t, index.heights[position], i64(position))
+		testing.expect_value(t, index.total, i64(position * (position + 1) / 2))
+	}
+	total := index.total
+	testing.expect(t, !Variable_List_Append(&index, -1))
+	testing.expect_value(t, index.total, total)
+	testing.expect_value(t, len(index.heights), 257)
+	testing.expect(t, Variable_List_Update(&index, 0, 10))
+	testing.expect_value(t, Variable_List_Prefix(&index, 1), i64(10))
+}
+
 Fit_Test_Counts :: struct {
 	measure: i32,
 	render:  i32,
