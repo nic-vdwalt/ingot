@@ -226,6 +226,18 @@ markdown_layout_destroy :: proc(layout: ^Markdown_Layout) {
 	layout^ = {}
 }
 
+markdown_layout_owned_bytes :: proc(layout: ^Markdown_Layout) -> u64 {
+	assert(layout != nil && layout.initialized)
+	assert(len(layout.source) <= MARKDOWN_LAYOUT_SOURCE_MAX)
+	return(
+		u64(len(layout.source) + cap(layout.text)) +
+		u64(cap(layout.runs)) * u64(size_of(Markdown_Layout_Run)) +
+		u64(cap(layout.stops)) * u64(size_of(Markdown_Layout_Stop)) +
+		u64(cap(layout.decorations)) * u64(size_of(Markdown_Layout_Decoration)) +
+		u64(cap(layout.blocks)) * u64(size_of(Markdown_Layout_Block)) \
+	)
+}
+
 markdown_layout_measure :: proc(layout: ^Markdown_Layout) -> (width, height: i32) {
 	assert(layout != nil && layout.initialized)
 	assert(layout.content_w >= 0 && layout.content_h >= 0)

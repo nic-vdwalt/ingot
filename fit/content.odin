@@ -16,6 +16,75 @@ Markdown_Context :: struct {
 
 Markdown_Prepare_Status :: ui.Markdown_Prepare_Status
 
+Markdown_Layout :: struct {
+	inner: ui.Markdown_Layout,
+}
+
+Markdown_Layout_Init :: proc(layout: ^Markdown_Layout) {
+	assert(layout != nil)
+	assert(!layout.inner.initialized)
+	ui.markdown_layout_init(&layout.inner)
+}
+
+Markdown_Layout_Destroy :: proc(layout: ^Markdown_Layout) {
+	assert(layout != nil)
+	ui.markdown_layout_destroy(&layout.inner)
+}
+
+Markdown_Layout_Prepare :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	width: i32,
+	source: string,
+) -> Markdown_Prepare_Status {
+	assert(ctx != nil && layout != nil)
+	assert(width > 0)
+	return ui.markdown_layout_prepare(&ctx.inner, &layout.inner, width, source)
+}
+
+Markdown_Layout_Measure :: proc(layout: ^Markdown_Layout) -> (width, height: i32) {
+	assert(layout != nil)
+	return ui.markdown_layout_measure(&layout.inner)
+}
+
+Markdown_Layout_Bytes :: proc(layout: ^Markdown_Layout) -> u64 {
+	assert(layout != nil)
+	return ui.markdown_layout_owned_bytes(&layout.inner)
+}
+
+Markdown_Layout_Draw :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	rect: Rect,
+	color: Color,
+	selection_start: int = -1,
+	selection_end: int = -1,
+	out_width: ^i32 = nil,
+) -> i32 {
+	assert(ctx != nil && layout != nil)
+	ctx.inner.cull_top = ctx.cull_top
+	ctx.inner.cull_bottom = ctx.cull_bottom
+	return ui.markdown_layout_draw(
+		&ctx.inner,
+		&layout.inner,
+		to_rect(rect),
+		ui.Color(color),
+		selection_start,
+		selection_end,
+		out_width,
+	)
+}
+
+Markdown_Layout_Hit_Test :: proc(layout: ^Markdown_Layout, x, y, mouse_x, mouse_y: i32) -> int {
+	assert(layout != nil)
+	return ui.markdown_layout_hit_test(&layout.inner, x, y, mouse_x, mouse_y)
+}
+
+Markdown_Layout_Source_Y :: proc(layout: ^Markdown_Layout, offset: int) -> i32 {
+	assert(layout != nil)
+	return ui.markdown_layout_source_y(&layout.inner, offset)
+}
+
 Markdown_Prepared :: struct {
 	inner: ui.Markdown_Prepared,
 }
