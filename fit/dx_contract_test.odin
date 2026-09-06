@@ -19,10 +19,18 @@ dx_diagnostics_preserve_bounded_failure_counts :: proc(t: ^testing.T) {
 	defer Test_Driver_Destroy(&driver)
 	testing.expect(t, Test_Driver_Frame(&driver, {}, dx_diagnostic_draw))
 	actual := Test_Driver_Diagnostics(&driver)
-	testing.expect_value(t, actual.layout_overflows, i32(2))
-	testing.expect_value(t, actual.semantic_id_collisions, i32(3))
-	testing.expect_value(t, actual.semantic_nodes_dropped, i32(3))
-	testing.expect_value(t, actual.main_commands_dropped, i32(4))
+	fit_expect_diagnostics(
+		t,
+		actual,
+		{
+			layout_overflows = 2,
+			semantic_id_collisions = 3,
+			semantic_nodes_dropped = 3,
+			main_commands_dropped = 4,
+		},
+		0,
+		0,
+	)
 }
 
 dx_duplicate_draw :: proc(builder: ^Builder, _: rawptr) {

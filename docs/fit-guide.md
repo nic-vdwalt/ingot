@@ -138,6 +138,15 @@ snapshot is produced; semantic collision counters are not universal ID checking
 when semantics are disabled. The DX tests deliberately inject duplicate semantic
 records separately from focus registration to verify bounded degradation.
 
+Duplicate-focus assertions include the stable focus ID and the first/current
+registration indices. These are traversal indices, not declaration source lines.
+Prepared-node exhaustion includes the requested parent, current count, and capacity.
+Both messages remain assertion-only programmer-error diagnostics, not recovery APIs.
+
+Fit's internal diagnostic tests compare an explicit expected snapshot across every
+counter. Omitted expected fields mean zero; intentional degradation must be named.
+Failures identify the counter, expected/observed counts, frame index, and seed.
+
 | Symptom | Check |
 |---|---|
 | Stale Parent assertion | Rebuild Parent each Draw; never cache it |

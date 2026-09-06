@@ -3,6 +3,7 @@
 // keyboard focus whose traversal order is rebuilt in bounded frame arrays.
 package ui
 
+import "core:fmt"
 
 // MAX_FOCUSABLES bounds focus registrations per frame (Tiger Style: put a
 // limit on everything).
@@ -534,8 +535,20 @@ focus :: proc(u: ^Ui, widget: Widget_Id) -> Focus_Opt {
 	assert(widget != WIDGET_ID_NONE, "focus: zero stable id")
 	assert(u.focus_seq < MAX_FOCUSABLES, "focus: too many focusables")
 	widget_focus := focus_widget_id(widget)
-	for registered in u.focus_cur[:u.focus_seq] {
-		assert(registered != widget_focus, "focus: duplicate stable id")
+	when !ODIN_DISABLE_ASSERT {
+		for registered, existing_index in u.focus_cur[:u.focus_seq] {
+			if registered == widget_focus {
+				buffer: [256]u8
+				message := fmt.bprintf(
+					buffer[:],
+					"focus: duplicate stable id %v (first=%d current=%d)",
+					widget_focus,
+					existing_index,
+					u.focus_seq,
+				)
+				assert(registered != widget_focus, message)
+			}
+		}
 	}
 	u.focus_cur[u.focus_seq] = widget_focus
 	u.focus_seq += 1

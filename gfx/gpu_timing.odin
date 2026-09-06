@@ -62,6 +62,11 @@ Gpu_Timing_Slot :: struct {
 }
 
 Gpu_Timing_Invalid_Pair :: struct {
+	begin_tick:  u64,
+	end_tick:    u64,
+	slot_index:  u32,
+	query_begin: u32,
+	query_end:   u32,
 	epoch:       u64,
 	frame_index: u64,
 	pair_index:  u32,
@@ -347,7 +352,7 @@ _gpu_timing_detail :: proc(
 
 _gpu_timing_collect :: proc(ctx: ^Context) {
 	if ctx == nil || !ctx.gpu_timing.available do return
-	for &slot in ctx.gpu_timing.slots {
+	for &slot, slot_index in ctx.gpu_timing.slots {
 		if !slot.in_flight || !sync.atomic_load(&slot.map_done) do continue
 		if sync.atomic_load(&slot.map_ok) {
 			detail, ok := _gpu_timing_detail(
@@ -368,6 +373,11 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 				)
 				if invalid && !ctx.gpu_timing.health.first_invalid_pair.valid {
 					ctx.gpu_timing.health.first_invalid_pair = {
+						begin_tick  = slot.ticks[pair_index * 2],
+						end_tick    = slot.ticks[pair_index * 2 + 1],
+						slot_index  = u32(slot_index),
+						query_begin = pair_index * 2,
+						query_end   = pair_index * 2 + 1,
 						epoch       = slot.epoch,
 						frame_index = slot.frame_index,
 						pair_index  = pair_index,

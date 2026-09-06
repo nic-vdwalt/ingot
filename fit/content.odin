@@ -2,6 +2,51 @@ package fit
 
 import "ingot:ui"
 
+Variable_List_Index :: struct {
+	inner:   ui.Variable_List_Index,
+	heights: []i64,
+	total:   i64,
+}
+Variable_List_Window :: struct {
+	first, end: int,
+	top:        i64,
+}
+Variable_List_Init :: proc(index: ^Variable_List_Index) {
+	assert(index != nil)
+	ui.variable_list_init(&index.inner)
+}
+Variable_List_Destroy :: proc(index: ^Variable_List_Index) {
+	assert(index != nil)
+	ui.variable_list_destroy(&index.inner)
+	index^ = {}
+}
+Variable_List_Reset :: proc(index: ^Variable_List_Index, heights: []i64) -> bool {
+	assert(index != nil)
+	if !ui.variable_list_reset(&index.inner, heights) do return false
+	index.heights = index.inner.heights[:]
+	index.total = index.inner.total
+	return true
+}
+Variable_List_Update :: proc(index: ^Variable_List_Index, offset: int, height: i64) -> bool {
+	assert(index != nil)
+	if !ui.variable_list_update(&index.inner, offset, height) do return false
+	index.total = index.inner.total
+	return true
+}
+Variable_List_Prefix :: proc(index: ^Variable_List_Index, end: int) -> i64 {
+	assert(index != nil)
+	return ui.variable_list_prefix(&index.inner, end)
+}
+Variable_List_Visible :: proc(
+	index: ^Variable_List_Index,
+	scroll: f64,
+	height: i32,
+) -> Variable_List_Window {
+	assert(index != nil)
+	window := ui.variable_list_window(&index.inner, scroll, height)
+	return {window.first, window.end, window.top}
+}
+
 Markdown_Reference_Resolver :: #type proc(
 	reference: string,
 	workspace_files: []string,
