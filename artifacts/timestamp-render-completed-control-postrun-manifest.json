@@ -1,0 +1,43 @@
+{
+  "provenance": "post-run verification; not pre-build provenance; historical compiler and binary identities not recorded; native Swift does not link wgpu",
+  "source": "artifacts/timestamp-render-range-source.swift",
+  "source_sha256": "5c0a669410c8770752ca958c3baec32a1ef1e5ff3f4705b1d9e4f78181078467",
+  "source_identity_verified": true,
+  "capture": "artifacts/timestamp-render-completed-control.jsonl",
+  "capture_sha256": "1530546bab8e827913b8713b69e6502f3417282e0f2ff62e93a8c1ae00739cea",
+  "evaluator_sha256": "01a0896abf28cbe4f30d1012a10674454a018b920df4de0e6cca53ec0fb0c732",
+  "device": {
+    "blit_sampling": false,
+    "device": "Apple M2 Max",
+    "draw_sampling": false,
+    "kind": "device",
+    "os": "Version 15.6.1 (Build 24G90)",
+    "source_sha256": "5c0a669410c8770752ca958c3baec32a1ef1e5ff3f4705b1d9e4f78181078467",
+    "stage_sampling": true
+  },
+  "topology": {
+    "gpu_resolve": true,
+    "split_commands": true,
+    "resolve_after_completion": true,
+    "fence_boundary": false,
+    "empty_fence": false,
+    "copy_boundary": false,
+    "dependent_boundary": false
+  },
+  "evaluation": {
+    "submissions": 40,
+    "command_submissions": 80,
+    "gpu_resolve_samples": 40,
+    "gpu_resolve_mismatches": 0,
+    "drawn_gpu_resolve_reversed": 0,
+    "known_clear_failures": 8,
+    "post_boundary_samples": 40,
+    "post_boundary_missing": 0,
+    "post_boundary_overlapping": 0,
+    "post_boundary_reversed": 0,
+    "production_repair_validated": false,
+    "clear_gpu_reversed": 8,
+    "clear_cpu_reversed": 8,
+    "clear_resolve_mismatches": 0
+  }
+}
