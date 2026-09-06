@@ -101,6 +101,9 @@ Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 }
 ```
 
+Read the [Fit guide](docs/fit-guide.md) for timing, caller-owned state, reusable
+components, typed commands, and headless tests without introducing another API.
+
 See the [layout guide](docs/layout.md) for responsive Flow, track Grid, sizing,
 and placement options. Larger applications can optionally converge buttons,
 menus, shortcuts, and integration completions on a caller-owned bounded typed

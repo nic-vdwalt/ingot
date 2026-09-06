@@ -1,0 +1,248 @@
+== testing action ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:21] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:21] The random seed sent to every test is: 7072855016944. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:21] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:21] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 4 tests in 161µs. All tests were successful.
+
+== testing asset ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:22] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:22] The random seed sent to every test is: 7072870624495. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:22] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:22] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 40 tests in 24.641ms. All tests were successful.
+
+== testing box3d_workers ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:22] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:22] The random seed sent to every test is: 7072885455901. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:22] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:22] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 2 tests in 134µs. All tests were successful.
+
+== testing ecs ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:23] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:23] The random seed sent to every test is: 7072900882982. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:23] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:23] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 12 tests in 652µs. All tests were successful.
+
+== testing gfx ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:24] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:24] The random seed sent to every test is: 7072928934700. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:24] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:24] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+[INFO ] --- [2026-09-06 08:02:24] [gpu3d_fuzz_test.odin:142:gpu_3d_deterministic_simulation()] gpu_3d_dts seed=1788681744788277000 iterations=500
+
+Finished 336 tests in 167.353ms. All tests were successful.
+
+== testing procgen ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:25] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:25] The random seed sent to every test is: 7072956575964. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:25] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:25] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 106 tests in 3.050199s. All tests were successful.
+
+== testing scene ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:29] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:29] The random seed sent to every test is: 7073047599768. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:29] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:29] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 10 tests in 2.733ms. All tests were successful.
+
+== testing scene_gfx ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:30] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:30] The random seed sent to every test is: 7073068399409. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:30] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:30] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 4 tests in 2.21ms. All tests were successful.
+
+== testing ui ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:32] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:32] The random seed sent to every test is: 7073112683114. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:32] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:32] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+[INFO ] --- [2026-09-06 08:02:32] [text_input_fuzz_test.odin:160:text_input_edit_op_fuzz()] text_input_fuzz seed=1788681752900545000 iterations=2000
+
+Finished 626 tests in 522.746ms. All tests were successful.
+
+== testing ui_gfx ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+ld: warning: ignoring duplicate libraries: '-lobjc'
+[INFO ] --- [2026-09-06 08:02:33] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:33] The random seed sent to every test is: 7073149982507. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:33] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:33] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 26 tests in 3.814ms. All tests were successful.
+
+== testing fit ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:35] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:35] The random seed sent to every test is: 7073189011955. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:35] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:35] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+[INFO ] --- [2026-09-06 08:02:35] [fit_fuzz_test.odin:330:fit_public_builder_fuzz()] fit fuzz seed=1788681755609830000 iterations=128
+
+Finished 70 tests in 21.205ms. All tests were successful.
+
+== testing view ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:36] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:36] The random seed sent to every test is: 7073209872426. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:36] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:36] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 92 tests in 33.693ms. All tests were successful.
+
+== testing view/generate ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:37] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:37] The random seed sent to every test is: 7073228902175. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:37] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:37] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 10 tests in 1.427ms. All tests were successful.
+
+== testing libvterm ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:37] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:37] The random seed sent to every test is: 7073244294897. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:37] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:37] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 1 test in 106µs. The test was successful.
+
+== testing term ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:38] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:38] The random seed sent to every test is: 7073265342969. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:38] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:38] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+[INFO ] --- [2026-09-06 08:02:39] [term_pump_fuzz_test.odin:37:term_pump_resize_fuzz()] term_pump_fuzz seed=1788681759735263000 iterations=300
+
+Finished 21 tests in 1.171749s. All tests were successful.
+
+== testing prefs ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:40] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:40] The random seed sent to every test is: 7073307993657. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:40] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:40] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 1 test in 3.8ms. The test was successful.
+
+== testing net ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:41] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:41] The random seed sent to every test is: 7073323707188. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:41] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:41] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+net: unable to create cache directory "/tmp/ingot_http_cache_11788/blocked": Exist
+
+Finished 49 tests in 9.14678s. All tests were successful.
+
+== testing testx ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:50] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:50] The random seed sent to every test is: 7073557803113. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:50] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:50] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 3 tests in 522µs. All tests were successful.
+
+== testing fuzz/fuzzx ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:51] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:51] The random seed sent to every test is: 7073572295581. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:51] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:51] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 6 tests in 540µs. All tests were successful.
+
+== testing examples/box3d_advanced ==
+Warning: given -define:INGOT_FRAME_SCRATCH_GUARD is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:52] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:52] The random seed sent to every test is: 7073595589925. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:52] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:52] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 5 tests in 237µs. All tests were successful.
+
+== testing examples/builder_controls ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:53] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:53] The random seed sent to every test is: 7073623450687. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:53] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:53] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 5 tests in 1.68ms. All tests were successful.
+
+== testing examples/gallery ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:54] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:54] The random seed sent to every test is: 7073651817422. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:54] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:54] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 5 tests in 51.97ms. All tests were successful.
+
+== testing examples/typed_commands ==
+Warning: given -define:ODIN_TEST_FAIL_ON_EMPTY is unused in the project 
+	Suggestion: use the -show-defineables flag for an overview of the possible defines 
+[INFO ] --- [2026-09-06 08:02:56] Starting test runner with 1 thread.
+[INFO ] --- [2026-09-06 08:02:56] The random seed sent to every test is: 7073682497651. Set with -define:ODIN_TEST_RANDOM_SEED=n.
+[INFO ] --- [2026-09-06 08:02:56] Memory tracking is enabled. Tests will log their memory usage if there's an issue.
+[INFO ] --- [2026-09-06 08:02:56] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]
+
+Finished 1 test in 719µs. The test was successful.
+
+== replaying fuzz regression corpus ==
+target=net version=1 seed=24680 operations=8 bytes=7095
+target=interact version=1 seed=24680 operations=24 bytes=1376
+fuzz corpus: 2 entries valid
+== testing native WSS loopback TLS ==
+wss-loopback: valid PASS
+wss-loopback: untrusted PASS
+wss-loopback: wrong-host PASS
+wss-loopback: bad-upgrade PASS
+== checking sys ==
+== checking pty ==
+== checking accesskit ==

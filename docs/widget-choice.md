@@ -1,5 +1,9 @@
 # Choosing a widget
 
+The [Fit guide](fit-guide.md#when-state-changes) lists delivery phases and
+ownership requirements. Builder operations run during render, not inline in Draw;
+use Action as the default operation path and typed commands only when needed.
+
 - Use `Button` for one immediate operation. Use an `Action` for the shortest
   path; use `Button_Command` when several input sources share one typed command.
 - Use `Checkbox` for an independent boolean and `Radio` for one value from a

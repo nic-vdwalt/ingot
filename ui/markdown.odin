@@ -23,6 +23,7 @@ Markdown_Prepared :: struct {
 	content_h:  i32,
 	generation: u64,
 	status:     Markdown_Prepare_Status,
+	layout:     ^Markdown_Layout,
 }
 
 Markdown_Context :: struct {
@@ -631,7 +632,7 @@ draw_markdown_span_emphasis :: proc(
 // were laid into. The hit box is the text box grown by a hairline on each
 // side: an exact glyph box makes a single-line link feel like it slips out
 // from under the cursor at the boundary.
-@(private = "file")
+@(private = "package")
 markdown_track_link :: proc(
 	ctx: ^Markdown_Context,
 	span: ^Text_Span,
@@ -1965,26 +1966,311 @@ markdown_draw_unprepared :: proc(
 	return state.current_y - y
 }
 
+markdown_layout_prepare :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	width: i32,
+	source: string,
+) -> Markdown_Prepare_Status {
+	assert(ctx != nil && ctx.frame != nil && ctx.frame.open)
+	assert(layout != nil && layout.initialized && width > 0)
+	owned_source := strings.clone(
+		source[:min(len(source), MARKDOWN_LAYOUT_SOURCE_MAX)],
+		layout.allocator,
+	)
+	delete(layout.source, layout.allocator)
+	layout.source = owned_source
+	clear(&layout.text)
+	clear(&layout.runs)
+	clear(&layout.stops)
+	clear(&layout.decorations)
+	clear(&layout.blocks)
+	layout.width, layout.content_w, layout.content_h = width, 0, 0
+	layout.status = .Truncated if len(source) > MARKDOWN_LAYOUT_SOURCE_MAX else .Complete
+	position := 0
+	in_code := false
+	for position < len(layout.source) {
+		newline := strings.index_byte(layout.source[position:], '\n')
+		end := len(layout.source) if newline < 0 else position + newline
+		line := layout.source[position:end]
+		block_y := layout.content_h
+		next := end + 1
+		if is_code_fence(line) {
+			decoration_y := layout.content_h + (2 if !in_code else 0)
+			append(
+				&layout.decorations,
+				Markdown_Layout_Decoration{{0, decoration_y, width, 1}, .Border},
+			)
+			layout.content_h += 6 if !in_code else 8
+			in_code = !in_code
+		} else if in_code {
+			markdown_layout_code(ctx, layout, line, position)
+		} else if heading, ok := match_heading(line); ok {
+			markdown_layout_heading(ctx, layout, heading, position)
+		} else if len(line) >= 2 &&
+		   (line[0] == '-' || line[0] == '*' || line[0] == '+') &&
+		   line[1] == ' ' {
+			markdown_layout_bullet(ctx, layout, line, position)
+		} else if table_next, handled := markdown_layout_table(ctx, layout, line, position, end);
+		   handled {
+			next = table_next
+		} else if len(line) == 0 {
+			layout.content_h += ui_frame_metrics(ctx.frame).LINE_HEIGHT / 2
+		} else {
+			metrics := ui_frame_metrics(ctx.frame)
+			layout.content_h += markdown_layout_add_text(
+				ctx,
+				layout,
+				line,
+				position,
+				0,
+				layout.content_h,
+				width,
+				metrics.FONT_SIZE_BODY,
+				metrics.LINE_HEIGHT,
+				.Body,
+				true,
+			)
+		}
+		assert(next > position)
+		append(&layout.blocks, Markdown_Layout_Block{position, next, block_y, end, layout.content_h})
+		position = next
+		if len(layout.runs) >= MARKDOWN_LAYOUT_RUNS_MAX ||
+		   len(layout.stops) >= MARKDOWN_LAYOUT_STOPS_MAX ||
+		   len(layout.decorations) >= MARKDOWN_LAYOUT_RUNS_MAX {
+			layout.status = .Truncated
+			break
+		}
+	}
+	when UI_TELEMETRY_ENABLED {
+		ctx.frame.markdown_telemetry.preparations += 1
+		ctx.frame.markdown_telemetry.layout_walks += 1
+	}
+	return layout.status
+}
+
+markdown_layout_code :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	line: string,
+	start: int,
+) {
+	assert(ctx != nil && layout != nil)
+	assert(start >= 0 && start <= len(layout.source))
+	if len(layout.decorations) + 2 > MARKDOWN_LAYOUT_RUNS_MAX {
+		layout.status = .Truncated
+		return
+	}
+	metrics := ui_frame_metrics(ctx.frame)
+	height := metrics.LINE_HEIGHT
+	append(
+		&layout.decorations,
+		Markdown_Layout_Decoration{{0, layout.content_h, layout.width, height}, .Code_Background},
+	)
+	append(
+		&layout.decorations,
+		Markdown_Layout_Decoration{{0, layout.content_h, 2, height}, .Code_Edge},
+	)
+	text := truncate_to_width_frame(
+		ctx.frame,
+		line,
+		max(layout.width - metrics.CODE_BLOCK_PAD * 2, 1),
+		metrics.FONT_SIZE_BODY,
+	)
+	markdown_layout_add_run(
+		ctx,
+		layout,
+		text,
+		start,
+		metrics.CODE_BLOCK_PAD,
+		layout.content_h,
+		metrics.FONT_SIZE_BODY,
+		height,
+		.Primary,
+	)
+	layout.content_w = max(
+		layout.content_w,
+		min(
+			measure_text_frame(
+				ctx.frame,
+				strings.clone_to_cstring(line, context.temp_allocator),
+				metrics.FONT_SIZE_BODY,
+			),
+			layout.width - metrics.CODE_BLOCK_PAD * 2,
+		) +
+		metrics.CODE_BLOCK_PAD * 2,
+	)
+	layout.content_h += height
+}
+
+markdown_layout_heading :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	heading: Heading_Match,
+	start: int,
+) {
+	assert(ctx != nil && layout != nil)
+	assert(heading.level >= 1 && heading.level <= 3)
+	size := heading_font_size(ctx, heading.level)
+	height := markdown_layout_add_text(
+		ctx,
+		layout,
+		heading.text,
+		start + heading.prefix_len,
+		0,
+		layout.content_h,
+		layout.width,
+		size,
+		heading_line_height(ctx, heading.level),
+		.Heading,
+		false,
+	)
+	if height == 0 do height = size + 4
+	layout.content_h += height
+	if heading.level == 1 {
+		append(
+			&layout.decorations,
+			Markdown_Layout_Decoration{{0, layout.content_h, layout.width, 1}, .Border},
+		)
+		layout.content_h += 9
+	} else {
+		layout.content_h += 6 if heading.level == 2 else 4
+	}
+}
+
+markdown_layout_bullet :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	line: string,
+	start: int,
+) {
+	assert(ctx != nil && layout != nil)
+	assert(len(line) >= 2 && start >= 0)
+	metrics := ui_frame_metrics(ctx.frame)
+	append(
+		&layout.decorations,
+		Markdown_Layout_Decoration {
+			{8, layout.content_h + metrics.FONT_SIZE_BODY / 2 + 1, 5, 5},
+			.Bullet,
+		},
+	)
+	height := markdown_layout_add_text(
+		ctx,
+		layout,
+		line[2:],
+		start + 2,
+		metrics.BULLET_INDENT,
+		layout.content_h,
+		max(layout.width - metrics.BULLET_INDENT, 1),
+		metrics.FONT_SIZE_BODY,
+		metrics.LINE_HEIGHT,
+		.Body,
+		true,
+	)
+	layout.content_h += max(height, metrics.LINE_HEIGHT)
+	layout.content_w = max(layout.content_w, metrics.BULLET_INDENT)
+}
+
+markdown_layout_table :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	line: string,
+	start, end: int,
+) -> (
+	next: int,
+	handled: bool,
+) {
+	assert(ctx != nil && layout != nil)
+	assert(start >= 0 && end >= start)
+	if end >= len(layout.source) || !strings.contains(line, "|") do return 0, false
+	newline := strings.index_byte(layout.source[end + 1:], '\n')
+	next_end := len(layout.source) if newline < 0 else end + 1 + newline
+	separator := layout.source[end + 1:next_end]
+	if !strings.contains(separator, "|") || !is_table_separator(separator) do return 0, false
+	rows, columns, next_byte := markdown_table_parse_rows(ctx, layout.source, start)
+	if columns == 0 || len(rows) == 0 do return 0, false
+	naturals, minimum := markdown_table_natural_widths(ctx, rows[:], columns, layout.width)
+	widths, shrunk := markdown_table_column_widths(naturals, columns, layout.width, minimum)
+	heights := markdown_table_row_heights(ctx, rows[:], widths, columns)
+	table_width := markdown_table_total_width(widths, columns)
+	layout.content_w = max(layout.content_w, layout.width if shrunk else table_width)
+	top := layout.content_h
+	metrics := ui_frame_metrics(ctx.frame)
+	for row, row_index in rows {
+		height := heights[row_index]
+		if row_index == 0 {
+			append(
+				&layout.decorations,
+				Markdown_Layout_Decoration {
+					{0, layout.content_h, table_width, height},
+					.Table_Header,
+				},
+			)
+			append(
+				&layout.decorations,
+				Markdown_Layout_Decoration {
+					{0, layout.content_h + height, table_width, 1},
+					.Border,
+				},
+			)
+		}
+		cell_x: i32
+		for column in 0 ..< columns {
+			if column > 0 {
+				append(
+					&layout.decorations,
+					Markdown_Layout_Decoration{{cell_x, layout.content_h, 1, height}, .Border},
+				)
+			}
+			if column < len(row.cells) {
+				first_run := len(layout.runs)
+				markdown_layout_add_text(
+					ctx,
+					layout,
+					row.cells[column],
+					row.starts[column],
+					cell_x + metrics.TABLE_CELL_PAD,
+					layout.content_h + max((metrics.LINE_HEIGHT - metrics.FONT_SIZE_BODY) / 2, 0),
+					max(widths[column] - metrics.TABLE_CELL_PAD * 2, 1),
+					metrics.FONT_SIZE_BODY,
+					metrics.LINE_HEIGHT,
+					.Table_Bold if row_index == 0 else .Body,
+					false,
+				)
+				for &run in layout.runs[first_run:] {
+					run.hit_top = max(run.bounds.y - max((metrics.LINE_HEIGHT - metrics.FONT_SIZE_BODY) / 2, 0), layout.content_h)
+					run.hit_bottom = min(run.hit_top + metrics.LINE_HEIGHT, layout.content_h + height)
+				}
+			}
+			cell_x += widths[column]
+		}
+		layout.content_h += height
+	}
+	append(
+		&layout.decorations,
+		Markdown_Layout_Decoration{{0, top, table_width, layout.content_h - top + 1}, .Outline},
+	)
+	layout.content_h += 5
+	return next_byte, true
+}
+
 markdown_prepare :: proc(ctx: ^Markdown_Context, width: i32, source: string) -> Markdown_Prepared {
 	assert(ctx != nil && ctx.frame != nil && ctx.frame.open, "markdown prepare: invalid context")
 	assert(width > 0, "markdown prepare: non-positive width")
-	content_width: i32
-	content_height := markdown_draw_unprepared(
-		ctx,
-		{0, 0, width, 0},
-		source,
-		ui_frame_theme(ctx.frame).fg_assistant,
-		out_w = &content_width,
-		draw = false,
-	)
-	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.preparations += 1
+	allocator := ui_frame_allocator(ctx.frame)
+	layout := new(Markdown_Layout, allocator)
+	markdown_layout_init(layout, allocator)
+	status := markdown_layout_prepare(ctx, layout, width, source)
+	ctx.hovered_link = ""
+	ctx.link_pressed = false
 	return {
-		source = source,
+		source = layout.source,
 		width = width,
-		content_w = content_width,
-		content_h = content_height,
+		content_w = layout.content_w,
+		content_h = layout.content_h,
 		generation = ctx.frame.scratch.generation,
-		status = .Complete,
+		status = status,
+		layout = layout,
 	}
 }
 
@@ -2310,7 +2596,7 @@ markdown_prepared_draw :: proc(
 	markdown_prepared_validate(ctx, prepared)
 	assert(bounds.w == prepared.width, "markdown prepared draw: width mismatch")
 	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.draw_queries += 1
-	return markdown_draw_unprepared(ctx, bounds, prepared.source, color, sel_start, sel_end, out_w)
+	return markdown_layout_draw(ctx, prepared.layout, bounds, color, sel_start, sel_end, out_w)
 }
 
 markdown_prepared_hit_test :: proc(
@@ -2321,15 +2607,7 @@ markdown_prepared_hit_test :: proc(
 	assert(ctx != nil && prepared != nil, "markdown prepared hit test: invalid argument")
 	markdown_prepared_validate(ctx, prepared)
 	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.hit_queries += 1
-	return hit_test_markdown_unprepared(
-		ctx,
-		x,
-		y,
-		prepared.width,
-		prepared.source,
-		mouse_x,
-		mouse_y,
-	)
+	return markdown_layout_hit_test(prepared.layout, x, y, mouse_x, mouse_y)
 }
 
 markdown_prepared_source_y :: proc(
@@ -2344,7 +2622,7 @@ markdown_prepared_source_y :: proc(
 		"markdown prepared source y: invalid offset",
 	)
 	when UI_TELEMETRY_ENABLED do ctx.frame.markdown_telemetry.source_y_queries += 1
-	return markdown_source_y_unprepared(ctx, prepared.width, prepared.source, offset)
+	return markdown_layout_source_y(prepared.layout, offset)
 }
 
 markdown_draw :: proc(

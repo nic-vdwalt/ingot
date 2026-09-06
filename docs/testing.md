@@ -1,5 +1,11 @@
 # Testing Ingot
 
+For application-facing headless recipes, see the
+[Fit guide](fit-guide.md#test-and-diagnose-without-a-window). Successful frame
+execution is not proof of zero degradation; inspect the existing diagnostics.
+Semantic collision counters do not replace stable-ID contracts or validate IDs
+when semantics are disabled.
+
 Ingot tests the immediate-mode boundary directly: explicit application state and
 synthetic input go in; bounded frame output and state transitions come out.
 Assertions define the invariants, deterministic seeds make failures

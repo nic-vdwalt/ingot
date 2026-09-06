@@ -13,9 +13,13 @@ gpu_timing_completion_queue_retains_order_and_reports_loss :: proc(t: ^testing.T
 	testing.expect_value(t, count, 1)
 	testing.expect_value(t, output[0].frame_index, u64(9))
 	testing.expect_value(t, health.overflow, u64(0))
+	testing.expect_value(t, health.completion_occupancy, u32(1))
+	testing.expect_value(t, health.completion_high_water, u32(2))
 	count, health = _gpu_timing_drain(&state, output[:])
 	testing.expect_value(t, count, 1)
 	testing.expect_value(t, output[0].frame_index, u64(3))
+	testing.expect_value(t, health.completion_occupancy, u32(0))
+	testing.expect_value(t, health.completion_high_water, u32(1))
 	testing.expect_value(t, state.latest.frame_index, u64(9))
 	for index in 0 ..< GPU_TIMING_COMPLETION_CAPACITY + 2 {
 		_gpu_timing_enqueue(&state, {frame_index = u64(index + 10), valid = true})
@@ -23,9 +27,13 @@ gpu_timing_completion_queue_retains_order_and_reports_loss :: proc(t: ^testing.T
 	count, health = _gpu_timing_drain(&state, output[:])
 	testing.expect_value(t, count, 2)
 	testing.expect_value(t, health.overflow, u64(2))
+	testing.expect_value(t, health.completion_occupancy, u32(GPU_TIMING_COMPLETION_CAPACITY - 2))
+	testing.expect_value(t, health.completion_high_water, u32(GPU_TIMING_COMPLETION_CAPACITY))
 	testing.expect_value(t, output[0].frame_index, u64(10))
 	_, health = _gpu_timing_drain(&state, nil)
 	testing.expect_value(t, health.overflow, u64(0))
+	testing.expect_value(t, health.completion_occupancy, u32(GPU_TIMING_COMPLETION_CAPACITY - 2))
+	testing.expect_value(t, health.completion_high_water, u32(GPU_TIMING_COMPLETION_CAPACITY - 2))
 }
 
 @(test)
@@ -47,6 +55,9 @@ gpu_timing_collect_preserves_every_completion :: proc(t: ^testing.T) {
 	count, health := context_renderer_gpu_timing_drain(ctx, output[:])
 	testing.expect_value(t, count, GPU_TIMING_FRAME_SLOTS)
 	testing.expect_value(t, health.map_failure, u64(0))
+	testing.expect_value(t, health.overflow, u64(0))
+	testing.expect_value(t, health.completion_occupancy, u32(0))
+	testing.expect_value(t, health.completion_high_water, u32(GPU_TIMING_FRAME_SLOTS))
 	for detail, index in output {
 		testing.expect_value(t, detail.frame_index, u64(GPU_TIMING_FRAME_SLOTS - index))
 	}
@@ -84,16 +95,42 @@ gpu_timing_health_preserves_invalid_and_truncated_evidence :: proc(t: ^testing.T
 	testing.expect_value(t, count, 1)
 	testing.expect_value(t, output[0].epoch, u64(12))
 	testing.expect_value(t, health.pair_exhaustion, u64(1))
-	testing.expect_value(t, health.group_truncation, u64(GPU_TIMING_MAX_SPANS - GPU_TIMING_MAX_GROUPS))
+	testing.expect_value(
+		t,
+		health.group_truncation,
+		u64(GPU_TIMING_MAX_SPANS - GPU_TIMING_MAX_GROUPS),
+	)
 	slot.in_flight = true
 	slot.map_done = true
 	slot.map_ok = true
-	slot.query_count = 2
-	slot.ticks[0] = 20
-	slot.ticks[1] = 10
+	slot.epoch = 23
+	slot.frame_index = 45
+	slot.query_count = 6
+	slot.labels[0] = _gpu_timing_label("valid.before")
+	slot.labels[1] = _gpu_timing_label("invalid.pair")
+	slot.labels[2] = _gpu_timing_label("valid.after")
+	slot.ticks[0] = 10
+	slot.ticks[1] = 20
+	slot.ticks[2] = 40
+	slot.ticks[3] = 30
+	slot.ticks[4] = 50
+	slot.ticks[5] = 60
 	count, health = context_renderer_gpu_timing_drain(ctx, output[:])
 	testing.expect_value(t, count, 0)
 	testing.expect_value(t, health.invalid_timestamps, u64(1))
+	testing.expect(t, health.first_invalid_pair.valid)
+	testing.expect_value(t, health.first_invalid_pair.epoch, u64(23))
+	testing.expect_value(t, health.first_invalid_pair.frame_index, u64(45))
+	testing.expect_value(t, health.first_invalid_pair.pair_index, u32(1))
+	testing.expect(
+		t,
+		_gpu_timing_label_equal(
+			health.first_invalid_pair.label,
+			_gpu_timing_label("invalid.pair"),
+		),
+	)
+	_, health = context_renderer_gpu_timing_drain(ctx, nil)
+	testing.expect(t, !health.first_invalid_pair.valid)
 }
 
 @(test)

@@ -1,5 +1,9 @@
 # UI state and stable focus
 
+See the [Fit guide](fit-guide.md#reusable-components) for a tested scoped
+component recipe and the distinction between current-build handles and state
+that must survive helper return, rendering, and later builds.
+
 Immediate mode describes how Ingot declares and derives an interface; it does
 not mean useful applications have no persistent state. Ingot keeps long-lived
 widget behavior in application data instead of a retained widget tree or hidden

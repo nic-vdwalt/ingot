@@ -1,0 +1,588 @@
+== wasm compile: examples/hello ==
+== wasm compile: examples/builder_controls ==
+== wasm compile: examples/gallery ==
+== wasm compile: examples/breakout ==
+== wasm compile: examples/procgen_world ==
+== wasm compile: examples/box3d_stack ==
+== wasm compile: examples/box3d_advanced ==
+== wasm compile: examples/box3d_water ==
+== wasm compile: examples/raylib_migration_fixture ==
+== wasm compile: default web demo ==
+== wasm check: net ==
+== wasm data segment bloat ==
+ingot_web.wasm: 830,517 bytes, data section 343,859 bytes
+  offset  1,048,576  len    321,943  zeros  19.8%
+  offset  1,370,520  len      1,204  zeros  47.4%
+  offset  1,371,728  len     20,712  zeros  73.6%
+  data section is 23.2% zeros overall
+== web startup gating ==
+== web lifecycle and semantic tests ==
+TAP version 13
+# Subtest: app session closes sockets and aborts fetches once
+ok 1 - app session closes sockets and aborts fetches once
+  ---
+  duration_ms: 1.364333
+  type: 'test'
+  ...
+# Subtest: load resolves asynchronously and applies deferred play
+ok 2 - load resolves asynchronously and applies deferred play
+  ---
+  duration_ms: 8.578
+  type: 'test'
+  ...
+# Subtest: failed fetch leaves a permanently silent slot
+ok 3 - failed fetch leaves a permanently silent slot
+  ---
+  duration_ms: 0.597292
+  type: 'test'
+  ...
+# Subtest: stop cancels a deferred play
+ok 4 - stop cancels a deferred play
+  ---
+  duration_ms: 1.739125
+  type: 'test'
+  ...
+# Subtest: non-2xx response is an error, unload frees the slot mid-flight
+ok 5 - non-2xx response is an error, unload frees the slot mid-flight
+  ---
+  duration_ms: 5.125417
+  type: 'test'
+  ...
+# Subtest: Box3D worker count remains bounded
+ok 6 - Box3D worker count remains bounded
+  ---
+  duration_ms: 1.482791
+  type: 'test'
+  ...
+# Subtest: Box3D workers reject ordinary memory
+ok 7 - Box3D workers reject ordinary memory
+  ---
+  duration_ms: 0.681416
+  type: 'test'
+  ...
+# Box3D worker pool failed Error: bootstrap
+#     at worker.onmessage (evalmachine.<anonymous>:21:13)
+#     at file:///Users/nicolasvanderwalt_1/Development/git/ingot/web/test/box3d_workers.test.mjs:43:30
+#     at node:internal/process/task_queues:151:7
+#     at AsyncResource.runInAsyncScope (node:async_hooks:214:14)
+#     at AsyncResource.runMicrotask (node:internal/process/task_queues:148:8)
+# Subtest: Box3D worker bootstrap errors reject immediately
+ok 8 - Box3D worker bootstrap errors reject immediately
+  ---
+  duration_ms: 10.785292
+  type: 'test'
+  ...
+# Subtest: Box3D benchmark completion retains timing and counters
+ok 9 - Box3D benchmark completion retains timing and counters
+  ---
+  duration_ms: 2.445667
+  type: 'test'
+  ...
+# Subtest: Box3D coordinator commands are exclusive and publish one-shot completion
+ok 10 - Box3D coordinator commands are exclusive and publish one-shot completion
+  ---
+  duration_ms: 2.447917
+  type: 'test'
+  ...
+# Subtest: Box3D coordinator rejects invalid commands
+ok 11 - Box3D coordinator rejects invalid commands
+  ---
+  duration_ms: 1.030875
+  type: 'test'
+  ...
+# Box3D worker pool failed Error: Box3D benchmark batch failed
+#     at worker.onmessage (evalmachine.<anonymous>:136:14)
+#     at file:///Users/nicolasvanderwalt_1/Development/git/ingot/web/test/box3d_workers.test.mjs:158:31
+#     at node:internal/process/task_queues:151:7
+#     at AsyncResource.runInAsyncScope (node:async_hooks:214:14)
+#     at AsyncResource.runMicrotask (node:internal/process/task_queues:148:8)
+# Subtest: Box3D benchmark rejects invalid batches and records step failure
+ok 12 - Box3D benchmark rejects invalid batches and records step failure
+  ---
+  duration_ms: 1.620625
+  type: 'test'
+  ...
+# Subtest: Box3D worker supplies a monotonic clock import to Box3D
+ok 13 - Box3D worker supplies a monotonic clock import to Box3D
+  ---
+  duration_ms: 3.461292
+  type: 'test'
+  ...
+# Subtest: Box3D worker dispatches coordinator commands exactly once
+ok 14 - Box3D worker dispatches coordinator commands exactly once
+  ---
+  duration_ms: 1.295959
+  type: 'test'
+  ...
+# Subtest: Box3D benchmark profile fields survive the result path
+ok 15 - Box3D benchmark profile fields survive the result path
+  ---
+  duration_ms: 1.249833
+  type: 'test'
+  ...
+# Subtest: threaded binaries receive serial fallback imports
+ok 16 - threaded binaries receive serial fallback imports
+  ---
+  duration_ms: 2.085083
+  type: 'test'
+  ...
+# Subtest: high device pixel ratios are capped
+ok 17 - high device pixel ratios are capped
+  ---
+  duration_ms: 0.672083
+  type: 'test'
+  ...
+# Subtest: ordinary device pixel ratios pass through untouched
+ok 18 - ordinary device pixel ratios pass through untouched
+  ---
+  duration_ms: 0.190167
+  type: 'test'
+  ...
+# Subtest: an invalid ratio falls back to 1
+ok 19 - an invalid ratio falls back to 1
+  ---
+  duration_ms: 0.724459
+  type: 'test'
+  ...
+# Subtest: fitCanvas and the engine agree on the ratio
+ok 20 - fitCanvas and the engine agree on the ratio
+  ---
+  duration_ms: 0.440708
+  type: 'test'
+  ...
+# Subtest: the cap actually reduces the backing store on a phone
+ok 21 - the cap actually reduces the backing store on a phone
+  ---
+  duration_ms: 0.35325
+  type: 'test'
+  ...
+# Subtest: resizing to a smaller css box shrinks the backing store
+ok 22 - resizing to a smaller css box shrinks the backing store
+  ---
+  duration_ms: 0.166583
+  type: 'test'
+  ...
+# Subtest: a degenerate css box still yields a usable canvas
+ok 23 - a degenerate css box still yields a usable canvas
+  ---
+  duration_ms: 0.069292
+  type: 'test'
+  ...
+# Subtest: invalid and enormous css dimensions stay within WebGPU's portable bound
+ok 24 - invalid and enormous css dimensions stay within WebGPU's portable bound
+  ---
+  duration_ms: 0.993416
+  type: 'test'
+  ...
+# Subtest: a fractional css box is pinned to a whole device-pixel multiple
+ok 25 - a fractional css box is pinned to a whole device-pixel multiple
+  ---
+  duration_ms: 0.457458
+  type: 'test'
+  ...
+# Subtest: fractional ratios snap the css box so the bitmap scale is exact
+ok 26 - fractional ratios snap the css box so the bitmap scale is exact
+  ---
+  duration_ms: 0.139375
+  type: 'test'
+  ...
+# Subtest: the pinned css box is what the engine lays out against
+ok 27 - the pinned css box is what the engine lays out against
+  ---
+  duration_ms: 0.086375
+  type: 'test'
+  ...
+# Subtest: the engine reads the effective ratio when the pixel budget engages
+ok 28 - the engine reads the effective ratio when the pixel budget engages
+  ---
+  duration_ms: 0.07375
+  type: 'test'
+  ...
+# Subtest: a retina desktop in fullscreen is not squeezed into the phone budget
+ok 29 - a retina desktop in fullscreen is not squeezed into the phone budget
+  ---
+  duration_ms: 0.068459
+  type: 'test'
+  ...
+# Subtest: a coarse pointer keeps the phone pixel budget
+ok 30 - a coarse pointer keeps the phone pixel budget
+  ---
+  duration_ms: 0.052167
+  type: 'test'
+  ...
+# Subtest: a shrunk pin does not stop the canvas growing back
+ok 31 - a shrunk pin does not stop the canvas growing back
+  ---
+  duration_ms: 0.091625
+  type: 'test'
+  ...
+# Subtest: the engine reads the validated backing store during viewport transitions
+ok 32 - the engine reads the validated backing store during viewport transitions
+  ---
+  duration_ms: 0.051208
+  type: 'test'
+  ...
+# Subtest: a session that shuts down cleanly leaves no record
+ok 33 - a session that shuts down cleanly leaves no record
+  ---
+  duration_ms: 9.078667
+  type: 'test'
+  ...
+# Subtest: a session killed without pagehide is recovered as a crash
+ok 34 - a session killed without pagehide is recovered as a crash
+  ---
+  duration_ms: 0.35275
+  type: 'test'
+  ...
+# Subtest: a post-mortem never covers a working demo
+ok 35 - a post-mortem never covers a working demo
+  ---
+  duration_ms: 0.177
+  type: 'test'
+  ...
+# Subtest: a post-mortem can be dismissed but a live crash cannot
+ok 36 - a post-mortem can be dismissed but a live crash cannot
+  ---
+  duration_ms: 0.246542
+  type: 'test'
+  ...
+# Subtest: a reload before the first heartbeat is not reported as a crash
+ok 37 - a reload before the first heartbeat is not reported as a crash
+  ---
+  duration_ms: 0.178417
+  type: 'test'
+  ...
+# Subtest: recovery is one-shot: a second reload does not re-report the death
+ok 38 - recovery is one-shot: a second reload does not re-report the death
+  ---
+  duration_ms: 0.113625
+  type: 'test'
+  ...
+# Subtest: recovering a record consumes it, even if nothing overwrites it
+ok 39 - recovering a record consumes it, even if nothing overwrites it
+  ---
+  duration_ms: 0.165708
+  type: 'test'
+  ...
+# Subtest: a sibling demo's live session is never reported as a crash
+ok 40 - a sibling demo's live session is never reported as a crash
+  ---
+  duration_ms: 0.126917
+  type: 'test'
+  ...
+# Subtest: a sibling shutting down does not destroy this demo's record
+ok 41 - a sibling shutting down does not destroy this demo's record
+  ---
+  duration_ms: 0.272959
+  type: 'test'
+  ...
+# Subtest: a record written by another path is ignored
+ok 42 - a record written by another path is ignored
+  ---
+  duration_ms: 1.330875
+  type: 'test'
+  ...
+# Subtest: a pre-namespace shared record is evicted, never reported
+ok 43 - a pre-namespace shared record is evicted, never reported
+  ---
+  duration_ms: 0.1585
+  type: 'test'
+  ...
+# Subtest: a bfcache restore re-arms the recorder
+ok 44 - a bfcache restore re-arms the recorder
+  ---
+  duration_ms: 0.121083
+  type: 'test'
+  ...
+# Subtest: breadcrumbs stay bounded and long lines are truncated
+ok 45 - breadcrumbs stay bounded and long lines are truncated
+  ---
+  duration_ms: 0.117625
+  type: 'test'
+  ...
+# Subtest: writes are coalesced but a forced flush always persists
+ok 46 - writes are coalesced but a forced flush always persists
+  ---
+  duration_ms: 0.064042
+  type: 'test'
+  ...
+# Subtest: unavailable storage disables the box without breaking the panel
+ok 47 - unavailable storage disables the box without breaking the panel
+  ---
+  duration_ms: 0.106417
+  type: 'test'
+  ...
+# Subtest: a truncated record is ignored rather than breaking startup
+ok 48 - a truncated record is ignored rather than breaking startup
+  ---
+  duration_ms: 0.054959
+  type: 'test'
+  ...
+# Subtest: a live crash and a recovered one are reported together
+ok 49 - a live crash and a recovered one are reported together
+  ---
+  duration_ms: 0.076333
+  type: 'test'
+  ...
+# Subtest: heartbeat records liveness and is scheduled on load
+ok 50 - heartbeat records liveness and is scheduled on load
+  ---
+  duration_ms: 0.047958
+  type: 'test'
+  ...
+# Subtest: heartbeat reports frame progress so a stalled loop is visible
+ok 51 - heartbeat reports frame progress so a stalled loop is visible
+  ---
+  duration_ms: 0.0795
+  type: 'test'
+  ...
+# Subtest: watched probes appear in every heartbeat
+ok 52 - watched probes appear in every heartbeat
+  ---
+  duration_ms: 0.076083
+  type: 'test'
+  ...
+# Subtest: a throwing probe does not break the heartbeat
+ok 53 - a throwing probe does not break the heartbeat
+  ---
+  duration_ms: 0.0675
+  type: 'test'
+  ...
+# Subtest: probe registration is bounded and validated
+ok 54 - probe registration is bounded and validated
+  ---
+  duration_ms: 0.104125
+  type: 'test'
+  ...
+# Subtest: file hover ignores nested leave and clears on final leave
+ok 55 - file hover ignores nested leave and clears on final leave
+  ---
+  duration_ms: 2.196917
+  type: 'test'
+  ...
+# Subtest: non-file drags are ignored
+ok 56 - non-file drags are ignored
+  ---
+  duration_ms: 0.095208
+  type: 'test'
+  ...
+# Subtest: drop clears hover before notifying completion
+ok 57 - drop clears hover before notifying completion
+  ---
+  duration_ms: 0.425375
+  type: 'test'
+  ...
+# Subtest: replacement cancels an in-flight older drop
+ok 58 - replacement cancels an in-flight older drop
+  ---
+  duration_ms: 0.115208
+  type: 'test'
+  ...
+# Subtest: blur clears hover and cleanup removes listeners
+ok 59 - blur clears hover and cleanup removes listeners
+  ---
+  duration_ms: 0.1305
+  type: 'test'
+  ...
+# Subtest: forwards the current request ABI and preserves HTTP responses
+ok 60 - forwards the current request ABI and preserves HTTP responses
+  ---
+  duration_ms: 3.824042
+  type: 'test'
+  ...
+# Subtest: maps every method and omits a GET body
+ok 61 - maps every method and omits a GET body
+  ---
+  duration_ms: 6.095166
+  type: 'test'
+  ...
+# Subtest: reports malformed headers and oversized responses as bridge errors
+ok 62 - reports malformed headers and oversized responses as bridge errors
+  ---
+  duration_ms: 0.691375
+  type: 'test'
+  ...
+# Subtest: allows long-running API responses to complete
+ok 63 - allows long-running API responses to complete
+  ---
+  duration_ms: 0.215958
+  type: 'test'
+  ...
+# Subtest: streams complete newline-delimited chunks in order
+ok 64 - streams complete newline-delimited chunks in order
+  ---
+  duration_ms: 3.610208
+  type: 'test'
+  ...
+# Subtest: cancel and destroy abort only live owned requests
+ok 65 - cancel and destroy abort only live owned requests
+  ---
+  duration_ms: 0.439
+  type: 'test'
+  ...
+# Subtest: input attach replaces the previous listener set
+ok 66 - input attach replaces the previous listener set
+  ---
+  duration_ms: 1.077708
+  type: 'test'
+  ...
+# Subtest: input detach is idempotent
+ok 67 - input detach is idempotent
+  ---
+  duration_ms: 0.087792
+  type: 'test'
+  ...
+# Subtest: a touch tap under the slop presses and releases once
+ok 68 - a touch tap under the slop presses and releases once
+  ---
+  duration_ms: 1.037875
+  type: 'test'
+  ...
+# Subtest: a touch drag past the slop scrolls and never presses
+ok 69 - a touch drag past the slop scrolls and never presses
+  ---
+  duration_ms: 0.202
+  type: 'test'
+  ...
+# Subtest: touch scroll direction follows the finger
+ok 70 - touch scroll direction follows the finger
+  ---
+  duration_ms: 0.176917
+  type: 'test'
+  ...
+# Subtest: a cancelled touch abandons the pending tap
+ok 71 - a cancelled touch abandons the pending tap
+  ---
+  duration_ms: 0.135416
+  type: 'test'
+  ...
+# Subtest: mouse input is unaffected by the touch path
+ok 72 - mouse input is unaffected by the touch path
+  ---
+  duration_ms: 0.231583
+  type: 'test'
+  ...
+# Subtest: simultaneous pointer IDs and pen pressure remain distinct
+ok 73 - simultaneous pointer IDs and pen pressure remain distinct
+  ---
+  duration_ms: 1.245958
+  type: 'test'
+  ...
+# Subtest: pointer buttons remap browser right and middle bits
+ok 74 - pointer buttons remap browser right and middle bits
+  ---
+  duration_ms: 0.398
+  type: 'test'
+  ...
+# Subtest: simultaneous touches are bounded
+ok 75 - simultaneous touches are bounded
+  ---
+  duration_ms: 0.850459
+  type: 'test'
+  ...
+# Subtest: editing keys reach the engine from the IME proxy
+ok 76 - editing keys reach the engine from the IME proxy
+  ---
+  duration_ms: 0.254458
+  type: 'test'
+  ...
+# Subtest: Enter and Backspace are consumed so the proxy never edits itself
+ok 77 - Enter and Backspace are consumed so the proxy never edits itself
+  ---
+  duration_ms: 0.127958
+  type: 'test'
+  ...
+# Subtest: key repeat is reported as repeat, not as a fresh press
+ok 78 - key repeat is reported as repeat, not as a fresh press
+  ---
+  duration_ms: 0.100166
+  type: 'test'
+  ...
+# Subtest: pointer events synchronize Option held before canvas focus
+ok 79 - pointer events synchronize Option held before canvas focus
+  ---
+  duration_ms: 0.107333
+  type: 'test'
+  ...
+# Subtest: pointer leave preserves captured drag input
+ok 80 - pointer leave preserves captured drag input
+  ---
+  duration_ms: 0.111875
+  type: 'test'
+  ...
+# Subtest: text input mirror: creation, aria-label, GC by frame stamp
+ok 81 - text input mirror: creation, aria-label, GC by frame stamp
+  ---
+  duration_ms: 1.747916
+  type: 'test'
+  ...
+# Subtest: text input value-echo: Odin value wins unless user edited
+ok 82 - text input value-echo: Odin value wins unless user edited
+  ---
+  duration_ms: 0.098416
+  type: 'test'
+  ...
+# Subtest: control mirror: roles, ARIA state, activation staging
+ok 83 - control mirror: roles, ARIA state, activation staging
+  ---
+  duration_ms: 0.3805
+  type: 'test'
+  ...
+# Subtest: control mirror: listbox roles and collection state
+ok 84 - control mirror: listbox roles and collection state
+  ---
+  duration_ms: 0.314584
+  type: 'test'
+  ...
+# Subtest: control mirror: links expose and stage activation
+ok 85 - control mirror: links expose and stage activation
+  ---
+  duration_ms: 0.10625
+  type: 'test'
+  ...
+# Subtest: control mirror: role change replaces the element
+ok 86 - control mirror: role change replaces the element
+  ---
+  duration_ms: 0.098875
+  type: 'test'
+  ...
+# Subtest: submit button: submit event reported once
+ok 87 - submit button: submit event reported once
+  ---
+  duration_ms: 0.193958
+  type: 'test'
+  ...
+# Subtest: an isolated page allocates no shared memory unless workers are requested
+ok 88 - an isolated page allocates no shared memory unless workers are requested
+  ---
+  duration_ms: 1.472625
+  type: 'test'
+  ...
+# Subtest: requesting workers allocates shared memory
+ok 89 - requesting workers allocates shared memory
+  ---
+  duration_ms: 0.242125
+  type: 'test'
+  ...
+# Subtest: a page that is not isolated ignores the worker request
+ok 90 - a page that is not isolated ignores the worker request
+  ---
+  duration_ms: 0.113417
+  type: 'test'
+  ...
+# Subtest: requesting workers without box3d_workers.js names the missing file
+ok 91 - requesting workers without box3d_workers.js names the missing file
+  ---
+  duration_ms: 0.287583
+  type: 'test'
+  ...
+1..91
+# tests 91
+# suites 0
+# pass 91
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 113.540167
+check-web: PASS

@@ -2,7 +2,12 @@ package main
 
 import fit "ingot:fit"
 
+Workspace_Preference :: struct {
+	enabled: bool,
+}
+
 State :: struct {
+	local_preferences:     [2]Workspace_Preference,
 	notifications_enabled: bool,
 	telemetry_enabled:     bool,
 	quality:               i32,
@@ -46,7 +51,19 @@ main :: proc() {
 		draw,
 		&state,
 	)
-	fit.Combobox_State_Destroy(&state.workspace_combobox)
+	when ODIN_OS != .JS do destroy_state(&state)
+}
+
+destroy_state :: proc(data: ^State) {
+	assert(data != nil, "builder controls destroy: nil state")
+	fit.Combobox_State_Destroy(&data.workspace_combobox)
+}
+
+draw_preference :: proc(parent: fit.Parent, stable_key: u64, data: ^Workspace_Preference) {
+	assert(data != nil, "builder controls preference: nil state")
+	assert(stable_key != 0, "builder controls preference: zero key")
+	scoped := fit.Scope(parent, stable_key)
+	fit.Checkbox(scoped, "enabled", "Enable local settings", &data.enabled)
 }
 
 draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
@@ -109,6 +126,9 @@ draw_account :: proc(parent: fit.Parent, data: ^State) {
 	fit.Label(parent, "Account", {role = .Title})
 	fit.Label(parent, "Account settings are synchronized with the selected workspace.")
 	fit.Progress(parent, 0.75)
+	fit.Canvas_Leaf(parent, {intrinsic = {w = 160, h = 48}}, preview_render)
+	draw_preference(parent, 101, &data.local_preferences[0])
+	draw_preference(parent, 205, &data.local_preferences[1])
 }
 
 status_text :: proc(data: ^State) -> string {

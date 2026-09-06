@@ -1,5 +1,9 @@
 # Commands and contextual shortcuts
 
+The [Fit guide](fit-guide.md#optional-typed-commands) distinguishes direct
+Actions from next-build typed command collection, including collection lifetime,
+fixed drain snapshots, and capacity-failure handling.
+
 `ingot:action` provides bounded named command IDs, keystrokes, bindings, and a
 transactionally replaced keymap. `ingot:ui` resolves a keymap against the open
 frame, while `ingot:fit` exposes the same operation through a Builder or Surface.

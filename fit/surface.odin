@@ -2,6 +2,32 @@ package fit
 
 import "ingot:ui"
 
+Surface_Performance :: struct {
+	markdown_preparations: u64,
+	markdown_layout_walks: u64,
+	scratch_allocations:   u64,
+	scratch_bytes:         u64,
+	measure_cache_hits:    u64,
+	measure_cache_misses:  u64,
+}
+
+Surface_Performance_Snapshot :: proc(surface: ^Surface) -> Surface_Performance {
+	assert(surface != nil, "Fit.Surface_Performance_Snapshot: nil surface")
+	widget := surface_ui(surface)
+	assert(widget.frame != nil && widget.frame.open)
+	frame := widget.frame
+	hits, misses, _ := ui.measure_cache_telemetry_with(ui.ui_frame_text(frame))
+	return {
+		markdown_preparations = frame.markdown_telemetry.preparations,
+		markdown_layout_walks = frame.markdown_telemetry.layout_walks,
+		scratch_allocations = frame.scratch.allocation_count,
+		scratch_bytes = frame.scratch.allocation_request_bytes +
+		frame.scratch.resize_request_bytes,
+		measure_cache_hits = hits,
+		measure_cache_misses = misses,
+	}
+}
+
 Surface_Viewport :: proc(surface: ^Surface) -> Rect {
 	u := surface_ui(surface)
 	return from_rect(ui.frame_viewport(u.frame))
