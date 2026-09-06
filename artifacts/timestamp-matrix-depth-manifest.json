@@ -1,0 +1,21 @@
+{
+  "submissions": 40,
+  "known_clear_failures": 8,
+  "production_repair_validated": false,
+  "sha256": {
+    "/Users/nicolasvanderwalt_1/Development/git/ingot/tests/metal_timestamps/evaluate.py": "4855fbadc3812c7c9079157d490cd419957952065f1d3656e3a209b729b73ae2",
+    "/Users/nicolasvanderwalt_1/Development/git/ingot/tests/metal_timestamps/native.swift": "7140076a07c25ad52442f58e18217199a267091f45fda1830052dc35c856ba76",
+    "artifacts/timestamp-matrix-depth.jsonl": "545d6bac67d954b8adad7323522976f423600920991277bdc5d241c38686f4ba",
+    "../tools/wgpu-455571728/lib/libwgpu_native.a": "7d8b688a6b55f0728c847e1c3b028d07ccb1009d8cea4833a6186a5775384248"
+  },
+  "ingot_revision": "3a3c82b7ece5e2bc797ca64b0ae519ab3e837369",
+  "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "device": {
+    "blit_sampling": false,
+    "device": "Apple M2 Max",
+    "draw_sampling": false,
+    "kind": "device",
+    "os": "Version 15.6.1 (Build 24G90)",
+    "stage_sampling": true
+  }
+}
