@@ -1,9 +1,136 @@
 #+build !js
 package ui
 
+import "core:fmt"
 import "core:testing"
+import "core:time"
 import "core:unicode/utf8"
 import "ingot:testx"
+
+when #config(INGOT_MARKDOWN_BENCHMARK, false) {
+	@(test)
+	markdown_repeated_frame_baseline :: proc(t: ^testing.T) {
+		runtime: Ui_Runtime
+		ui_runtime_init(&runtime)
+		defer ui_runtime_destroy(&runtime)
+		text_backend: Test_Text_Backend_State
+		ui_runtime_set_text_backend(
+			&runtime,
+			{
+				data = &text_backend,
+				font_for_size = test_text_font_for_size,
+				measure = test_text_measure,
+			},
+		)
+		frame: Ui_Frame
+		defer ui_frame_destroy(&frame)
+		output := new(Ui_Output)
+		defer free(output)
+		frame.output = output
+		samples: [1024]f64
+		walks, preparations: u64
+		for iteration in 0 ..< 1056 {
+			ui_frame_begin(&frame, &runtime)
+			ctx := markdown_context(&frame)
+			started := time.tick_now()
+			prepared := markdown_prepare(
+				&ctx,
+				240,
+				"# Heading\nplain **bold** text\n- bullet\n```\ncode\n```",
+			)
+			_ = markdown_prepared_measure(&ctx, &prepared)
+			_ = markdown_prepared_draw(&ctx, &prepared, {0, 0, 240, 300}, {255, 255, 255, 255})
+			_ = markdown_prepared_hit_test(&ctx, &prepared, 0, 0, 10, 30)
+			_ = markdown_prepared_source_y(&ctx, &prepared, 12)
+			elapsed := time.duration_milliseconds(time.tick_since(started))
+			if iteration >= 32 {
+				samples[iteration - 32] = elapsed
+				walks += frame.markdown_telemetry.layout_walks
+				preparations += frame.markdown_telemetry.preparations
+			}
+			ui_frame_end(&frame)
+		}
+		for index in 1 ..< len(samples) {
+			value := samples[index]
+			position := index
+			for position > 0 && samples[position - 1] > value {
+				samples[position] = samples[position - 1]
+				position -= 1
+			}
+			samples[position] = value
+		}
+		testing.expect(t, samples[972] >= samples[511])
+		fmt.eprintfln(
+			"Markdown headless 1024 frames p50=%.6fms p95=%.6fms walks=%d preparations=%d",
+			samples[511],
+			samples[972],
+			walks,
+			preparations,
+		)
+	}
+}
+
+@(test)
+markdown_owned_layout_matches_extents_and_survives_frames :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	layout: Markdown_Layout
+	markdown_layout_init(&layout)
+	defer markdown_layout_destroy(&layout)
+	cases := [?]string {
+		"plain words wrap across narrow lines",
+		"# Heading\nplain **bold** text\n- bullet",
+		"plain\n| a | b |\n|---|---|\n| c | d |\n```\ncode\n```",
+		"αβ **bold** [label](target)\n\nlast",
+	}
+	for source in cases {
+		ui_frame_begin(&frame, &runtime)
+		ctx := markdown_context(&frame)
+		legacy_width: i32
+		legacy_height := markdown_draw_unprepared(
+			&ctx,
+			{0, 0, 240, 0},
+			source,
+			{255, 255, 255, 255},
+			out_w = &legacy_width,
+			draw = false,
+		)
+		status := markdown_layout_prepare(&ctx, &layout, 240, source)
+		testing.expect_value(t, status, Markdown_Prepare_Status.Complete)
+		testing.expect_value(t, layout.content_h, legacy_height)
+		testing.expect_value(t, layout.content_w, legacy_width)
+		for offset in 0 ..= len(source) {
+			testing.expect_value(t, markdown_layout_source_y(&layout, offset),
+				markdown_source_y_unprepared(&ctx, 240, source, offset))
+		}
+		for row := i32(0); row < legacy_height; row += 11 {
+			for column := i32(0); column < 240; column += 24 {
+				testing.expect_value(t, markdown_layout_hit_test(&layout, 0, 0, column, row),
+					hit_test_markdown_unprepared(&ctx, 0, 0, 240, source, column, row))
+			}
+		}
+		ui_frame_end(&frame)
+		ui_frame_begin(&frame, &runtime)
+		ctx = markdown_context(&frame)
+		walks := frame.markdown_telemetry.layout_walks
+		_ = markdown_layout_draw(&ctx, &layout, {0, 0, 240, 0}, {255, 255, 255, 255})
+		_ = markdown_layout_hit_test(&layout, 0, 0, 10, 10)
+		_ = markdown_layout_source_y(&layout, 0)
+		testing.expect_value(t, frame.markdown_telemetry.layout_walks, walks)
+		ui_frame_end(&frame)
+	}
+}
 
 markdown_reference_counting_resolver :: proc(
 	reference: string,

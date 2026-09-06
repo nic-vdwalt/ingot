@@ -31,6 +31,9 @@ is not a second general drawing vocabulary and never changes ambient state.
 
 ## `ingot:fit`
 
+Start with the [Fit guide](fit-guide.md) for executable timing, lifetime,
+component, typed-command, and custom-geometry recipes.
+
 Use `ingot:fit` for UI applications. `fit.App` owns the graphics/UI lifecycle,
 and the callback receives the recommended declaration object: `fit.Builder`.
 

@@ -61,13 +61,24 @@ Gpu_Timing_Slot :: struct {
 	in_flight:   bool,
 }
 
+Gpu_Timing_Invalid_Pair :: struct {
+	epoch:       u64,
+	frame_index: u64,
+	pair_index:  u32,
+	label:       Gpu_Timing_Label,
+	valid:       bool,
+}
+
 Gpu_Timing_Health :: struct {
-	overflow:           u64,
-	no_free_slot:       u64,
-	pair_exhaustion:    u64,
-	map_failure:        u64,
-	group_truncation:   u64,
-	invalid_timestamps: u64,
+	overflow:              u64,
+	no_free_slot:          u64,
+	pair_exhaustion:       u64,
+	map_failure:           u64,
+	group_truncation:      u64,
+	invalid_timestamps:    u64,
+	completion_occupancy:  u32,
+	completion_high_water: u32,
+	first_invalid_pair:    Gpu_Timing_Invalid_Pair,
 }
 
 Gpu_Timing_State :: struct {
@@ -274,13 +285,21 @@ _gpu_timing_frame_abandon :: proc(ctx: ^Context) {
 	ctx.gpu_timing.active_slot = -1
 }
 
+_gpu_timing_invalid_pair :: proc(ticks: []u64, span_count: u32) -> (u32, bool) {
+	if span_count == 0 || int(span_count) * 2 > len(ticks) do return 0, false
+	for span in 0 ..< int(span_count) {
+		if ticks[span * 2 + 1] < ticks[span * 2] do return u32(span), true
+	}
+	return 0, false
+}
+
 _gpu_timing_seconds :: proc(ticks: []u64, span_count: u32, period_ns: f64) -> (f64, bool) {
 	if period_ns <= 0 || span_count == 0 || int(span_count) * 2 > len(ticks) do return 0, false
+	if _, invalid := _gpu_timing_invalid_pair(ticks, span_count); invalid do return 0, false
 	total: u64
 	for span in 0 ..< int(span_count) {
 		begin := ticks[span * 2]
 		end := ticks[span * 2 + 1]
-		if end < begin do return 0, false
 		total += end - begin
 	}
 	return f64(total) * period_ns * 1e-9, true
@@ -343,6 +362,19 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 				_gpu_timing_enqueue(&ctx.gpu_timing, detail)
 			} else {
 				ctx.gpu_timing.health.invalid_timestamps += 1
+				pair_index, invalid := _gpu_timing_invalid_pair(
+					slot.ticks[:],
+					slot.query_count / 2,
+				)
+				if invalid && !ctx.gpu_timing.health.first_invalid_pair.valid {
+					ctx.gpu_timing.health.first_invalid_pair = {
+						epoch       = slot.epoch,
+						frame_index = slot.frame_index,
+						pair_index  = pair_index,
+						label       = slot.labels[pair_index],
+						valid       = true,
+					}
+				}
 			}
 		} else {
 			ctx.gpu_timing.health.map_failure += 1
@@ -375,6 +407,10 @@ _gpu_timing_enqueue :: proc(state: ^Gpu_Timing_State, detail: Gpu_Frame_Timing_D
 	index := (state.completed_head + state.completed_count) % GPU_TIMING_COMPLETION_CAPACITY
 	state.completed[index] = detail
 	state.completed_count += 1
+	state.health.completion_high_water = max(
+		state.health.completion_high_water,
+		state.completed_count,
+	)
 }
 
 _gpu_timing_drain :: proc(
@@ -394,7 +430,10 @@ _gpu_timing_drain :: proc(
 	}
 	state.completed_count -= u32(count)
 	health := state.health
-	state.health = {}
+	health.completion_occupancy = state.completed_count
+	state.health = {
+		completion_high_water = state.completed_count,
+	}
 	return count, health
 }
 

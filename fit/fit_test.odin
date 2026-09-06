@@ -151,6 +151,17 @@ fit_surface_builder_bridge_renders_in_subrect :: proc(t: ^testing.T) {
 	testing.expect_value(t, state.calls, i32(1))
 	testing.expect(t, !builder.bound, "bridge left builder bound")
 	testing.expect(t, builder.inner.prepared.rendered, "bridge did not render")
+	frame.markdown_telemetry.preparations = 7
+	frame.markdown_telemetry.layout_walks = 11
+	performance := Surface_Performance_Snapshot(&surface)
+	testing.expect_value(t, performance.markdown_preparations, u64(7))
+	testing.expect_value(t, performance.markdown_layout_walks, u64(11))
+	testing.expect_value(t, performance.scratch_allocations, frame.scratch.allocation_count)
+	testing.expect_value(
+		t,
+		performance.scratch_bytes,
+		frame.scratch.allocation_request_bytes + frame.scratch.resize_request_bytes,
+	)
 	_ = ui.end(&root)
 }
 

@@ -44,7 +44,7 @@
   ],
   "binding_packages": ["libvterm", "accesskit"],
   "compile_packages": ["sys", "pty", "accesskit"],
-  "test_examples": ["box3d_advanced", "builder_controls", "gallery"],
+  "test_examples": ["box3d_advanced", "builder_controls", "gallery", "typed_commands"],
   "windows_gfx_expected_assert_tests": [
     "gfx.frame_owner_rejects_stale_epoch",
     "gfx.camera_update_rejects_parallel_up",
