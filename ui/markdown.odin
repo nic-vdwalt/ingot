@@ -1974,10 +1974,11 @@ markdown_layout_prepare :: proc(
 ) -> Markdown_Prepare_Status {
 	assert(ctx != nil && ctx.frame != nil && ctx.frame.open)
 	assert(layout != nil && layout.initialized && width > 0)
-	owned_source := strings.clone(
-		source[:min(len(source), MARKDOWN_LAYOUT_SOURCE_MAX)],
-		layout.allocator,
-	)
+	source_end := min(len(source), MARKDOWN_LAYOUT_SOURCE_MAX)
+	for source_end > 0 && source_end < len(source) && (u8(source[source_end]) & 0xc0) == 0x80 {
+		source_end -= 1
+	}
+	owned_source := strings.clone(source[:source_end], layout.allocator)
 	delete(layout.source, layout.allocator)
 	layout.source = owned_source
 	clear(&layout.text)
@@ -1986,6 +1987,7 @@ markdown_layout_prepare :: proc(
 	clear(&layout.decorations)
 	clear(&layout.blocks)
 	layout.width, layout.content_w, layout.content_h = width, 0, 0
+	layout.trailing_hit_height = ui_frame_metrics(ctx.frame).LINE_HEIGHT
 	layout.status = .Truncated if len(source) > MARKDOWN_LAYOUT_SOURCE_MAX else .Complete
 	position := 0
 	in_code := false
@@ -2033,7 +2035,10 @@ markdown_layout_prepare :: proc(
 			)
 		}
 		assert(next > position)
-		append(&layout.blocks, Markdown_Layout_Block{position, next, block_y, end, layout.content_h})
+		append(
+			&layout.blocks,
+			Markdown_Layout_Block{position, next, block_y, end, layout.content_h},
+		)
 		position = next
 		if len(layout.runs) >= MARKDOWN_LAYOUT_RUNS_MAX ||
 		   len(layout.stops) >= MARKDOWN_LAYOUT_STOPS_MAX ||
@@ -2238,8 +2243,14 @@ markdown_layout_table :: proc(
 					false,
 				)
 				for &run in layout.runs[first_run:] {
-					run.hit_top = max(run.bounds.y - max((metrics.LINE_HEIGHT - metrics.FONT_SIZE_BODY) / 2, 0), layout.content_h)
-					run.hit_bottom = min(run.hit_top + metrics.LINE_HEIGHT, layout.content_h + height)
+					run.hit_top = max(
+						run.bounds.y - max((metrics.LINE_HEIGHT - metrics.FONT_SIZE_BODY) / 2, 0),
+						layout.content_h,
+					)
+					run.hit_bottom = min(
+						run.hit_top + metrics.LINE_HEIGHT,
+						layout.content_h + height,
+					)
 				}
 			}
 			cell_x += widths[column]
