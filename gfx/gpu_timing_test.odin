@@ -127,32 +127,33 @@ gpu_timing_generation_and_resolve_guard :: proc(t: ^testing.T) {
 
 @(test)
 gpu_timing_completion_queue_retains_order_and_reports_loss :: proc(t: ^testing.T) {
-	state: Gpu_Timing_State
-	_gpu_timing_enqueue(&state, {frame_index = 9, valid = true})
-	_gpu_timing_enqueue(&state, {frame_index = 3, valid = true})
+	state := new(Gpu_Timing_State)
+	defer free(state)
+	_gpu_timing_enqueue(state, {frame_index = 9, valid = true})
+	_gpu_timing_enqueue(state, {frame_index = 3, valid = true})
 	output: [2]Gpu_Frame_Timing_Detail
-	count, health := _gpu_timing_drain(&state, output[:1])
+	count, health := _gpu_timing_drain(state, output[:1])
 	testing.expect_value(t, count, 1)
 	testing.expect_value(t, output[0].frame_index, u64(9))
 	testing.expect_value(t, health.overflow, u64(0))
 	testing.expect_value(t, health.completion_occupancy, u32(1))
 	testing.expect_value(t, health.completion_high_water, u32(2))
-	count, health = _gpu_timing_drain(&state, output[:])
+	count, health = _gpu_timing_drain(state, output[:])
 	testing.expect_value(t, count, 1)
 	testing.expect_value(t, output[0].frame_index, u64(3))
 	testing.expect_value(t, health.completion_occupancy, u32(0))
 	testing.expect_value(t, health.completion_high_water, u32(1))
 	testing.expect_value(t, state.latest.frame_index, u64(9))
 	for index in 0 ..< GPU_TIMING_COMPLETION_CAPACITY + 2 {
-		_gpu_timing_enqueue(&state, {frame_index = u64(index + 10), valid = true})
+		_gpu_timing_enqueue(state, {frame_index = u64(index + 10), valid = true})
 	}
-	count, health = _gpu_timing_drain(&state, output[:])
+	count, health = _gpu_timing_drain(state, output[:])
 	testing.expect_value(t, count, 2)
 	testing.expect_value(t, health.overflow, u64(2))
 	testing.expect_value(t, health.completion_occupancy, u32(GPU_TIMING_COMPLETION_CAPACITY - 2))
 	testing.expect_value(t, health.completion_high_water, u32(GPU_TIMING_COMPLETION_CAPACITY))
 	testing.expect_value(t, output[0].frame_index, u64(10))
-	_, health = _gpu_timing_drain(&state, nil)
+	_, health = _gpu_timing_drain(state, nil)
 	testing.expect_value(t, health.overflow, u64(0))
 	testing.expect_value(t, health.completion_occupancy, u32(GPU_TIMING_COMPLETION_CAPACITY - 2))
 	testing.expect_value(t, health.completion_high_water, u32(GPU_TIMING_COMPLETION_CAPACITY - 2))
@@ -266,13 +267,14 @@ gpu_timing_health_preserves_invalid_and_truncated_evidence :: proc(t: ^testing.T
 
 @(test)
 gpu_timing_pass_boundaries_reserve_distinct_indices :: proc(t: ^testing.T) {
-	state: Gpu_Timing_State
-	unavailable := _gpu_timing_pass_writes(&state, "window")
+	state := new(Gpu_Timing_State)
+	defer free(state)
+	unavailable := _gpu_timing_pass_writes(state, "window")
 	testing.expect(t, unavailable.querySet == nil)
 	testing.expect_value(t, state.slots[0].query_count, u32(0))
 	state.available = true
-	first := _gpu_timing_pass_writes(&state, "world.opaque")
-	second := _gpu_timing_pass_writes(&state, "world.ocean")
+	first := _gpu_timing_pass_writes(state, "world.opaque")
+	second := _gpu_timing_pass_writes(state, "world.ocean")
 	testing.expect_value(t, first.beginningOfPassWriteIndex, u32(0))
 	testing.expect_value(t, first.endOfPassWriteIndex, u32(1))
 	testing.expect_value(t, second.beginningOfPassWriteIndex, u32(2))
@@ -286,29 +288,31 @@ gpu_timing_pass_boundaries_reserve_distinct_indices :: proc(t: ^testing.T) {
 
 @(test)
 gpu_timing_query_pairs_are_bounded :: proc(t: ^testing.T) {
-	state: Gpu_Timing_State
+	state := new(Gpu_Timing_State)
+	defer free(state)
 	state.available = true
 	state.active_slot = 0
 	state.slots[0].query_count = GPU_TIMING_QUERY_COUNT - 2
-	testing.expect(t, _gpu_timing_pair_reserve(&state).valid)
-	testing.expect(t, !_gpu_timing_pair_reserve(&state).valid)
+	testing.expect(t, _gpu_timing_pair_reserve(state).valid)
+	testing.expect(t, !_gpu_timing_pair_reserve(state).valid)
 }
 
 @(test)
 gpu_timing_query_pairs_require_active_available_slot :: proc(t: ^testing.T) {
 	testing.expect(t, !_gpu_timing_pair_reserve(nil).valid)
-	state: Gpu_Timing_State
-	testing.expect(t, !_gpu_timing_pair_reserve(&state).valid)
+	state := new(Gpu_Timing_State)
+	defer free(state)
+	testing.expect(t, !_gpu_timing_pair_reserve(state).valid)
 	state.available = true
 	state.active_slot = -1
-	testing.expect(t, !_gpu_timing_pair_reserve(&state).valid)
+	testing.expect(t, !_gpu_timing_pair_reserve(state).valid)
 	state.active_slot = GPU_TIMING_FRAME_SLOTS
-	testing.expect(t, !_gpu_timing_pair_reserve(&state).valid)
+	testing.expect(t, !_gpu_timing_pair_reserve(state).valid)
 	state.active_slot = GPU_TIMING_FRAME_SLOTS - 1
 	state.slots[state.active_slot].in_flight = true
-	testing.expect(t, !_gpu_timing_pair_reserve(&state).valid)
+	testing.expect(t, !_gpu_timing_pair_reserve(state).valid)
 	state.slots[state.active_slot].in_flight = false
-	token := _gpu_timing_pair_reserve(&state)
+	token := _gpu_timing_pair_reserve(state)
 	testing.expect(t, token.valid)
 	testing.expect_value(t, token.query_begin, u32(0))
 	testing.expect_value(t, token.query_end, u32(1))
