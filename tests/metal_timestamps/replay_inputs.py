@@ -31,7 +31,7 @@ def packed_words(words, count):
 def window_geometry(payload, draw):
     checked_object(payload)
     checked_object(draw)
-    if checked_u32(payload.get("version")) not in (6, 7):
+    if checked_u32(payload.get("version")) not in (6, 7, 8):
         raise ValueError("unsupported geometry schema")
     identity = draw.get("geometry_id", 0)
     geometry = checked_array(payload.get("geometry"), 16)
@@ -74,7 +74,7 @@ ATLAS_BYTES_MAX = 1024 * 1024
 def atlas_pixels(payload, draw):
     checked_object(payload)
     checked_object(draw)
-    if checked_u32(payload.get("version")) != 7 or draw.get("atlas_known") is not True:
+    if checked_u32(payload.get("version")) not in (7, 8) or draw.get("atlas_known") is not True:
         raise ValueError("unsupported or incomplete atlas evidence")
     identity = checked_u32(draw.get("atlas_id"))
     prefix = checked_u32(draw.get("atlas_upload_count"))

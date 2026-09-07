@@ -80,6 +80,38 @@ The inspected v29.0.3 Metal command source still maps vertex-start to begin and
 fragment-end to end. Registry crate/source and binary provenance must still be
 verified before claiming an exact binary-source match.
 
+## Selected window evidence readiness
+
+`replay_inputs.py` reconstructs little-endian 36-byte vertices, u32 indices and
+16-byte projection uniforms without parsing float text. Geometry supports schemas
+6–8; atlas reconstruction supports 7–8. Atlas uploads apply in recorded order to a
+zero 2048-square R8 base, using only the draw's submitted upload prefix. Later
+capture-wide drops do not invalidate an already sealed known prefix.
+
+Schema 8 additionally exports compiled `BATCH_SHADER` text, explicit neutral-bind
+identity and exact attachment clear words: four u64 words for WebGPU f64 color and
+one u32 word for f32 depth. Human-readable float values are not replay authority.
+A neutral texture is a 1×1 white RGBA8Unorm texture with nearest/clamp sampling;
+a nil or unrelated binding is not neutral evidence.
+
+```sh
+python3 tests/metal_timestamps/window_readiness.py \
+  artifacts/timestamp-game-v5-evidence.tel.timing.json --failure 0
+```
+
+The readiness report is versioned independently (`bundle_version=1`) and lists
+missing selected-pass inputs. It currently always rejects full replay readiness:
+immutable actual-build pipeline provenance and complete producer/resolve topology
+are not yet exported or verified. This is an input audit, not a GPU replay or a
+complete untrusted-file validator. Old v5 evidence lacks retained geometry,
+textures and exact clear words and cannot be upgraded by filling defaults.
+
+Diagnostic submit metadata is sealed immediately before QueueSubmit in all four
+instrumented submission paths. This prevents inline completion dispatch from
+observing an unsealed record or changing the sampled atlas prefix after submission.
+The ordinal records the API submission attempt, not GPU success. Timing callback
+lifetime and safe teardown remain separate unresolved defects.
+
 ## Render-counter publication controls
 
 The current source resolves only render sample indices 0–3 on the GPU and compares

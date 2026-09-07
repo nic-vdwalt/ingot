@@ -24,6 +24,9 @@ _gpu_timing_diagnostic_render_pass :: proc(
 	when GPU_TIMING_DIAGNOSTICS {
 		if writes.querySet == nil do return
 		assert(ctx.gpu_timing.active_slot >= 0)
+		assert(ctx.gpu_timing.active_slot < GPU_TIMING_FRAME_SLOTS)
+		assert(writes.beginningOfPassWriteIndex < GPU_TIMING_QUERY_COUNT)
+		assert(writes.beginningOfPassWriteIndex % 2 == 0)
 		_gpu_timing_diagnostic_bind(
 			&ctx.gpu_timing.diagnostics[0],
 			u32(ctx.gpu_timing.active_slot),
@@ -446,7 +449,8 @@ _gpu_timing_diagnostic_batch_draw :: proc(
 				geometry_id = geometry_id,
 				projection = renderer.diagnostic_projection,
 				projection_bits = transmute([4]u32)renderer.diagnostic_projection,
-				projection_known = (renderer.cur_u == nil || renderer.cur_u == renderer.ubind) &&
+				projection_known = renderer.ubind != nil &&
+				(renderer.cur_u == nil || renderer.cur_u == renderer.ubind) &&
 				renderer.diagnostic_projection[0] > 0 &&
 				renderer.diagnostic_projection[1] > 0,
 				path = .Batch_Builtin,

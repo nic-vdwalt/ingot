@@ -365,6 +365,37 @@ cover exact signed-zero/NaN-payload bytes and rejection cases; all 12 Python tes
 pass. This reconstructs input buffers only, not shaders, pipelines, attachment
 contents or GPU execution, and does not satisfy the game-replay gate.
 
+## September 7 selected-window contract implementation
+
+Schema 8 now exports the compiled built-in WGSL text and exact attachment clear
+words (f64 color/u64 words and f32 depth/u32 word), alongside the neutral texture
+identity. The telemetry regression reconstructs clear values from the words before
+comparison, avoiding JSON float rounding. A missing uniform bind is now explicitly
+unknown even if a cached projection exists.
+
+All four diagnostic submit hooks now seal records immediately before QueueSubmit,
+not after it returns. This closes the evidence-ordering gap for inline callbacks;
+it does not repair callback userdata lifetime or prove GPU command success.
+The current reset audit found production timing-state zeroing at shutdown, after
+resource destruction in normal context close. No live diagnostic reset API was
+found; adding one would require atlas ID epoching rather than reusing IDs.
+
+The selected v5 invalid window pass remains unreconstructable: all three draws
+lack retained geometry/texture inputs, exact clears and compiled shader text.
+`window_readiness.py` reports these missing inputs with an independent report
+version. It also explicitly rejects full readiness pending an immutable actual-build
+pipeline manifest and complete producer/resolve command topology; it cannot certify
+replay even when the retained buffer subset is complete. The report is not a GPU
+replay. No new game capture was made during this implementation.
+
+Verification: 358 gfx tests enabled/disabled after submit-hook changes; enabled
+rerun after projection-binding guards; 19 Python tests; v22 five focused telemetry
+tests enabled and disabled. v22 remains preserved-baseline union evidence, not
+current gameplay build verification. Gfx assertion checking passes after adding
+actual query/slot bounds at the render-pass hook. A direct gfx style scan reports
+pre-existing long JavaScript strings in platform_web.odin. Concurrent repository
+hygiene-script changes were left untouched.
+
 ## Remaining gates
 
 - Finish first-frame trace metadata and classify all observed labels; gameplay was

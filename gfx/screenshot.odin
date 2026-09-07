@@ -154,10 +154,10 @@ _screenshot_copy :: proc(
 		wg.BufferRelease(staging)
 		return nil
 	}
-	wg.QueueSubmit(ctx.queue, {command})
 	when GPU_TIMING_DIAGNOSTICS {
 		_gpu_timing_diagnostic_submit(&ctx.gpu_timing.diagnostics[0], encoder)
 	}
+	wg.QueueSubmit(ctx.queue, {command})
 	wg.CommandBufferRelease(command)
 	wg.CommandEncoderRelease(encoder)
 	return staging

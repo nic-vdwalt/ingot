@@ -46,6 +46,7 @@ gpu_timing_diagnostics_window_draw_metadata_is_bounded :: proc(t: ^testing.T) {
 		ctx.config.width = 2560
 		ctx.config.height = 1440
 		ctx.rend.active_shader = 99
+		ctx.rend.ubind = cast(wg.BindGroup)uintptr(4)
 		ctx.rend.diagnostic_projection = _window_projection(1280, 720)
 		ctx.id = DEFAULT_CONTEXT_ID
 		ctx.gpu_timing.active_slot = 0
@@ -84,6 +85,12 @@ gpu_timing_diagnostics_window_draw_metadata_is_bounded :: proc(t: ^testing.T) {
 		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 9)
 		testing.expect_value(t, state.bindings[0][0].record.draws[0].scissor, [4]u32{5, 6, 20, 30})
 		testing.expect(t, !state.bindings[0][0].record.draws[0].projection_known)
+		ctx.rend.cur_u = nil
+		ctx.rend.ubind = nil
+		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 10)
+		testing.expect(t, !state.bindings[0][0].record.draws[1].projection_known)
+		_gpu_timing_diagnostic_bind(state, 0, 0, encoder, pass, .Clear, .Store)
+		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 9)
 		ctx.frame.pass = nil
 		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 10)
 		testing.expect(t, !state.bindings[0][0].record.draws[1].known)
