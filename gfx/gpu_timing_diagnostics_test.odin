@@ -263,18 +263,16 @@ gpu_timing_diagnostics_retains_prior_ordered_samples :: proc(t: ^testing.T) {
 		slot.ticks[1] = 120
 		ctx.gpu_timing.available = true
 		ctx.gpu_timing.timestamp_period = 1
-		slot.in_flight = true
-		slot.map_done = true
-		slot.map_ok = true
+		_ = gpu_timing_test_arm(ctx, 0)
+		gpu_timing_test_deliver(ctx, 0, .Success)
 		_gpu_timing_collect(ctx)
 		testing.expect_value(t, ctx.gpu_timing.diagnostics[0].failure_count, u32(0))
 		slot.frame_index = 11
 		slot.generation = 2
 		slot.query_count = 2
-		slot.in_flight = true
-		slot.map_done = true
-		slot.map_ok = true
 		slot.ticks[0] = 200
+		_ = gpu_timing_test_arm(ctx, 0)
+		gpu_timing_test_deliver(ctx, 0, .Success)
 		_gpu_timing_collect(ctx)
 		snapshot := context_gpu_timing_diagnostics(ctx)
 		record := snapshot.failures[0]

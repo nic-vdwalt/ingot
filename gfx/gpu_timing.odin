@@ -294,7 +294,9 @@ _gpu_timing_shutdown :: proc(ctx: ^Context) -> bool {
 
 _gpu_timing_frame_begin :: proc(ctx: ^Context) {
 	assert(ctx != nil, "_gpu_timing_frame_begin: nil context")
-	ctx.gpu_timing.active_slot = -1
+	// A frame that never reached submit (surface unavailable, acquire failed)
+	// leaves its slot recording; that slot is free again, not in flight.
+	_gpu_timing_frame_abandon(ctx)
 	if !ctx.gpu_timing.available do return
 	if ctx.gpu_timing.closing {
 		ctx.gpu_timing.health.closed_rejections += 1
@@ -589,6 +591,7 @@ _gpu_timing_record_invalid :: proc(
 	state.health.invalid_timestamps += 1
 	pair_index, invalid := _gpu_timing_invalid_pair(slot.ticks[:], slot.query_count / 2)
 	if !invalid || state.health.first_invalid_pair.valid do return
+	assert(int(pair_index) * 2 + 1 < len(slot.ticks), "gpu timing: invalid pair index")
 	state.health.first_invalid_pair = {
 		generation  = slot.generation,
 		submission  = slot.submission,

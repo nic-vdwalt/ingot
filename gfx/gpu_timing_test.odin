@@ -2,6 +2,39 @@
 package gfx
 
 import "core:testing"
+import wg "vendor:wgpu"
+
+// gpu_timing_test_arm registers a slot the test filled directly, exactly as
+// _gpu_timing_frame_submitted would before calling BufferMapAsync.
+gpu_timing_test_arm :: proc(ctx: ^Context, index: int) -> ^Gpu_Timing_Map_Request {
+	slot := &ctx.gpu_timing.slots[index]
+	record := &ctx.gpu_timing.requests[index]
+	assert(!record.armed && !record.done)
+	record^ = {
+		slot_index  = u32(index),
+		generation  = slot.generation,
+		submission  = slot.submission,
+		query_count = slot.query_count,
+		readback    = slot.readback,
+	}
+	slot.phase = .Map_Pending
+	record.armed = true
+	// Submission always releases the active slot before arming it.
+	if ctx.gpu_timing.active_slot == index do ctx.gpu_timing.active_slot = -1
+	return record
+}
+
+// gpu_timing_test_deliver publishes the slot's ticks through the armed record
+// the way the backend callback does for a Success status, without a device.
+gpu_timing_test_deliver :: proc(ctx: ^Context, index: int, status: wg.MapAsyncStatus) {
+	slot := &ctx.gpu_timing.slots[index]
+	record := &ctx.gpu_timing.requests[index]
+	assert(record.armed && !record.done)
+	record.ticks = slot.ticks
+	record.status = status
+	record.mapped = status == .Success
+	record.done = true
+}
 
 @(test)
 gpu_timing_synthetic_cadence_preserves_delayed_completions :: proc(t: ^testing.T) {
@@ -20,12 +53,10 @@ gpu_timing_synthetic_cadence_preserves_delayed_completions :: proc(t: ^testing.T
 			testing.expect(t, _gpu_timing_pair_reserve(&ctx.gpu_timing).valid)
 			slot.ticks[0] = u64(frame * 100 + 1)
 			slot.ticks[1] = slot.ticks[0] + 50
-			slot.in_flight = true
+			_ = gpu_timing_test_arm(ctx, ctx.gpu_timing.active_slot)
 			if (frame + 1) % GPU_TIMING_FRAME_SLOTS != 0 do continue
 			for index in 0 ..< GPU_TIMING_FRAME_SLOTS {
-				completed := &ctx.gpu_timing.slots[GPU_TIMING_FRAME_SLOTS - index - 1]
-				completed.map_ok = true
-				completed.map_done = true
+				gpu_timing_test_deliver(ctx, GPU_TIMING_FRAME_SLOTS - index - 1, .Success)
 			}
 			count, health := context_renderer_gpu_timing_drain(ctx, output[:])
 			collected += count
@@ -39,35 +70,47 @@ gpu_timing_synthetic_cadence_preserves_delayed_completions :: proc(t: ^testing.T
 	}
 }
 
+// Every delivery below goes through the registered userdata address, so the
+// callback is exercised exactly as the backend would invoke it. Only Error and
+// Aborted are delivered to armed records here: Success would read the mapped
+// range of a device buffer that no test owns.
 @(test)
-gpu_timing_stale_callback_cannot_complete_new_generation :: proc(t: ^testing.T) {
-	slot := Gpu_Timing_Slot {
-		generation  = 4,
-		submission  = 3,
-		query_count = 2,
-		in_flight   = true,
-	}
-	request := Gpu_Timing_Map_Request {
-		slot        = &slot,
-		generation  = 4,
-		submission  = 3,
-		query_count = 2,
-	}
-	testing.expect(t, _gpu_timing_map_request_matches(request))
-	slot.generation = 5
-	_gpu_timing_map_done(.Success, {}, &request, nil)
-	testing.expect(t, !slot.map_done)
-	testing.expect(t, !slot.map_ok)
-	testing.expect(t, !_gpu_timing_map_request_matches(request))
+gpu_timing_stray_callbacks_are_counted_not_published :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.gpu_timing.available = true
+	slot := &ctx.gpu_timing.slots[0]
+	record := &ctx.gpu_timing.requests[0]
+	_gpu_timing_map_done(.Success, {}, record, nil)
+	testing.expect(t, !record.done)
+	testing.expect_value(t, record.stray, u32(1))
+	_gpu_timing_collect(ctx)
+	testing.expect_value(t, ctx.gpu_timing.health.stray_callbacks, u64(1))
+	testing.expect_value(t, record.stray, u32(0))
 	slot.generation = 4
-	slot.submission = 4
-	testing.expect(t, !_gpu_timing_map_request_matches(request))
 	slot.submission = 3
-	slot.query_count = 4
-	testing.expect(t, !_gpu_timing_map_request_matches(request))
 	slot.query_count = 2
-	slot.in_flight = false
-	testing.expect(t, !_gpu_timing_map_request_matches(request))
+	testing.expect(t, gpu_timing_test_arm(ctx, 0) == record)
+	testing.expect(t, _gpu_timing_record_matches_slot(record^, slot, 0))
+	testing.expect(t, !_gpu_timing_record_matches_slot(record^, slot, 1))
+	_gpu_timing_map_done(.Error, {}, record, nil)
+	testing.expect(t, record.done)
+	testing.expect(t, !record.mapped)
+	testing.expect_value(t, record.status, wg.MapAsyncStatus.Error)
+	_gpu_timing_map_done(.Error, {}, record, nil)
+	testing.expect_value(t, record.stray, u32(1))
+	testing.expect(t, !record.mapped)
+	_gpu_timing_collect(ctx)
+	testing.expect_value(t, ctx.gpu_timing.health.map_failure, u64(1))
+	testing.expect_value(t, ctx.gpu_timing.health.stray_callbacks, u64(2))
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Free)
+	testing.expect_value(t, slot.map_status, wg.MapAsyncStatus.Error)
+	testing.expect(t, !record.armed && !record.done)
+	_gpu_timing_map_done(.Aborted, {}, record, nil)
+	testing.expect(t, !record.done)
+	_gpu_timing_collect(ctx)
+	testing.expect_value(t, ctx.gpu_timing.health.stray_callbacks, u64(3))
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Free)
 }
 
 @(test)
@@ -79,26 +122,86 @@ gpu_timing_failed_callbacks_complete_out_of_order :: proc(t: ^testing.T) {
 		slot.generation = u64(index + 1)
 		slot.submission = u64(index + 1)
 		slot.query_count = 2
-		slot.in_flight = true
-		slot.map_request = {
-			slot        = &slot,
-			generation  = slot.generation,
-			submission  = slot.submission,
-			query_count = 2,
-		}
+		_ = gpu_timing_test_arm(ctx, index)
 	}
 	for index in 0 ..< GPU_TIMING_FRAME_SLOTS {
-		slot := &ctx.gpu_timing.slots[GPU_TIMING_FRAME_SLOTS - index - 1]
-		_gpu_timing_map_done(.Error, {}, &slot.map_request, nil)
-		testing.expect(t, slot.map_done)
-		testing.expect(t, !slot.map_ok)
+		record := &ctx.gpu_timing.requests[GPU_TIMING_FRAME_SLOTS - index - 1]
+		_gpu_timing_map_done(.Error, {}, record, nil)
+		testing.expect(t, record.done)
+		testing.expect(t, !record.mapped)
 	}
 	_gpu_timing_collect(ctx)
 	testing.expect_value(t, ctx.gpu_timing.health.map_failure, u64(GPU_TIMING_FRAME_SLOTS))
-	for slot in ctx.gpu_timing.slots {
-		testing.expect(t, !slot.in_flight)
-		testing.expect(t, !slot.map_done)
+	testing.expect_value(t, ctx.gpu_timing.health.stray_callbacks, u64(0))
+	for slot, index in ctx.gpu_timing.slots {
+		testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Free)
+		testing.expect(t, !ctx.gpu_timing.requests[index].armed)
+		testing.expect(t, !ctx.gpu_timing.requests[index].done)
 	}
+	testing.expect_value(t, _gpu_timing_pending_count(&ctx.gpu_timing), u32(0))
+}
+
+// An inline callback is one the backend runs before BufferMapAsync returns.
+// The record is armed before the call, so the delivery lands exactly like a
+// delayed one and the collector retires it on its next pass.
+@(test)
+gpu_timing_inline_callback_completes_armed_record :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.gpu_timing.available = true
+	_gpu_timing_frame_begin(ctx)
+	slot := &ctx.gpu_timing.slots[0]
+	testing.expect(t, _gpu_timing_pair_reserve(&ctx.gpu_timing).valid)
+	slot.phase = .Resolved
+	slot.submission = 1
+	record := gpu_timing_test_arm(ctx, 0)
+	_gpu_timing_map_done(.Error, {}, record, nil)
+	testing.expect(t, record.done)
+	testing.expect_value(t, _gpu_timing_pending_count(&ctx.gpu_timing), u32(1))
+	_gpu_timing_frame_begin(ctx)
+	testing.expect_value(t, ctx.gpu_timing.active_slot, 1)
+	_gpu_timing_frame_abandon(ctx)
+	_gpu_timing_collect(ctx)
+	testing.expect_value(t, ctx.gpu_timing.health.map_failure, u64(1))
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Free)
+	testing.expect_value(t, _gpu_timing_pending_count(&ctx.gpu_timing), u32(0))
+}
+
+// A registration that never reaches its terminal callback within the bounded
+// retire is quarantined: the state refuses release and keeps the record and
+// its buffers, and a later terminal callback still retires it normally.
+@(test)
+gpu_timing_retire_refuses_until_terminal_callback_observed :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.gpu_timing.available = true
+	slot := &ctx.gpu_timing.slots[2]
+	slot.generation = 7
+	slot.submission = 5
+	slot.query_count = 4
+	record := gpu_timing_test_arm(ctx, 2)
+	testing.expect(t, !_gpu_timing_quiesce(ctx))
+	testing.expect(t, !_gpu_timing_retire(ctx))
+	testing.expect(t, ctx.gpu_timing.closing)
+	testing.expect_value(t, ctx.gpu_timing.quarantined, u32(1))
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Quarantined)
+	testing.expect(t, record.armed && !record.done)
+	testing.expect_value(t, record.generation, u64(7))
+	_gpu_timing_frame_begin(ctx)
+	testing.expect_value(t, ctx.gpu_timing.active_slot, -1)
+	testing.expect_value(t, ctx.gpu_timing.health.closed_rejections, u64(1))
+	testing.expect(t, !_gpu_timing_retire(ctx))
+	testing.expect_value(t, ctx.gpu_timing.quarantined, u32(1))
+	_gpu_timing_map_done(.Aborted, {}, record, nil)
+	testing.expect(t, record.done)
+	testing.expect(t, _gpu_timing_retire(ctx))
+	testing.expect_value(t, ctx.gpu_timing.quarantined, u32(0))
+	testing.expect_value(t, ctx.gpu_timing.health.map_failure, u64(1))
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Free)
+	testing.expect(t, !record.armed && !record.done)
+	_gpu_timing_release(ctx)
+	testing.expect(t, !ctx.gpu_timing.available)
+	testing.expect_value(t, ctx.gpu_timing.active_slot, -1)
 }
 
 @(test)
@@ -110,15 +213,17 @@ gpu_timing_generation_and_resolve_guard :: proc(t: ^testing.T) {
 	slot := &ctx.gpu_timing.slots[0]
 	testing.expect_value(t, slot.generation, u64(1))
 	testing.expect(t, _gpu_timing_pair_reserve(&ctx.gpu_timing).valid)
-	slot.resolved = true
+	slot.phase = .Resolved
 	testing.expect(t, !_gpu_timing_pair_reserve(&ctx.gpu_timing).valid)
 	testing.expect_value(t, slot.query_count, u32(2))
 	_gpu_timing_frame_abandon(ctx)
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Free)
 	_gpu_timing_frame_begin(ctx)
 	testing.expect_value(t, slot.generation, u64(2))
-	testing.expect(t, !slot.resolved)
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Recording)
 	testing.expect_value(t, slot.submission, u64(0))
-	slot.in_flight = true
+	slot.phase = .Map_Pending
+	ctx.gpu_timing.active_slot = -1
 	_gpu_timing_frame_begin(ctx)
 	testing.expect_value(t, ctx.gpu_timing.active_slot, 1)
 	testing.expect_value(t, slot.generation, u64(2))
@@ -166,13 +271,12 @@ gpu_timing_collect_preserves_every_completion :: proc(t: ^testing.T) {
 	ctx.gpu_timing.available = true
 	ctx.gpu_timing.timestamp_period = 1
 	for &slot, index in ctx.gpu_timing.slots {
-		slot.in_flight = true
-		slot.map_done = true
-		slot.map_ok = true
 		slot.frame_index = u64(GPU_TIMING_FRAME_SLOTS - index)
 		slot.query_count = 2
 		slot.ticks[0] = 10
 		slot.ticks[1] = 20
+		_ = gpu_timing_test_arm(ctx, index)
+		gpu_timing_test_deliver(ctx, index, .Success)
 	}
 	output: [GPU_TIMING_FRAME_SLOTS]Gpu_Frame_Timing_Detail
 	count, health := context_renderer_gpu_timing_drain(ctx, output[:])
@@ -184,11 +288,13 @@ gpu_timing_collect_preserves_every_completion :: proc(t: ^testing.T) {
 	for detail, index in output {
 		testing.expect_value(t, detail.frame_index, u64(GPU_TIMING_FRAME_SLOTS - index))
 	}
-	for &slot in ctx.gpu_timing.slots do slot.in_flight = true
+	for &slot in ctx.gpu_timing.slots do slot.phase = .Map_Pending
 	_gpu_timing_frame_begin(ctx)
 	testing.expect_value(t, ctx.gpu_timing.health.no_free_slot, u64(1))
-	ctx.gpu_timing.slots[0].map_done = true
-	ctx.gpu_timing.slots[0].map_ok = false
+	for &slot in ctx.gpu_timing.slots do slot.phase = .Free
+	ctx.gpu_timing.slots[0].query_count = 2
+	_ = gpu_timing_test_arm(ctx, 0)
+	gpu_timing_test_deliver(ctx, 0, .Error)
 	_gpu_timing_collect(ctx)
 	testing.expect_value(t, ctx.gpu_timing.health.map_failure, u64(1))
 }
@@ -210,9 +316,8 @@ gpu_timing_health_preserves_invalid_and_truncated_evidence :: proc(t: ^testing.T
 		slot.ticks[index * 2 + 1] = u64(index * 2 + 1)
 	}
 	testing.expect(t, !_gpu_timing_pair_reserve(&ctx.gpu_timing).valid)
-	slot.in_flight = true
-	slot.map_done = true
-	slot.map_ok = true
+	_ = gpu_timing_test_arm(ctx, 0)
+	gpu_timing_test_deliver(ctx, 0, .Success)
 	output: [1]Gpu_Frame_Timing_Detail
 	count, health := context_renderer_gpu_timing_drain(ctx, output[:])
 	testing.expect_value(t, count, 1)
@@ -223,9 +328,6 @@ gpu_timing_health_preserves_invalid_and_truncated_evidence :: proc(t: ^testing.T
 		health.group_truncation,
 		u64(GPU_TIMING_MAX_SPANS - GPU_TIMING_MAX_GROUPS),
 	)
-	slot.in_flight = true
-	slot.map_done = true
-	slot.map_ok = true
 	slot.epoch = 23
 	slot.frame_index = 45
 	slot.generation = 103
@@ -240,6 +342,8 @@ gpu_timing_health_preserves_invalid_and_truncated_evidence :: proc(t: ^testing.T
 	slot.ticks[3] = 30
 	slot.ticks[4] = 50
 	slot.ticks[5] = 60
+	_ = gpu_timing_test_arm(ctx, 0)
+	gpu_timing_test_deliver(ctx, 0, .Success)
 	count, health = context_renderer_gpu_timing_drain(ctx, output[:])
 	testing.expect_value(t, count, 0)
 	testing.expect_value(t, health.invalid_timestamps, u64(1))
@@ -273,6 +377,7 @@ gpu_timing_pass_boundaries_reserve_distinct_indices :: proc(t: ^testing.T) {
 	testing.expect(t, unavailable.querySet == nil)
 	testing.expect_value(t, state.slots[0].query_count, u32(0))
 	state.available = true
+	state.slots[0].phase = .Recording
 	first := _gpu_timing_pass_writes(state, "world.opaque")
 	second := _gpu_timing_pass_writes(state, "world.ocean")
 	testing.expect_value(t, first.beginningOfPassWriteIndex, u32(0))
@@ -292,6 +397,7 @@ gpu_timing_query_pairs_are_bounded :: proc(t: ^testing.T) {
 	defer free(state)
 	state.available = true
 	state.active_slot = 0
+	state.slots[0].phase = .Recording
 	state.slots[0].query_count = GPU_TIMING_QUERY_COUNT - 2
 	testing.expect(t, _gpu_timing_pair_reserve(state).valid)
 	testing.expect(t, !_gpu_timing_pair_reserve(state).valid)
@@ -309,9 +415,9 @@ gpu_timing_query_pairs_require_active_available_slot :: proc(t: ^testing.T) {
 	state.active_slot = GPU_TIMING_FRAME_SLOTS
 	testing.expect(t, !_gpu_timing_pair_reserve(state).valid)
 	state.active_slot = GPU_TIMING_FRAME_SLOTS - 1
-	state.slots[state.active_slot].in_flight = true
+	state.slots[state.active_slot].phase = .Map_Pending
 	testing.expect(t, !_gpu_timing_pair_reserve(state).valid)
-	state.slots[state.active_slot].in_flight = false
+	state.slots[state.active_slot].phase = .Recording
 	token := _gpu_timing_pair_reserve(state)
 	testing.expect(t, token.valid)
 	testing.expect_value(t, token.query_begin, u32(0))
@@ -363,4 +469,27 @@ gpu_timing_detail_aggregates_repeated_labels :: proc(t: ^testing.T) {
 	testing.expect_value(t, detail.groups[0].seconds, f64(80e-9))
 	testing.expect_value(t, detail.groups[1].count, u32(1))
 	testing.expect_value(t, detail.seconds, f64(160e-9))
+}
+
+// A frame that never reaches submit (the surface was unavailable, so
+// context_end_drawing took the no-frame branch) must not strand its slot in
+// Recording; the v9 game build lost every slot within eight frames that way.
+@(test)
+gpu_timing_unsubmitted_frame_frees_its_slot :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.gpu_timing.available = true
+	for frame in 0 ..< GPU_TIMING_FRAME_SLOTS * 2 {
+		ctx.stats_current.frame_index = u64(frame + 1)
+		_gpu_timing_frame_begin(ctx)
+		testing.expect_value(t, ctx.gpu_timing.active_slot, 0)
+		testing.expect(t, _gpu_timing_pair_reserve(&ctx.gpu_timing).valid)
+	}
+	testing.expect_value(t, ctx.gpu_timing.health.no_free_slot, u64(0))
+	testing.expect_value(t, ctx.gpu_timing.slots[0].phase, Gpu_Timing_Phase.Recording)
+	for slot in ctx.gpu_timing.slots[1:] do testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Free)
+	_gpu_timing_frame_abandon(ctx)
+	testing.expect_value(t, ctx.gpu_timing.slots[0].phase, Gpu_Timing_Phase.Free)
+	testing.expect_value(t, ctx.gpu_timing.slots[0].query_count, u32(0))
+	testing.expect_value(t, ctx.gpu_timing.active_slot, -1)
 }

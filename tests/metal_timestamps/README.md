@@ -103,14 +103,41 @@ validator verifies a frozen build manifest when `--build-dir` is given:
 
 ```sh
 python3 tests/metal_timestamps/freeze_build_inputs.py --root ..   --dest artifacts/timing-game-vN --odin artifacts/timing-odin-control/odin
-python3 tests/metal_timestamps/window_readiness.py   artifacts/timing-game-v8/timestamp-game-v8-evidence.tel.timing.json   --failure 1 --build-dir artifacts/timing-game-v8
+python3 tests/metal_timestamps/window_readiness.py   artifacts/timing-game-v10/timestamp-game-v10-evidence.tel.timing.json   --failure 1 --build-dir artifacts/timing-game-v10
 ```
 
 `freeze_build_inputs.py` copies the union game packages, demo assets and Ingot
 collection packages into the destination and hashes them before any build, along
 with the compiler and pinned wgpu archive identities. Build the host and library
-from that tree (commands in `timing-game-v8/build-commands.log`), then write the
+from that tree (commands in `timing-game-v10/build-commands.log`), then write the
 post-capture `identity-audit.json` so the validator can tie the capture file back.
+`timing-game-v10/signature-comparison.json` records the v8/v9/v10 failure
+signatures and telemetry health totals; v9 is retained as the failing build that
+stranded every timing slot (`gh.s` = 1175) before the phase-leak repair.
+
+Exact replay of a certified failure (step 4 attribution):
+
+```sh
+python3 tests/metal_timestamps/export_replay_bundle.py   artifacts/timing-game-v10/timestamp-game-v10-evidence.tel.timing.json   --failure 1 --dest artifacts/timing-replay-v10-f1 --build-dir artifacts/timing-game-v10
+./artifacts/timing-odin-control/odin build tests/metal_timestamps/replay -collection:ingot=.   -define:INGOT_RENDER_STATS=true -out:artifacts/timing-replay-v10-f1/replay-webgpu-pinned
+artifacts/timing-replay-v10-f1/replay-webgpu-pinned artifacts/timing-replay-v10-f1 300 run.jsonl
+swiftc -O -o artifacts/timing-replay-v10-f1/replay-native-metal tests/metal_timestamps/native_replay.swift
+artifacts/timing-replay-v10-f1/replay-native-metal artifacts/timing-replay-v10-f1 300 gpu.jsonl --gpu-resolve
+artifacts/timing-replay-v10-f1/replay-native-metal artifacts/timing-replay-v10-f1 300 cpu.jsonl --completed-resolve
+python3 tests/metal_timestamps/evaluate_replay.py run.jsonl gpu.jsonl cpu.jsonl --manifest evaluation.json
+```
+
+The replay opens a real window at the captured attachment size and refuses to
+run when the swapchain differs. `evaluate_replay.py` counts the stale-by-one-pass
+signature (end of iteration N equals the end of iteration N-1) and only reports
+`candidate_passes` for a run with every sample ordered after one first-use zero.
+Result on the inspected device: the pinned WebGPU replay and the native
+same-command-buffer GPU resolve fail identically; only a render-completed
+resolve is ordered. See investigation.md, "attribution".
+
+Telemetry `gh` carries two ownership counters since the step 3 repair: `sc`
+(backend callbacks that reached a retired or unarmed record) and `cr` (frames
+refused a timing slot after close began). Both must stay 0 in a healthy capture.
 
 ```sh
 python3 tests/metal_timestamps/window_readiness.py \

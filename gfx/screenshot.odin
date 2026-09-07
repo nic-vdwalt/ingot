@@ -141,16 +141,18 @@ _screenshot_retire :: proc(ctx: ^Context, wait: bool) -> bool {
 	for _ in 0 ..< polls {
 		if sync.atomic_load_explicit(&record.done, .Acquire) do break
 		if ctx.device == nil do break
-		wg.DevicePoll(ctx.device, wait, nil)
+		wg.DevicePoll(ctx.device, b32(wait), nil)
 	}
 	if wait && !sync.atomic_load_explicit(&record.done, .Acquire) && ctx.device != nil {
 		// Cancel is a request, not a join; the observed callback below decides.
-		wg.BufferUnmap(record.staging)
+		if record.staging != nil do wg.BufferUnmap(record.staging)
 	}
 	if !sync.atomic_load_explicit(&record.done, .Acquire) do return false
-	if record.status == .Success do wg.BufferUnmap(record.staging)
-	wg.BufferDestroy(record.staging)
-	wg.BufferRelease(record.staging)
+	if record.staging != nil {
+		if record.status == .Success do wg.BufferUnmap(record.staging)
+		wg.BufferDestroy(record.staging)
+		wg.BufferRelease(record.staging)
+	}
 	record^ = {}
 	return true
 }

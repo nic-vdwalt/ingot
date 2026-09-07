@@ -449,16 +449,279 @@ next to the telemetry path; it is not part of this evidence.
 
 Verification: 360 gfx tests enabled and disabled; 29 Python tests; v24 and v25 six
 focused telemetry tests enabled and disabled; assertion and style checks clean.
+After step 3: 367 gfx tests enabled and disabled; v26 seven focused telemetry
+tests enabled and disabled; ForgeCore host tests; 62 Aesir memwatch tests.
+
+## September 7 callback ownership and teardown repair (step 3)
+
+Pinned dispatch facts re-verified in `artifacts/wgpu-native-control` before any
+change. Map callbacks run on the calling thread from four entry points, never
+from a backend thread: `wgpuBufferMapAsync` (inline on validation failure,
+`vendor/wgpu-core/src/device/global.rs:2066–2092`), `wgpuQueueSubmit` (the
+submit path runs `maintain(Poll)` and fires the collected closures before it
+returns, `vendor/wgpu-core/src/device/queue.rs:1468–1501`), `wgpuDevicePoll` /
+`wgpuInstanceProcessEvents` (`global.rs:1860–1873`), and `wgpuBufferUnmap` /
+`wgpuBufferDestroy`, which answer a waiting map with an inline `Aborted`
+(`resource.rs:837–846`, `global.rs:240–258`). A pending mapping keeps the
+buffer alive (`BufferPendingMapping._parent_buffer`), so release without unmap
+is not a cancel either. The Metal fence completion block only touches an
+`Arc` atomic (`vendor/wgpu-hal/src/metal/mod.rs:546–564`), but its code lives
+in whichever binary called `QueueSubmit`; the ForgeCore game library links its
+own renderer and wgpu copy (`nm build/game.dylib` in v8 lists `_wgpuQueueSubmit`,
+`_gfx::_screenshot_map_done` and `_gfx::_submission_done`), so a hot unload
+while its work is outstanding can strand code the backend still calls.
+
+Defects found in our ownership, all independent of the counter defect:
+
+- Timing: `Gpu_Timing_Map_Request` lived inside the mutable slot and the
+  callback wrote slot fields directly; `_gpu_timing_shutdown` destroyed the
+  readback buffers after a bounded poll regardless of outcome, relying on the
+  inline abort to land before `slot = {}`.
+- Screenshot: `Screenshot_Map` was a stack local of `_screenshot_map`; on the
+  timeout path the caller's deferred `BufferDestroy` delivered the inline
+  `Aborted` callback into a popped frame.
+- Submissions: `_close_window_context` turned an undrained tracker into
+  `ensure` (a crash), not a refusal, and destroyed renderer resources before
+  attempting to drain.
+- Hot unload: the ForgeCore host reloaded the game library without proving the
+  backend held no registration or completion block pointing into it.
+
+Repair (`gfx/gpu_timing.odin`, `gfx/screenshot.odin`, `gfx/submission.odin`,
+`gfx/context.odin`, `ui_gfx/app.odin`, `fit/app.odin`, ForgeCore
+`host/main.odin`):
+
+- `Gpu_Timing_State.requests[GPU_TIMING_FRAME_SLOTS]` holds one immutable
+  registration record per slot. The submitter writes identity and arms it with
+  a release store before `BufferMapAsync`; the callback is the only writer of
+  `ticks/status/mapped` and publishes with a release store on `done`; the
+  collector acquires `done`, asserts the record still matches its slot, copies
+  into the slot, unmaps only after a `Success`, and retires (`record = {}`).
+  Slots carry an explicit `Gpu_Timing_Phase`
+  (`Free -> Recording -> Resolved -> Map_Pending -> Result_Ready | Map_Failed
+  -> Free`, plus `Quarantined`). A callback for an unarmed or already-done
+  record is counted in `health.stray_callbacks` and never published.
+- `_gpu_timing_retire` sets `closing` (new frames are refused and counted in
+  `health.closed_rejections`), makes bounded progress, then attempts cancel by
+  `BufferUnmap` and re-collects; unmap is treated as a request, not a join.
+  Slots still pending are `Quarantined`, `_gpu_timing_release` asserts none
+  remain, and `_gpu_timing_shutdown` returns false while retaining storage and
+  buffers. A later terminal callback retires a quarantined slot normally.
+- `Screenshot_Map` moved into `Context.screenshot` with the same arm/done/stray
+  protocol; a timed-out capture leaves the record owning its staging buffer,
+  later captures first try one non-blocking retire and refuse otherwise.
+- `_submission_done` counts callbacks naming no live ticket; `_submission_quiesce`
+  is the bounded, non-closing drain shared by shutdown.
+- `_close_window_context` retires submissions, the screenshot map and timing
+  before destroying anything and returns `false` on refusal, leaving the
+  context in `.Closing` with every object intact and retry-safe.
+  `context_close`, `CloseWindow`, `ui_gfx.app_destroy` and `fit.Destroy` now
+  return that bool; partial-init cleanups route through
+  `_abandon_window_context`, which asserts an uninitialised context cannot
+  refuse. `context_quiesce_gpu` is the non-closing variant for hosts.
+- ForgeCore host: `reload_game` defers a reload until `context_quiesce_gpu`
+  succeeds, `restart_game` `ensure`s it after the library's shutdown, and
+  process exit keeps the library loaded when `CloseWindow` refuses.
+  Telemetry `gh` gained `sc` (stray callbacks) and `cr` (closed rejections);
+  Aesir's `GPU_Timing_Health` decodes both.
+
+Tests (`gfx/gpu_timing_test.odin`, `gfx/callback_ownership_test.odin`) deliver
+through the registered userdata addresses: stray before arm, terminal `Error`,
+duplicate after terminal (fault injection beyond the one-callback contract),
+late after retire, out-of-order failures across all eight slots, inline
+delivery immediately after arming, permanent stall with a nil device
+(quarantine, refused release, refused `context_close`, refused
+`context_quiesce_gpu`) followed by a late `Aborted` that retires it, screenshot
+strand/retire, and submission stray/epoch accounting.
+
+This step proves storage and code lifetime for our registrations. It changes
+nothing about counter publication; the captures below are the before/after
+signature comparison that the gate demands, not a repair claim.
+
+### v9: phase leak caught by the frozen capture, not by unit tests
+
+The first frozen build with the phase machine (`artifacts/timing-game-v9`)
+reported `gh.s` (`no_free_slot`) = 1175 with a single invalid timestamp: every
+slot was stranded in `Recording`. A frame that never reaches submit (surface
+unavailable or acquire failure takes `context_end_drawing`'s no-frame branch)
+used to leave a slot with `in_flight = false`, which the old selector treated
+as reusable; the explicit phase made that leak visible. A 90-frame probe
+window reproduced it in eight frames. Repair: `_gpu_timing_frame_begin`
+abandons a leftover active slot and the no-frame branch of
+`context_end_drawing` abandons explicitly; `_gpu_timing_frame_abandon` asserts
+it never abandons an armed slot. Regression:
+`gpu_timing_unsubmitted_frame_frees_its_slot`. The v9 tree, binaries and
+capture are retained as the failing evidence; v10 is the same source plus that
+repair.
+
+The same probe (a 640x360 window drawing one rectangle at 60 Hz) reported
+invalid timestamp pairs in 2, 0 and 6 of successive 15-frame windows, with the
+collector otherwise healthy. The counter defect therefore reproduces without
+the game, which is the minimal replay input step 4 needs.
+
+### v10: signature after the repair
+
+`artifacts/timing-game-v10` (frozen tree, `identity-audit.json`,
+`signature-comparison.json`, `readiness-all.json`) is the post-repair capture.
+Collector health is clean for the first time: `no_free_slot` 0, `map_failure`
+0, `overflow` 0, `stray_callbacks` 0, `closed_rejections` 0, and the host's
+`CloseWindow` returned true (the process exited normally). The counter
+signature is unchanged from v8: 64 retained failures, 3 zero ends and 61
+reversed ends across slots 0–2, `window` only, single span on a single
+encoder, invalid pairs over 872 collected frames (v8: 1316 over a longer
+telemetry window). `window_readiness.py --build-dir artifacts/timing-game-v10`
+certifies frames 1, 11, 12, 13 and 14; frame 11 is a reversed end whose end
+tick (`18796717235625`) is frame 1's begin tick + 209 us, the same stale-end
+shape seen in v6 and v8. Aesir still rejects the recording (truncated,
+`read_errors` 1, 8 telemetry lines), unchanged and deferred to step 5.
+
+Step 3 gate outcome: storage and code lifetime are proved by construction and
+by the tests above; teardown refusal is observable (`context_close` false,
+`CloseWindow` false, host keeps the library); the captured signature is
+identical before and after, so the ownership repair is explicitly not a
+counter repair.
+
+## September 7 attribution: exact replay of the captured window pass (step 4)
+
+Inputs: `artifacts/timing-replay-v10-f1/` is the bundle
+`export_replay_bundle.py` wrote from v10 failure 1 (frame 11, the reversed end
+with frame 1 as its prior sample, certified by `window_readiness.py
+--build-dir artifacts/timing-game-v10`): captured WGSL (sha `c3a29d73…`),
+three draws (1080, 66 and 300 indices; neutral texture, atlas 1, atlas 2 at
+linear filter), projection words, retained BGRA8Unorm pipeline descriptors,
+exact clear words, full-attachment scissors and the single-span topology.
+`attribution-manifest.json` records every input, source, binary and run hash.
+
+Three programs consume that bundle unchanged, one hypothesis each:
+
+1. `replay/main.odin`, built with the pinned control compiler against the
+   pinned wgpu archive: opens the window through ingot:gfx (2560x1440
+   BGRA8Unorm swapchain, asserted), re-encodes the pass itself with
+   `timestampWrites {0, 1}`, resolves and copies in the same encoder, one
+   submit, one map per iteration, eight readback slots, no CPU wait.
+2. `native_replay.swift --gpu-resolve`: the same window, drawable, draws and
+   the exact wgpu-hal Metal topology (`sampleBufferAttachments[0]
+   startOfVertex=0, endOfFragment=1`, blit `resolveCounters(0..<2)` and copy
+   in the same command buffer, present on a separate command buffer).
+3. `native_replay.swift --completed-resolve`: identical render encoding with
+   no resolve in the render command buffer; the resolve and copy are encoded
+   in a second command buffer only after the render command buffer completed.
+   Diagnostic control only.
+
+| Run | Samples | Ordered | Zero end | Reversed | Stale by one pass | Median duration |
+|---|---:|---:|---:|---:|---:|---:|
+| WebGPU pinned replay, run 1 | 300 | 13 | 1 | 286 | 280 | 197.1 us |
+| WebGPU pinned replay, run 2 | 300 | 2 | 1 | 297 | 292 | 201.8 us |
+| Native GPU resolve, run 1 | 300 | 1 | 1 | 298 | 297 | 198.4 us |
+| Native GPU resolve, run 2 | 300 | 11 | 1 | 288 | 287 | 200.4 us |
+| Native render-completed resolve | 300 | 300 | 0 | 0 | 0 | 196.9 us |
+
+All 1500 commands completed without error-scope or command-buffer errors.
+"Stale by one pass" means the reversed end tick of iteration N equals the
+begin tick of iteration N-1 plus that pass's own duration within 50 us: the
+resolve returned the previous pass's end-of-fragment sample from the same
+sample index, while start-of-vertex was current. The first use returns 0
+because the index had never been written. The few ordered samples in the
+failing modes carry the current duration, so publication is racy rather than
+always late. Presentation ran at the display's 120 Hz (8.5 ms begin period)
+in every run. The game's captured signature (end tick equal to the begin of
+the slot's previous frame plus 110–212 us; zero on first use of a slot) is the
+same mechanism with per-slot query sets.
+
+Decision-table outcome: the application encoding is valid per Apple's
+documentation, which requires post-completion access only for CPU
+`resolveCounterRange` and places no ordering requirement on a blit
+`resolveCounters` (pages listed above). The pinned backend's Metal topology
+(same-command-buffer GPU resolve) is the trigger and the native control shows
+the trigger is the device's stage-boundary counter publication, not wgpu
+code. This is an evidenced native-limitation/unresolved-publication result:
+GPU pass durations resolved in the same command buffer are unsupported on
+Apple M2 Max / macOS 15.6.1. gfx-rs/wgpu#9414 (open; community comments of
+2026-07-27 on M4 Max / macOS 26) report the same dependence and an unmerged
+completion-handler-deferred resolve; nothing merged upstream. The
+render-completed control is not a production repair: it waits on the CPU and
+serialises submissions. No timestamp clamp, vertex-end substitution or dummy
+work is authorised; production must publish this timing scope as unreliable
+(step 5 reliability fields) until a nonblocking deferred-resolve candidate
+built from identical pinned sources passes `evaluate_replay.py`
+(`candidate_passes`: every sample ordered after a single first-use zero, no
+stale-by-one-pass matches, drained, no command failures).
+
+Interval definition for any future candidate: the measured interval is
+start-of-vertex to end-of-fragment of the timed render encoder; clear-only
+passes have no fragment stage and are unsupported for this interval (native
+matrix above); overlap with the following present command buffer is not part
+of the interval. Ocean has its own category and no capture yet; it cannot
+inherit this attribution.
+
+## September 7 transport and reliability propagation (step 5)
+
+Before: ForgeCore collected GPU and delivery records only under the
+diagnostics build, wrote every line synchronously from the frame thread, and
+only `telemetry_publish` (gameplay) or `telemetry_shutdown` (a bounded
+eight-packet burst) ever drained them. v10 showed the consequence: eight raw
+lines in 25 s, `fdd` 1173 deliveries dropped during loading, and Aesir marked
+the recording truncated because its first ticks opened a sidecar that did not
+exist yet (`read_errors` 3) and every absence counted as a read error.
+
+ForgeCore `client/telemetry.odin` now implements the single-consumer contract:
+
+- Eight owned packets (`TELEMETRY_PACKETS`), each one raw line (16 GPU frames,
+  32 deliveries, health) or one summary snapshot, moving
+  `Free -> Producer -> Queued -> Writer -> Free`. The frame thread drains
+  ingot's rings every frame (`game_prepare`, loading included) into the
+  producer packet and seals it when full or at the 1 s cadence; when the
+  writer holds every packet the drained records are counted
+  (`pd` packet drops, `pfd` frames, `pdd` deliveries) rather than left to
+  overflow inside ingot.
+- A writer thread is the only encoder and the only writer. Lines are encoded
+  into a 64 KiB buffer (aesir's line limit; an overflow is counted in `eo` and
+  withheld, never torn) and written with a byte offset that advances on
+  every short write (`pw` partial, `zp` zero-progress, bounded by
+  `TELEMETRY_WRITE_ATTEMPTS_MAX` before `wf`). `qh` is the queue high water,
+  `lw` lines written.
+- The summary is a value snapshot (`Telemetry_Summary`) taken on the frame
+  thread and encoded by the writer; it never drains the rings.
+- Shutdown: final collect, seal, terminal packet, bounded join
+  (`TELEMETRY_SHUTDOWN_DEADLINE`). A stalled writer makes
+  `telemetry_shutdown` return false and `telemetry_release_pending` true;
+  `game_shutdown` then keeps `g` allocated and returns false, and the host
+  (`Game_Shutdown_Proc -> bool`) keeps the library loaded instead of
+  unloading the thread's code. Regressions: sustained production past the
+  ring, backpressure accounting, short and zero-progress writes, encode
+  overflow, stalled-writer refusal and later release, exact >2^53 identities.
+- Every line carries `"rl":{"v":1,"s":"gpu_pass","g":...,"r":...}`. Darwin
+  builds publish `unreliable` with reason `metal_same_command_buffer_resolve`
+  (step 4); other platforms `unknown` with `no_attribution_evidence`. Nothing
+  in the target can set `reliable`; only a candidate that passes
+  `evaluate_replay.py` may change that.
+
+Aesir `memwatch`:
+
+- The tail distinguishes bounded startup absence (`startup_absent`, up to
+  `MAX_TELEMETRY_STARTUP_ABSENT` ticks before the first byte; not a loss)
+  from read errors, parse errors (`parse_errors`) from oversized lines
+  (`invalid_lines`), file reset (`resets`) and an unfinished final line
+  (`unfinished_tail`, pending bytes after the final drain). One definition,
+  `telemetry_health_incomplete`, drives the recording's coverage verdict,
+  the bottleneck coverage and the truncation flag.
+- `parse_telemetry` decodes `rl` into `gpu_reliability`; unless the scope is
+  `gpu_pass` and the word is `reliable`, `gv` is cleared, raw `gfd` frames
+  are marked invalid and `gg` groups are dropped. Legacy lines without `rl`
+  are `Unknown` and rejected the same way. Deliveries (CPU, presentation)
+  stay independently valid. The GPU badge shows the reason code.
 
 ## Remaining gates
 
 - Finish first-frame trace metadata and classify all observed labels; gameplay was
   not established in the bounded capture.
 - Complete source-to-installed-binary provenance (including registry crate source).
-- Callback userdata retirement and shutdown remain unmodified and unsafe in the
-  previously identified timeout path. Native reproduction does not excuse this bug.
-- Exact minimal WebGPU and window replay, delayed eight-slot inspection, explicit
-  status propagation, and repaired end-to-end Aesir validation remain outstanding.
+- Callback userdata retirement and teardown refusal are implemented (step 3
+  above); the remaining lifetime hazard is the backend's own completion block
+  code when a host unloads a library that submitted work, which the ForgeCore
+  host now refuses to do while any registration is unproved.
+- Exact window replay and attribution are complete (step 4) and reliability
+  propagation is implemented (step 5); end-to-end Aesir qualification of a
+  fresh capture remains (step 6).
 - Concurrent repository revisions changed during investigation. Capture-specific
   source manifests, not current HEAD alone, must be used for reproducibility.
 

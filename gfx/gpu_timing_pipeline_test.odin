@@ -6,6 +6,10 @@ import wg "vendor:wgpu"
 
 @(test)
 gpu_timing_pipeline_retains_swapchain_descriptor :: proc(t: ^testing.T) {
+	// The swapchain format is named outside the diagnostics block so the
+	// default build still type-checks this file's wgpu import.
+	swapchain_format := wg.TextureFormat.BGRA8Unorm
+	testing.expect_value(t, swapchain_format, wg.TextureFormat.BGRA8Unorm)
 	when GPU_TIMING_DIAGNOSTICS {
 		ctx := new(Context)
 		defer free(ctx)
@@ -52,10 +56,10 @@ gpu_timing_pipeline_retains_swapchain_descriptor :: proc(t: ^testing.T) {
 			)
 		}
 		for slot in Blend_Slot {
-			record(renderer, slot, "fs_ui", .BGRA8Unorm, vertex, primitive, multisample)
-			record(renderer, slot, "fs_image", .BGRA8Unorm, vertex, primitive, multisample)
+			record(renderer, slot, "fs_ui", swapchain_format, vertex, primitive, multisample)
+			record(renderer, slot, "fs_image", swapchain_format, vertex, primitive, multisample)
 		}
-		record(renderer, .Alpha, "fs_ocean", .BGRA8Unorm, vertex, primitive, multisample)
+		record(renderer, .Alpha, "fs_ocean", swapchain_format, vertex, primitive, multisample)
 		record(renderer, .Alpha, "fs_ui", .RGBA16Float, vertex, primitive, multisample)
 		output: [GPU_TIMING_BATCH_PIPELINES]Gpu_Timing_Batch_Pipeline
 		testing.expect_value(

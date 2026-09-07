@@ -1028,6 +1028,7 @@ context_end_drawing :: proc(ctx: ^Context) {
 		_flush_retired(ctx)
 		_renderer_report_overflow(&ctx.rend)
 	} else {
+		_gpu_timing_frame_abandon(ctx)
 		clear(&ctx.rend.verts)
 		clear(&ctx.rend.indices)
 	}

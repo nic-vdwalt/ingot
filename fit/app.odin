@@ -80,9 +80,11 @@ Stop :: proc(app: ^App) -> bool {
 	return ui_gfx.app_stop(&app.inner)
 }
 
-Destroy :: proc(app: ^App) {
+// Destroy returns false when the graphics context refused to close; see
+// ui_gfx.app_destroy. Retry before releasing the app or its context storage.
+Destroy :: proc(app: ^App) -> bool {
 	assert(app != nil, "Fit.Destroy: nil app")
-	ui_gfx.app_destroy(&app.inner)
+	return ui_gfx.app_destroy(&app.inner)
 }
 
 Run :: proc(app: ^App, config: Config, draw: Draw_Proc, user_data: rawptr = nil) -> bool {

@@ -71,6 +71,9 @@ App :: struct {
 	callbacks:   App_Callbacks,
 	userdata:    rawptr,
 	state:       App_State,
+	// Set once the shutdown callback and session ran, so a destroy retried
+	// after a refused context close does not run them twice.
+	torn_down:   bool,
 }
 
 @(private)
@@ -197,23 +200,31 @@ app_run :: proc(
 	}
 	if !gfx.run_data(app_frame_data, app) {
 		_ = app_stop(app)
-		app_destroy(app)
+		_ = app_destroy(app)
 		return false
 	}
 	when ODIN_OS != .JS {
 		if !app_stop(app) do return false
-		app_destroy(app)
+		if !app_destroy(app) do return false
 	}
 	return true
 }
 
-app_destroy :: proc(app: ^App) {
+// app_destroy returns false when the graphics context refused to close because
+// a backend callback registration is still outstanding. The app then stays
+// Stopped with its context pointer intact so the caller can retry instead of
+// releasing storage the backend may still write into.
+app_destroy :: proc(app: ^App) -> bool {
 	assert(app != nil, "app_destroy: nil app")
 	assert(app.state == .Ready || app.state == .Stopped, "app_destroy: invalid state")
-	if app.callbacks.shutdown != nil do app.callbacks.shutdown(app, app.userdata)
-	session_destroy(&app.session)
-	gfx.context_close(app.gfx_context)
+	if !app.torn_down {
+		if app.callbacks.shutdown != nil do app.callbacks.shutdown(app, app.userdata)
+		session_destroy(&app.session)
+		app.torn_down = true
+	}
+	if !gfx.context_close(app.gfx_context) do return false
 	app^ = {}
+	return true
 }
 
 app_screen_rect :: proc(app: ^App) -> ui.Rect_I32 {
