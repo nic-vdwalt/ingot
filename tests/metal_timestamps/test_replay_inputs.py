@@ -38,12 +38,12 @@ class GeometryReplayTests(unittest.TestCase):
 
     def test_geometry_schema_compatibility(self):
         expected = window_geometry(self.payload, self.draw)
-        for version in (6, 7, 8, 9):
+        for version in (6, 7, 8, 9, 10):
             with self.subTest(version=version):
                 self.assertEqual(window_geometry(dict(self.payload, version=version), self.draw),
                                  expected)
         with self.assertRaises(ValueError):
-            window_geometry(dict(self.payload, version=10), self.draw)
+            window_geometry(dict(self.payload, version=11), self.draw)
 
     def test_exact_little_endian_vertex_layout(self):
         vertices, indices, projection = window_geometry(self.payload, self.draw)
@@ -111,14 +111,24 @@ class AtlasReplayTests(unittest.TestCase):
 
     def test_atlas_schema_compatibility(self):
         expected = atlas_pixels(self.payload, self.draw)
-        for version in (7, 8, 9):
+        for version in (7, 8, 9, 10):
             with self.subTest(version=version):
                 self.assertEqual(atlas_pixels(dict(self.payload, version=version), self.draw),
                                  expected)
         with self.assertRaises(ValueError):
             atlas_pixels(dict(self.payload, version=6), self.draw)
         with self.assertRaises(ValueError):
-            atlas_pixels(dict(self.payload, version=10), self.draw)
+            atlas_pixels(dict(self.payload, version=11), self.draw)
+
+    def test_upload_budget_follows_schema(self):
+        upload = dict(self.payload["atlas_uploads"][0])
+        wide = dict(self.payload, atlas_uploads=[upload] * 300)
+        draw = dict(self.draw, atlas_upload_count=1)
+        with self.assertRaises(ValueError):
+            atlas_pixels(dict(wide, version=9), draw)
+        atlas_pixels(dict(wide, version=10), draw)
+        with self.assertRaises(ValueError):
+            atlas_pixels(dict(wide, version=10, atlas_uploads=[upload] * 2049), draw)
 
     def test_prefix_excludes_later_updates_and_other_atlases(self):
         pixels = atlas_pixels(self.payload, self.draw)

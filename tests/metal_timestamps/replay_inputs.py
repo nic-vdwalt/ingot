@@ -42,7 +42,7 @@ def attachment_clear_bytes(record):
 def window_geometry(payload, draw):
     checked_object(payload)
     checked_object(draw)
-    if checked_u32(payload.get("version")) not in (6, 7, 8, 9):
+    if checked_u32(payload.get("version")) not in (6, 7, 8, 9, 10, 11):
         raise ValueError("unsupported geometry schema")
     identity = draw.get("geometry_id", 0)
     geometry = checked_array(payload.get("geometry"), 16)
@@ -78,22 +78,26 @@ def window_geometry(payload, draw):
 
 
 ATLAS_DIM = 2048
-ATLAS_UPLOADS_MAX = 256
+# Upload budget by export schema: the v6 loading capture saturated 256 before
+# its first frame, so schema 10 exporters retain up to 2048.
+ATLAS_UPLOADS_MAX_BY_VERSION = {7: 256, 8: 256, 9: 256, 10: 2048, 11: 2048}
 ATLAS_BYTES_MAX = 1024 * 1024
 
 
 def atlas_pixels(payload, draw):
     checked_object(payload)
     checked_object(draw)
-    if checked_u32(payload.get("version")) not in (7, 8, 9) or draw.get("atlas_known") is not True:
+    version = checked_u32(payload.get("version"))
+    if version not in ATLAS_UPLOADS_MAX_BY_VERSION or draw.get("atlas_known") is not True:
         raise ValueError("unsupported or incomplete atlas evidence")
+    uploads_max = ATLAS_UPLOADS_MAX_BY_VERSION[version]
     identity = checked_u32(draw.get("atlas_id"))
     prefix = checked_u32(draw.get("atlas_upload_count"))
-    uploads = checked_array(payload.get("atlas_uploads"), ATLAS_UPLOADS_MAX)
+    uploads = checked_array(payload.get("atlas_uploads"), uploads_max)
     atlas_count = checked_u32(payload.get("atlas_count"))
     if not 0 < identity <= atlas_count:
         raise ValueError("invalid atlas identity")
-    if not 0 <= prefix <= len(uploads) <= ATLAS_UPLOADS_MAX:
+    if not 0 <= prefix <= len(uploads) <= uploads_max:
         raise ValueError("invalid upload prefix")
     encoded = payload.get("atlas_bytes")
     if isinstance(encoded, str):
@@ -172,7 +176,7 @@ def batch_pipeline(payload, draw, record):
     checked_object(payload)
     checked_object(draw)
     checked_object(record)
-    if checked_u32(payload.get("version")) != 9:
+    if checked_u32(payload.get("version")) not in (9, 10, 11):
         raise ValueError("unsupported pipeline schema")
     kind = checked_u32(draw.get("pipeline_kind"))
     style = checked_u32(draw.get("pipeline_style"))
@@ -217,3 +221,37 @@ def batch_pipeline(payload, draw, record):
     if type(entry.get("write_mask")) is not int or entry["write_mask"] != WRITE_MASK_ALL:
         raise ValueError("unexpected colour write mask")
     return entry
+
+
+MAX_SPANS = 64
+
+
+def submission_topology(payload, record):
+    """Return the replayable command topology of the record's submission.
+
+    Only the single-span, single-encoder shape is replayable today: one timed
+    pass, then resolve + copy in the same encoder, one submit, one map request.
+    Any other recorded shape is an explicit rejection, not a truncation."""
+    checked_object(payload)
+    checked_object(record)
+    if checked_u32(payload.get("version")) < 11:
+        raise ValueError("submission topology not exported before schema 11")
+    span_count = checked_u32(record.get("span_count"))
+    encoder_spans = checked_u32(record.get("encoder_spans"))
+    query_begin = checked_u32(record.get("query_begin"))
+    if not 0 < span_count <= MAX_SPANS or query_begin % 2 or query_begin // 2 >= span_count:
+        raise ValueError("span index outside the submitted span set")
+    if not 0 < encoder_spans <= span_count:
+        raise ValueError("encoder span count inconsistent with the submission")
+    for field in ("encoder_id", "resolve_encoder_id", "submit_ordinal", "resolve_ordinal"):
+        if type(record.get(field)) is not int or not 0 < record[field] < 2**64:
+            raise ValueError("missing submission identity")
+    if record["resolve_encoder_id"] != record["encoder_id"]:
+        raise ValueError("resolve recorded in another encoder")
+    if record["resolve_ordinal"] != record["submit_ordinal"]:
+        raise ValueError("resolve and submit ordinals differ")
+    if span_count != 1 or encoder_spans != 1:
+        raise ValueError("multi-span submission topology is not replayable yet")
+    return dict(spans=1, encoders=1,
+                sequence=["pass", "resolve_query_set", "copy_buffer_to_buffer", "submit",
+                          "map_async"])

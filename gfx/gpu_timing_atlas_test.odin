@@ -23,6 +23,7 @@ gpu_timing_atlas_uploads_are_owned_and_bounded :: proc(t: ^testing.T) {
 	}
 	_gpu_timing_atlas_upload(state, 1, 0, 0, 1, 1, 1, pixels[:])
 	testing.expect_value(t, state.dropped, u64(1))
+	testing.expect_value(t, state.dropped_bytes, u64(1))
 	state^ = {
 		atlas_count = 1,
 		byte_count  = GPU_TIMING_ATLAS_BYTES_MAX,
@@ -30,6 +31,7 @@ gpu_timing_atlas_uploads_are_owned_and_bounded :: proc(t: ^testing.T) {
 	_gpu_timing_atlas_upload(state, 1, 0, 0, 1, 1, 1, pixels[:])
 	testing.expect_value(t, state.upload_count, u32(0))
 	testing.expect_value(t, state.dropped, u64(1))
+	testing.expect_value(t, state.dropped_bytes, u64(1))
 	state^ = {
 		atlas_count = 1,
 	}
@@ -38,6 +40,7 @@ gpu_timing_atlas_uploads_are_owned_and_bounded :: proc(t: ^testing.T) {
 	_gpu_timing_atlas_upload(state, 1, 0, 0, 2, 2, 4, pixels[:2])
 	_gpu_timing_atlas_upload(state, 2, 0, 0, 1, 1, 1, pixels[:])
 	testing.expect_value(t, state.dropped, u64(4))
+	testing.expect_value(t, state.dropped_bytes, u64(1 + 4 + 4 + 1))
 	testing.expect_value(t, state.byte_count, u32(0))
 }
 

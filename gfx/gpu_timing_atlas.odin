@@ -1,6 +1,13 @@
 package gfx
 
-GPU_TIMING_ATLAS_UPLOADS_MAX :: 256
+// GPU_TIMING_ATLAS_UPLOADS_MAX must cover every atlas upload that precedes the
+// first retained window failure, or no draw's texture prefix is known. The v6
+// loading-inclusive PlanetForger capture at 2560x1440 recorded 1738 uploads
+// (256 kept + 1482 dropped) with the earlier 256 bound, dropping before the
+// first frame; 2048 covers that measurement with headroom at 28 bytes per
+// record. GPU_TIMING_ATLAS_BYTES_MAX stays 1 MiB: the retained 256 uploads
+// averaged 333 bytes, and dropped_bytes now reports whether it ever binds.
+GPU_TIMING_ATLAS_UPLOADS_MAX :: 2048
 GPU_TIMING_ATLAS_BYTES_MAX :: 1024 * 1024
 
 Gpu_Timing_Atlas_Upload :: struct {
@@ -10,12 +17,15 @@ Gpu_Timing_Atlas_Upload :: struct {
 }
 
 Gpu_Timing_Atlas_Evidence :: struct {
-	atlas_count:  u32,
-	upload_count: u32,
-	byte_count:   u32,
-	dropped:      u64,
-	uploads:      [GPU_TIMING_ATLAS_UPLOADS_MAX]Gpu_Timing_Atlas_Upload,
-	bytes:        [GPU_TIMING_ATLAS_BYTES_MAX]u8,
+	atlas_count:   u32,
+	upload_count:  u32,
+	byte_count:    u32,
+	dropped:       u64,
+	// Pixel bytes the dropped uploads would have retained, so the byte budget
+	// can be sized from a capture instead of guessed.
+	dropped_bytes: u64,
+	uploads:       [GPU_TIMING_ATLAS_UPLOADS_MAX]Gpu_Timing_Atlas_Upload,
+	bytes:         [GPU_TIMING_ATLAS_BYTES_MAX]u8,
 }
 
 context_gpu_timing_atlas_evidence :: proc(ctx: ^Context, output: ^Gpu_Timing_Atlas_Evidence) {
@@ -69,6 +79,7 @@ _gpu_timing_atlas_upload :: proc(
 	   state.upload_count == GPU_TIMING_ATLAS_UPLOADS_MAX ||
 	   byte_count > u64(GPU_TIMING_ATLAS_BYTES_MAX - state.byte_count) {
 		state.dropped += 1
+		state.dropped_bytes += byte_count
 		return
 	}
 	state.uploads[state.upload_count] = {

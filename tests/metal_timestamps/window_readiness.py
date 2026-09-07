@@ -2,11 +2,12 @@ import argparse
 import json
 from pathlib import Path
 
+from build_manifest import verify_build_manifest
 from replay_inputs import (atlas_pixels, attachment_clear_bytes, batch_pipeline,
-                           window_geometry)
+                           submission_topology, window_geometry)
 
 
-def selected_window_readiness(payload, record):
+def selected_window_readiness(payload, record, build_dir=None, capture_path=None):
     missing = []
     if type(payload) is not dict or type(record) is not dict:
         return dict(bundle_version=1, ready=False,
@@ -16,8 +17,8 @@ def selected_window_readiness(payload, record):
         if not condition:
             missing.append(dict(field=field, reason=reason))
 
-    require(type(payload.get("version")) is int and payload["version"] == 9,
-            "version", "requires schema 9 selected-pass inputs")
+    require(type(payload.get("version")) is int and payload["version"] in (9, 10, 11),
+            "version", "requires schema 9 or later selected-pass inputs")
     shader = payload.get("batch_shader")
     require(type(shader) is str and 0 < len(shader) <= 65536,
             "batch_shader", "compiled built-in shader source unavailable")
@@ -114,21 +115,32 @@ def selected_window_readiness(payload, record):
             value = previous.get(field)
             require(type(value) is int and 0 <= value < 2**64,
                     "previous." + field, "prior mapped identity/sample missing")
-    require(False, "source_manifest", "immutable actual-build shader/pipeline manifest required")
-    require(False, "queue_topology", "complete producer/resolve command topology required")
-    return dict(bundle_version=1, ready=False, missing_inputs=missing)
+    try:
+        submission_topology(payload, record)
+    except ValueError as error:
+        require(False, "queue_topology", str(error))
+    if build_dir is None:
+        require(False, "source_manifest", "frozen build directory not supplied")
+    else:
+        try:
+            verify_build_manifest(payload, build_dir, capture_path)
+        except ValueError as error:
+            require(False, "source_manifest", str(error))
+    return dict(bundle_version=2, ready=not missing, missing_inputs=missing)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("capture", type=Path)
     parser.add_argument("--failure", type=int, default=0)
+    parser.add_argument("--build-dir", type=Path, default=None)
     args = parser.parse_args()
     payload = json.loads(args.capture.read_text())
     failures = payload.get("failures", [])
     if not 0 <= args.failure < len(failures):
         parser.error("failure index outside retained records")
-    print(json.dumps(selected_window_readiness(payload, failures[args.failure]), indent=2))
+    print(json.dumps(selected_window_readiness(payload, failures[args.failure],
+                                               args.build_dir, args.capture), indent=2))
 
 
 if __name__ == "__main__":

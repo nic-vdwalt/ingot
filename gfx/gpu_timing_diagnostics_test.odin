@@ -221,6 +221,35 @@ gpu_timing_diagnostics_collect_all_pairs_and_own_snapshot :: proc(t: ^testing.T)
 }
 
 @(test)
+gpu_timing_diagnostics_records_submission_topology :: proc(t: ^testing.T) {
+	when GPU_TIMING_DIAGNOSTICS {
+		ctx := new(Context)
+		defer free(ctx)
+		state := &ctx.gpu_timing.diagnostics[0]
+		first := cast(type_of(state.bindings[0][0].encoder))uintptr(1)
+		second := cast(type_of(state.bindings[0][0].encoder))uintptr(2)
+		pass := cast(type_of(state.bindings[0][0].pass))uintptr(3)
+		_gpu_timing_diagnostic_encoder_created(state, first)
+		_gpu_timing_diagnostic_encoder_created(state, second)
+		_gpu_timing_diagnostic_bind(state, 0, 0, first, pass, .Clear, .Store)
+		_gpu_timing_diagnostic_bind(state, 0, 1, first, pass, .Load, .Store)
+		_gpu_timing_diagnostic_bind(state, 0, 2, second, pass, .Load, .Store)
+		slot := &ctx.gpu_timing.slots[0]
+		slot.query_count = 6
+		slot.ticks[0], slot.ticks[1] = 100, 0
+		slot.ticks[2], slot.ticks[3] = 200, 300
+		slot.ticks[4], slot.ticks[5] = 400, 0
+		_gpu_timing_diagnostic_collect(ctx, 0)
+		testing.expect_value(t, state.failure_count, u32(2))
+		testing.expect_value(t, state.failures[0].span_count, u32(3))
+		testing.expect_value(t, state.failures[0].encoder_spans, u32(2))
+		testing.expect_value(t, state.failures[1].query_begin, u32(4))
+		testing.expect_value(t, state.failures[1].span_count, u32(3))
+		testing.expect_value(t, state.failures[1].encoder_spans, u32(1))
+	}
+}
+
+@(test)
 gpu_timing_diagnostics_retains_prior_ordered_samples :: proc(t: ^testing.T) {
 	when GPU_TIMING_DIAGNOSTICS {
 		ctx := new(Context)

@@ -74,6 +74,11 @@ Gpu_Timing_Diagnostic :: struct {
 	draws_dropped:      u32,
 	query_begin:        u32,
 	slot_index:         u32,
+	// Submission topology: how many timed spans the slot carried when it was
+	// submitted and how many of them were recorded in this pass's encoder, so
+	// a replay can reject frames whose command order it cannot reproduce.
+	span_count:         u32,
+	encoder_spans:      u32,
 	load:               wg.LoadOp,
 	store:              wg.StoreOp,
 	label:              Gpu_Timing_Label,
@@ -543,7 +548,8 @@ _gpu_timing_diagnostic_collect :: proc(ctx: ^Context, slot_index: int) {
 		assert(slot.query_count <= GPU_TIMING_QUERY_COUNT)
 		diagnostics.collection_next += 1
 		ensure(diagnostics.collection_next != 0)
-		for pair in 0 ..< slot.query_count / 2 {
+		span_count := slot.query_count / 2
+		for pair in 0 ..< span_count {
 			previous := diagnostics.previous[slot_index][pair]
 			diagnostics.previous[slot_index][pair] = {
 				valid      = true,
@@ -565,6 +571,13 @@ _gpu_timing_diagnostic_collect :: proc(ctx: ^Context, slot_index: int) {
 			record.end_tick = slot.ticks[pair * 2 + 1]
 			record.query_begin = pair * 2
 			record.slot_index = u32(slot_index)
+			record.span_count = span_count
+			record.encoder_spans = 0
+			for other in 0 ..< span_count {
+				if diagnostics.bindings[slot_index][other].record.encoder_id == record.encoder_id {
+					record.encoder_spans += 1
+				}
+			}
 			record.label = slot.labels[pair]
 			record.callback_status = slot.map_status
 			record.collection_id = diagnostics.collection_next
