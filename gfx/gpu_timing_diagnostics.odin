@@ -58,7 +58,10 @@ Gpu_Timing_Diagnostic :: struct {
 	resolve_encoder_id: u64,
 	begin_tick:         u64,
 	end_tick:           u64,
+	previous:           Gpu_Timing_Diagnostic_Previous,
 	draw_count:         u32,
+	draws:              [4]Gpu_Timing_Diagnostic_Draw,
+	draws_dropped:      u32,
 	query_begin:        u32,
 	slot_index:         u32,
 	load:               wg.LoadOp,
@@ -76,6 +79,26 @@ Gpu_Timing_Diagnostic :: struct {
 	sample_count:       u32,
 	callback_status:    wg.MapAsyncStatus,
 	collection_id:      u64,
+}
+
+Gpu_Timing_Diagnostic_Draw :: struct {
+	known:          bool,
+	indexed:        bool,
+	count:          u32,
+	instances:      u32,
+	shader_id:      u32,
+	pipeline_kind:  u32,
+	pipeline_style: u32,
+	scissor:        [4]u32,
+}
+
+Gpu_Timing_Diagnostic_Previous :: struct {
+	valid:      bool,
+	epoch:      u64,
+	frame:      u64,
+	generation: u64,
+	begin_tick: u64,
+	end_tick:   u64,
 }
 
 Gpu_Timing_Diagnostic_Binding :: struct {
@@ -101,8 +124,8 @@ Gpu_Timing_Diagnostic_Snapshot :: struct {
 	failures:          [GPU_TIMING_DIAGNOSTIC_CAPACITY]Gpu_Timing_Diagnostic,
 	failure_count:     u32,
 	dropped:           u64,
-	encoder_overflow: u64,
-	missing_encoder: u64,
+	encoder_overflow:  u64,
+	missing_encoder:   u64,
 	categories:        [GPU_TIMING_DIAGNOSTIC_CAPACITY]Gpu_Timing_Diagnostic_Category,
 	category_count:    u32,
 	category_overflow: u64,
@@ -120,8 +143,9 @@ Gpu_Timing_Diagnostics :: struct {
 	submit_ordinal:    u64,
 	failure_count:     u32,
 	dropped:           u64,
-	encoder_overflow: u64,
-	missing_encoder: u64,
+	encoder_overflow:  u64,
+	missing_encoder:   u64,
+	previous:          [GPU_TIMING_FRAME_SLOTS][GPU_TIMING_MAX_SPANS]Gpu_Timing_Diagnostic_Previous,
 	resolve_encoder:   [GPU_TIMING_FRAME_SLOTS]wg.CommandEncoder,
 	resolve_ordinal:   [GPU_TIMING_FRAME_SLOTS]u64,
 }
@@ -252,17 +276,61 @@ _gpu_timing_diagnostic_bind :: proc(
 	}
 }
 
-_gpu_timing_diagnostic_draw :: proc(state: ^Gpu_Timing_Diagnostics, pass: wg.RenderPassEncoder) {
+_gpu_timing_diagnostic_draw :: proc(
+	state: ^Gpu_Timing_Diagnostics,
+	pass: wg.RenderPassEncoder,
+	draw: Gpu_Timing_Diagnostic_Draw = {},
+) {
 	assert(state != nil)
 	when GPU_TIMING_DIAGNOSTICS {
 		if pass == nil do return
 		for &bindings in state.bindings {
 			for &binding in bindings {
 				if binding.pass == pass && binding.record.submit_ordinal == 0 {
+					index := binding.record.draw_count
+					if index < u32(len(binding.record.draws)) {
+						binding.record.draws[index] = draw
+					} else {
+						binding.record.draws_dropped += 1
+					}
 					binding.record.draw_count += 1
 				}
 			}
 		}
+	}
+}
+
+_gpu_timing_diagnostic_batch_draw :: proc(
+	ctx: ^Context,
+	renderer: ^Renderer,
+	pass: wg.RenderPassEncoder,
+	count: u32,
+) {
+	assert(ctx != nil)
+	assert(renderer != nil)
+	when GPU_TIMING_DIAGNOSTICS {
+		if pass != ctx.frame.pass {
+			_gpu_timing_diagnostic_draw(&ctx.gpu_timing.diagnostics[0], pass)
+			return
+		}
+		scissor := [4]u32{0, 0, ctx.config.width, ctx.config.height}
+		if ctx.frame.scissor_on {
+			scissor = {ctx.frame.sc_x, ctx.frame.sc_y, ctx.frame.sc_w, ctx.frame.sc_h}
+		}
+		_gpu_timing_diagnostic_draw(
+			&ctx.gpu_timing.diagnostics[0],
+			pass,
+			{
+				known = true,
+				indexed = true,
+				count = count,
+				instances = 1,
+				shader_id = renderer.active_shader,
+				pipeline_kind = u32(renderer.cur_kind),
+				pipeline_style = u32(renderer.cur_blend),
+				scissor = scissor,
+			},
+		)
 	}
 }
 
@@ -337,8 +405,18 @@ _gpu_timing_diagnostic_collect :: proc(ctx: ^Context, slot_index: int) {
 		diagnostics.collection_next += 1
 		ensure(diagnostics.collection_next != 0)
 		for pair in 0 ..< slot.query_count / 2 {
+			previous := diagnostics.previous[slot_index][pair]
+			diagnostics.previous[slot_index][pair] = {
+				valid      = true,
+				epoch      = slot.epoch,
+				frame      = slot.frame_index,
+				generation = slot.generation,
+				begin_tick = slot.ticks[pair * 2],
+				end_tick   = slot.ticks[pair * 2 + 1],
+			}
 			if slot.ticks[pair * 2 + 1] >= slot.ticks[pair * 2] do continue
 			record := diagnostics.bindings[slot_index][pair].record
+			record.previous = previous
 			record.epoch = slot.epoch
 			record.frame = slot.frame_index
 			record.generation = slot.generation

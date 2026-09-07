@@ -1013,7 +1013,7 @@ renderer_flush :: proc(
 	wg.RenderPassEncoderSetIndexBuffer(pass, index_buffer, .Uint32, index_offset, index_bytes)
 	wg.RenderPassEncoderDrawIndexed(pass, u32(index_count), 1, 0, 0, 0)
 	when GPU_TIMING_DIAGNOSTICS {
-		_gpu_timing_diagnostic_draw(&ctx.gpu_timing.diagnostics[0], pass)
+		_gpu_timing_diagnostic_batch_draw(ctx, r, pass, u32(index_count))
 	}
 
 	clear(&r.verts)

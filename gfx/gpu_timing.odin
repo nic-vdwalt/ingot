@@ -410,6 +410,7 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 	for &slot, slot_index in ctx.gpu_timing.slots {
 		if !slot.in_flight || !sync.atomic_load(&slot.map_done) do continue
 		if sync.atomic_load(&slot.map_ok) {
+			_gpu_timing_diagnostic_collect(ctx, slot_index)
 			detail, ok := _gpu_timing_detail(
 				slot.ticks[:],
 				slot.labels[:],
@@ -426,7 +427,6 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 					slot.ticks[:],
 					slot.query_count / 2,
 				)
-				_gpu_timing_diagnostic_collect(ctx, slot_index)
 				if invalid && !ctx.gpu_timing.health.first_invalid_pair.valid {
 					ctx.gpu_timing.health.first_invalid_pair = {
 						generation  = slot.generation,

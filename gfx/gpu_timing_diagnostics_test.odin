@@ -35,6 +35,41 @@ gpu_timing_diagnostics_capture_only_encoded_draws :: proc(t: ^testing.T) {
 }
 
 @(test)
+gpu_timing_diagnostics_window_draw_metadata_is_bounded :: proc(t: ^testing.T) {
+	when GPU_TIMING_DIAGNOSTICS {
+		ctx := new(Context)
+		defer free(ctx)
+		state := &ctx.gpu_timing.diagnostics[0]
+		encoder := cast(wg.CommandEncoder)uintptr(1)
+		pass := cast(wg.RenderPassEncoder)uintptr(2)
+		ctx.frame.pass = pass
+		ctx.config.width = 2560
+		ctx.config.height = 1440
+		_gpu_timing_diagnostic_encoder_created(state, encoder)
+		_gpu_timing_diagnostic_bind(state, 0, 0, encoder, pass, .Clear, .Store)
+		for index in 0 ..< 6 {
+			_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, u32(index + 3))
+		}
+		record := state.bindings[0][0].record
+		testing.expect_value(t, record.draw_count, u32(6))
+		testing.expect_value(t, record.draws_dropped, u32(2))
+		testing.expect(t, record.draws[0].known)
+		testing.expect_value(t, record.draws[0].count, u32(3))
+		testing.expect_value(t, record.draws[3].count, u32(6))
+		testing.expect_value(t, record.draws[0].scissor, [4]u32{0, 0, 2560, 1440})
+		_gpu_timing_diagnostic_bind(state, 0, 0, encoder, pass, .Clear, .Store)
+		ctx.frame.scissor_on = true
+		ctx.frame.sc_x, ctx.frame.sc_y = 5, 6
+		ctx.frame.sc_w, ctx.frame.sc_h = 20, 30
+		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 9)
+		testing.expect_value(t, state.bindings[0][0].record.draws[0].scissor, [4]u32{5, 6, 20, 30})
+		ctx.frame.pass = nil
+		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 10)
+		testing.expect(t, !state.bindings[0][0].record.draws[1].known)
+	}
+}
+
+@(test)
 gpu_timing_diagnostics_abandoned_encoder_cannot_alias_reuse :: proc(t: ^testing.T) {
 	when !GPU_TIMING_DIAGNOSTICS do return
 	state := new(Gpu_Timing_Diagnostics)
@@ -149,6 +184,51 @@ gpu_timing_diagnostics_collect_all_pairs_and_own_snapshot :: proc(t: ^testing.T)
 		slot.ticks[4] = 999
 		testing.expect_value(t, snapshot.failures[1].begin_tick, u64(300))
 		testing.expect_value(t, snapshot.categories[1].first.begin_tick, u64(300))
+	}
+}
+
+@(test)
+gpu_timing_diagnostics_retains_prior_ordered_samples :: proc(t: ^testing.T) {
+	when GPU_TIMING_DIAGNOSTICS {
+		ctx := new(Context)
+		defer free(ctx)
+		slot := &ctx.gpu_timing.slots[0]
+		slot.epoch = 1
+		slot.frame_index = 10
+		slot.generation = 1
+		slot.query_count = 2
+		slot.ticks[0] = 100
+		slot.ticks[1] = 120
+		ctx.gpu_timing.available = true
+		ctx.gpu_timing.timestamp_period = 1
+		slot.in_flight = true
+		slot.map_done = true
+		slot.map_ok = true
+		_gpu_timing_collect(ctx)
+		testing.expect_value(t, ctx.gpu_timing.diagnostics[0].failure_count, u32(0))
+		slot.frame_index = 11
+		slot.generation = 2
+		slot.query_count = 2
+		slot.in_flight = true
+		slot.map_done = true
+		slot.map_ok = true
+		slot.ticks[0] = 200
+		_gpu_timing_collect(ctx)
+		snapshot := context_gpu_timing_diagnostics(ctx)
+		record := snapshot.failures[0]
+		testing.expect(t, record.previous.valid)
+		testing.expect_value(t, record.previous.frame, u64(10))
+		testing.expect_value(t, record.previous.generation, u64(1))
+		testing.expect_value(t, record.previous.begin_tick, u64(100))
+		testing.expect_value(t, record.previous.end_tick, record.end_tick)
+		testing.expect_value(t, record.collection_id, u64(2))
+		ctx.gpu_timing.diagnostics[0].previous[0][0] = {}
+		testing.expect_value(t, snapshot.failures[0].previous.end_tick, u64(120))
+		slot = &ctx.gpu_timing.slots[1]
+		slot.query_count = 2
+		slot.ticks[0] = 300
+		_gpu_timing_diagnostic_collect(ctx, 1)
+		testing.expect(t, !ctx.gpu_timing.diagnostics[0].failures[1].previous.valid)
 	}
 }
 
