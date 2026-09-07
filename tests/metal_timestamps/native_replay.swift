@@ -26,6 +26,7 @@
 // this file's sha256 so the pairing is auditable.
 import AppKit
 import CryptoKit
+import Darwin
 import Foundation
 import Metal
 import QuartzCore
@@ -55,13 +56,31 @@ struct Manifest: Decodable {
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 4 else {
-    FileHandle.standardError.write("usage: native_replay <bundle> <iterations> <out.jsonl> [--gpu-resolve|--completed-resolve]\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: native_replay <bundle> <iterations> <out.jsonl> [--gpu-resolve|--completed-resolve|--publication-latency|--unique-indices|--all-stages|--gap N|--tracked-dependency|--blit-boundary-samples|--deferred-resolve enqueued|scheduled|completed]\n".data(using: .utf8)!)
     exit(2)
 }
 let bundle = URL(fileURLWithPath: arguments[1])
 let iterations = Int(arguments[2])!
 precondition(iterations > 0 && iterations <= 100_000)
 let completedResolve = arguments.contains("--completed-resolve")
+let publicationLatency = arguments.contains("--publication-latency")
+let uniqueIndices = arguments.contains("--unique-indices")
+let allStages = arguments.contains("--all-stages")
+let trackedDependency = arguments.contains("--tracked-dependency")
+let blitBoundarySamples = arguments.contains("--blit-boundary-samples")
+let gapDispatches = arguments.firstIndex(of: "--gap").map { Int(arguments[$0 + 1])! } ?? 0
+let deferredResolve = arguments.firstIndex(of: "--deferred-resolve").map { arguments[$0 + 1] }
+if let deferredResolve { precondition(["enqueued", "scheduled", "completed"].contains(deferredResolve)) }
+let experiment: String = {
+    if publicationLatency { return "publication_latency" }
+    if uniqueIndices { return "unique_indices" }
+    if allStages { return "all_stages" }
+    if trackedDependency { return "tracked_dependency" }
+    if blitBoundarySamples { return "blit_boundary_samples" }
+    if gapDispatches > 0 { return "gap_\(gapDispatches)" }
+    if let deferredResolve { return "deferred_\(deferredResolve)" }
+    return completedResolve ? "completed_resolve" : "gpu_resolve"
+}()
 let output = FileHandle(forWritingAtPath: arguments[3]) ?? {
     FileManager.default.createFile(atPath: arguments[3], contents: nil)
     return FileHandle(forWritingAtPath: arguments[3])!
@@ -85,6 +104,7 @@ precondition(sha256(shaderSource) == manifest.shader_sha256, "bundle shader iden
 let device = MTLCreateSystemDefaultDevice()!
 let counterSet = device.counterSets!.first { $0.name == "timestamp" }!
 let queue = device.makeCommandQueue()!
+let blitBoundarySupported = device.supportsCounterSampling(.atBlitBoundary)
 let sampleDescriptor = MTLCounterSampleBufferDescriptor()
 sampleDescriptor.counterSet = counterSet
 sampleDescriptor.sampleCount = 128
@@ -133,6 +153,9 @@ fragment float4 fs_image(VSOut in [[stage_in]], texture2d<float> atlas [[texture
     float4 t = atlas.sample(samp, in.uv);
     float a = t.a * in.col.a;
     return float4(t.rgb * in.col.rgb * a, a);
+}
+kernel void gap_kernel(device uint *values [[buffer(0)]], uint index [[thread_position_in_grid]]) {
+    values[index] = values[index] &+ index;
 }
 """, options: nil)
 
@@ -244,6 +267,10 @@ let draws: [PreparedDraw] = try manifest.draws.map { draw in
 var projection = manifest.projection_bits
 let uniforms = device.makeBuffer(bytes: &projection, length: 16, options: .storageModeShared)!
 let clear = manifest.attachment.color_clear_bits.map { Double(bitPattern: $0) }
+let gapBuffer = device.makeBuffer(length: 64 * 1024 * 1024, options: .storageModePrivate)!
+let gapPipeline = try device.makeComputePipelineState(function: library.makeFunction(name: "gap_kernel")!)
+let dependencyBuffer = device.makeBuffer(length: 256, options: .storageModePrivate)!
+let boundaryBuffer = device.makeBuffer(length: 256, options: .storageModePrivate)!
 
 // Window and layer sized so the drawable matches the captured attachment.
 let app = NSApplication.shared
@@ -265,14 +292,35 @@ window.makeKeyAndOrderFront(nil)
 app.finishLaunching()
 
 let sourceData = try Data(contentsOf: URL(fileURLWithPath: #filePath))
+let sourceSHA = sha256(sourceData)
+let executableSHA = sha256(try Data(contentsOf: URL(fileURLWithPath: arguments[0])))
+var timebase = mach_timebase_info_data_t()
+mach_timebase_info(&timebase)
+func hostNanoseconds(_ ticks: UInt64) -> UInt64 {
+    UInt64((UInt128(ticks) * UInt128(timebase.numer)) / UInt128(timebase.denom))
+}
+let clockStart = device.sampleTimestamps()
 emit(["kind": "header", "bundle": arguments[1], "frame": manifest.frame, "iterations": iterations,
-      "mode": completedResolve ? "completed_resolve" : "gpu_resolve",
-      "device": device.name, "os": ProcessInfo.processInfo.operatingSystemVersionString,
-      "source_sha256": sha256(sourceData), "shader_sha256": manifest.shader_sha256,
+      "mode": completedResolve ? "completed_resolve" : "gpu_resolve", "experiment": experiment,
+      "flags": Array(arguments.dropFirst(4)), "gap_dispatches": gapDispatches,
+      "deferred_resolve": deferredResolve ?? "", "device": device.name,
+      "os": ProcessInfo.processInfo.operatingSystemVersionString,
+      "source_sha256": sourceSHA, "executable_sha256": executableSHA,
+      "shader_sha256": manifest.shader_sha256,
+      "clock_start_cpu": clockStart.cpu, "clock_start_cpu_ns": clockStart.cpu,
+      "clock_start_gpu": clockStart.gpu,
       "drawable_width": Int(layer.drawableSize.width), "drawable_height": Int(layer.drawableSize.height),
       "stage_sampling": device.supportsCounterSampling(.atStageBoundary),
+      "blit_boundary_sampling": blitBoundarySupported,
       "draws": draws.count, "slots": slotCount])
 precondition(Int(layer.drawableSize.width) == manifest.attachment.width && Int(layer.drawableSize.height) == manifest.attachment.height)
+if blitBoundarySamples && !blitBoundarySupported {
+    emit(["kind": "unsupported", "experiment": experiment, "reason": "at_blit_boundary_unsupported"])
+    emit(["kind": "footer", "experiment": experiment, "submits": 0,
+          "command_failures": 0, "drained": true, "source_sha256": sourceSHA])
+    output.closeFile()
+    exit(0)
+}
 
 func classify(begin: UInt64, end: UInt64, prior: (UInt64, UInt64)) -> String {
     if end == 0 { return "zero_end" }
@@ -280,114 +328,236 @@ func classify(begin: UInt64, end: UInt64, prior: (UInt64, UInt64)) -> String {
     if end == prior.1 { return "ordered_but_stale" }
     return "ordered"
 }
-var priors = Array(repeating: (UInt64(0), UInt64(0)), count: slotCount)
-var priorKinds = Array(repeating: "", count: slotCount)
-var pendingCommands: [(Int, Int, MTLCommandBuffer)] = []
+func encodeRender(_ command: MTLCommandBuffer, _ drawable: CAMetalDrawable, _ indices: [Int]) {
+    let pass = MTLRenderPassDescriptor()
+    pass.colorAttachments[0].texture = drawable.texture
+    pass.colorAttachments[0].loadAction = manifest.attachment.load == 2 ? .clear : .load
+    pass.colorAttachments[0].storeAction = manifest.attachment.store == 1 ? .store : .dontCare
+    pass.colorAttachments[0].clearColor = MTLClearColor(red: clear[0], green: clear[1], blue: clear[2], alpha: clear[3])
+    let samples = pass.sampleBufferAttachments[0]!
+    samples.sampleBuffer = sampleBuffer
+    samples.startOfVertexSampleIndex = indices[0]
+    samples.endOfVertexSampleIndex = indices.count == 4 ? indices[1] : MTLCounterDontSample
+    samples.startOfFragmentSampleIndex = indices.count == 4 ? indices[2] : MTLCounterDontSample
+    samples.endOfFragmentSampleIndex = indices.last!
+    let encoder = command.makeRenderCommandEncoder(descriptor: pass)!
+    encoder.label = "mechanism.render"
+    for draw in draws {
+        encoder.setScissorRect(draw.scissor)
+        encoder.setRenderPipelineState(draw.pipeline)
+        encoder.setVertexBuffer(draw.vertices, offset: 0, index: 0)
+        encoder.setVertexBuffer(uniforms, offset: 0, index: 1)
+        encoder.setFragmentTexture(draw.texture, index: 0)
+        encoder.setFragmentSamplerState(draw.sampler, index: 0)
+        encoder.drawIndexedPrimitives(type: .triangle, indexCount: draw.indexCount, indexType: .uint32, indexBuffer: draw.indices, indexBufferOffset: 0)
+    }
+    encoder.endEncoding()
+}
+func encodeGap(_ command: MTLCommandBuffer) {
+    guard gapDispatches > 0 else { return }
+    let pass = MTLComputePassDescriptor()
+    let samples = pass.sampleBufferAttachments[0]!
+    samples.sampleBuffer = sampleBuffer
+    samples.startOfEncoderSampleIndex = 4
+    samples.endOfEncoderSampleIndex = 5
+    let encoder = command.makeComputeCommandEncoder(descriptor: pass)!
+    encoder.label = "mechanism.gap.\(gapDispatches)"
+    encoder.setComputePipelineState(gapPipeline)
+    encoder.setBuffer(gapBuffer, offset: 0, index: 0)
+    for _ in 0..<gapDispatches {
+        encoder.dispatchThreads(MTLSize(width: gapBuffer.length / 4, height: 1, depth: 1),
+                                threadsPerThreadgroup: MTLSize(width: gapPipeline.threadExecutionWidth, height: 1, depth: 1))
+    }
+    encoder.endEncoding()
+}
+func encodeResolve(_ command: MTLCommandBuffer, _ drawable: CAMetalDrawable, _ indices: [Int], _ readback: MTLBuffer) {
+    let blit = command.makeBlitCommandEncoder()!
+    blit.label = "mechanism.resolve"
+    if trackedDependency {
+        blit.copy(from: drawable.texture, sourceSlice: 0, sourceLevel: 0,
+                  sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+                  sourceSize: MTLSize(width: 1, height: 1, depth: 1),
+                  to: dependencyBuffer, destinationOffset: 0,
+                  destinationBytesPerRow: 256, destinationBytesPerImage: 256)
+    }
+    let first = indices.min()!
+    let last = gapDispatches > 0 ? 6 : indices.max()! + 1
+    blit.resolveCounters(sampleBuffer, range: first..<last, destinationBuffer: resolveBuffer, destinationOffset: first * 8)
+    blit.copy(from: resolveBuffer, sourceOffset: first * 8, to: readback, destinationOffset: first * 8, size: (last - first) * 8)
+    blit.endEncoding()
+}
+func encodeBoundarySample(_ command: MTLCommandBuffer, _ index: Int) {
+    let blit = command.makeBlitCommandEncoder()!
+    blit.label = "mechanism.boundary.\(index)"
+    blit.sampleCounters(sampleBuffer: sampleBuffer, sampleIndex: index, barrier: true)
+    blit.fill(buffer: boundaryBuffer, range: 0..<1, value: 255)
+    blit.endEncoding()
+}
 func pump() {
     while let event = app.nextEvent(matching: .any, until: nil, inMode: .default, dequeue: true) {
         app.sendEvent(event)
     }
 }
-func collect(final: Bool) {
-    var remaining: [(Int, Int, MTLCommandBuffer)] = []
-    for (iteration, slot, command) in pendingCommands {
-        if command.status != .completed && command.status != .error {
-            if final { command.waitUntilCompleted() } else { remaining.append((iteration, slot, command)); continue }
-        }
-        // The GPU-resolved bytes are what wgpu maps; the CPU resolution after
-        // completion is the separate evidence type for the same samples.
-        let words = readbacks[slot].contents().bindMemory(to: UInt64.self, capacity: 2)
-        let gpu = (words[0], words[1])
-        var cpu: [UInt64] = []
-        if let resolved = try? sampleBuffer.resolveCounterRange(0..<2) {
-            cpu = resolved.withUnsafeBytes { Array($0.bindMemory(to: UInt64.self)) }
-        }
-        var record: [String: Any] = [
-            "kind": "sample", "iteration": iteration, "slot": slot,
-            "status": command.status.rawValue, "error": command.error.map { "\($0)" } ?? "",
-            "gpu_begin": gpu.0, "gpu_end": gpu.1,
-            "prior_begin": priors[slot].0, "prior_end": priors[slot].1, "prior_kind": priorKinds[slot],
-            "class": command.status == .completed ? classify(begin: gpu.0, end: gpu.1, prior: priors[slot]) : "failed_command",
-            "cpu_samples": cpu, "final_drain": final,
-        ]
-        if cpu.count == 2 {
-            record["cpu_class"] = classify(begin: cpu[0], end: cpu[1], prior: (0, 0))
-            record["gpu_matches_cpu"] = cpu[0] == gpu.0 && cpu[1] == gpu.1
-        }
-        emit(record)
-        priors[slot] = gpu
-        priorKinds[slot] = "mapped"
-    }
-    pendingCommands = remaining
-}
+
 var submits = 0
 var failures = 0
+var priorByIndex = Array(repeating: UInt64(0), count: 128)
+var priorCPUByIndex = Array(repeating: UInt64(0), count: 128)
 for iteration in 0..<iterations {
     autoreleasepool {
         pump()
-        collect(final: false)
-        let used = Set(pendingCommands.map { $0.1 })
-        guard let slot = (0..<slotCount).first(where: { !used.contains($0) }) else {
-            emit(["kind": "no_free_slot", "iteration": iteration])
-            pendingCommands.first?.2.waitUntilCompleted()
-            return
-        }
         guard let drawable = layer.nextDrawable() else {
-            emit(["kind": "acquire", "iteration": iteration, "status": -1])
+            emit(["kind": "acquire", "iteration": iteration, "status": -1, "experiment": experiment])
             return
         }
+        let indices = uniqueIndices ? [iteration * 2 % 128, (iteration * 2 + 1) % 128] : (allStages ? [0, 1, 2, 3] : [0, 1])
+        let readback = readbacks[iteration % slotCount]
         let command = queue.makeCommandBuffer()!
-        let pass = MTLRenderPassDescriptor()
-        pass.colorAttachments[0].texture = drawable.texture
-        pass.colorAttachments[0].loadAction = manifest.attachment.load == 2 ? .clear : .load
-        pass.colorAttachments[0].storeAction = manifest.attachment.store == 1 ? .store : .dontCare
-        pass.colorAttachments[0].clearColor = MTLClearColor(red: clear[0], green: clear[1], blue: clear[2], alpha: clear[3])
-        let sba = pass.sampleBufferAttachments[0]!
-        sba.sampleBuffer = sampleBuffer
-        sba.startOfVertexSampleIndex = 0
-        sba.endOfVertexSampleIndex = MTLCounterDontSample
-        sba.startOfFragmentSampleIndex = MTLCounterDontSample
-        sba.endOfFragmentSampleIndex = 1
-        let encoder = command.makeRenderCommandEncoder(descriptor: pass)!
-        for draw in draws {
-            encoder.setScissorRect(draw.scissor)
-            encoder.setRenderPipelineState(draw.pipeline)
-            encoder.setVertexBuffer(draw.vertices, offset: 0, index: 0)
-            encoder.setVertexBuffer(uniforms, offset: 0, index: 1)
-            encoder.setFragmentTexture(draw.texture, index: 0)
-            encoder.setFragmentSamplerState(draw.sampler, index: 0)
-            encoder.drawIndexedPrimitives(type: .triangle, indexCount: draw.indexCount, indexType: .uint32, indexBuffer: draw.indices, indexBufferOffset: 0)
+        command.label = "mechanism.render.\(iteration)"
+        if blitBoundarySamples { encodeBoundarySample(command, indices[0]) }
+        encodeRender(command, drawable, indices)
+        encodeGap(command)
+        if blitBoundarySamples { encodeBoundarySample(command, indices.last!) }
+        let usesDeferred = deferredResolve != nil || completedResolve
+        if !usesDeferred { encodeResolve(command, drawable, indices, readback) }
+
+        let timingLock = NSLock()
+        var scheduledHostNS: UInt64 = 0
+        var completedHostNS: UInt64 = 0
+        command.addScheduledHandler { _ in
+            timingLock.lock(); scheduledHostNS = hostNanoseconds(mach_absolute_time()); timingLock.unlock()
         }
-        encoder.endEncoding()
-        if !completedResolve {
-            let blit = command.makeBlitCommandEncoder()!
-            blit.resolveCounters(sampleBuffer, range: 0..<2, destinationBuffer: resolveBuffer, destinationOffset: 0)
-            blit.copy(from: resolveBuffer, sourceOffset: 0, to: readbacks[slot], destinationOffset: 0, size: 16)
-            blit.endEncoding()
+        command.addCompletedHandler { _ in
+            timingLock.lock(); completedHostNS = hostNanoseconds(mach_absolute_time()); timingLock.unlock()
         }
-        command.commit()
+        let commitHostNS = hostNanoseconds(mach_absolute_time())
+        var resolveCommand: MTLCommandBuffer? = nil
+        let makeDeferredResolve = {
+            let resolve = queue.makeCommandBuffer()!
+            resolve.label = "mechanism.resolve.\(iteration)"
+            encodeResolve(resolve, drawable, indices, readback)
+            resolve.commit()
+            timingLock.lock(); resolveCommand = resolve; timingLock.unlock()
+        }
+        if deferredResolve == "enqueued" {
+            let resolve = queue.makeCommandBuffer()!
+            resolve.label = "mechanism.resolve.\(iteration)"
+            encodeResolve(resolve, drawable, indices, readback)
+            resolve.enqueue()
+            command.commit()
+            resolve.commit()
+            resolveCommand = resolve
+        } else if deferredResolve == "scheduled" {
+            command.addScheduledHandler { _ in makeDeferredResolve() }
+            command.commit()
+        } else if deferredResolve == "completed" {
+            command.addCompletedHandler { _ in makeDeferredResolve() }
+            command.commit()
+        } else {
+            command.commit()
+        }
         submits += 1
-        // wgpu presents on its own command buffer after the submit (metal/mod.rs present()).
+
+        let publicationGroup = DispatchGroup()
+        var firstNewEndHostNS: UInt64 = 0
+        var firstNewEnd: UInt64 = 0
+        if publicationLatency {
+            let oldEnd = priorCPUByIndex[indices.last!]
+            publicationGroup.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                defer { publicationGroup.leave() }
+                let deadline = hostNanoseconds(mach_absolute_time()) + 1_000_000_000
+                while hostNanoseconds(mach_absolute_time()) < deadline {
+                    if let resolved = try? sampleBuffer.resolveCounterRange(indices.last!..<(indices.last! + 1)) {
+                        let value = resolved.withUnsafeBytes { $0.bindMemory(to: UInt64.self).first! }
+                        if value != 0 && value != oldEnd {
+                            timingLock.lock()
+                            firstNewEnd = value
+                            firstNewEndHostNS = hostNanoseconds(mach_absolute_time())
+                            timingLock.unlock()
+                            break
+                        }
+                    }
+                    usleep(10)
+                }
+            }
+        }
+        command.waitUntilCompleted()
+        publicationGroup.wait()
+        if completedResolve {
+            makeDeferredResolve()
+        }
+        var deferredCommand: MTLCommandBuffer? = nil
+        while usesDeferred && deferredCommand == nil {
+            timingLock.lock(); deferredCommand = resolveCommand; timingLock.unlock()
+            if deferredCommand == nil { usleep(10) }
+        }
+        let terminal = deferredCommand ?? command
+        terminal.waitUntilCompleted()
+        if command.status == .error || terminal.status == .error { failures += 1 }
+
+        let first = indices.min()!
+        let count = indices.max()! - first + 1
+        let words = readback.contents().bindMemory(to: UInt64.self, capacity: 128)
+        let gpu = (0..<count).map { words[first + $0] }
+        var cpu: [UInt64] = []
+        if let resolved = try? sampleBuffer.resolveCounterRange(first..<(first + count)) {
+            cpu = resolved.withUnsafeBytes { Array($0.bindMemory(to: UInt64.self)) }
+        }
+        let begin = gpu.first ?? 0
+        let end = gpu.last ?? 0
+        let prior = (priorByIndex[indices[0]], priorByIndex[indices.last!])
+        var record: [String: Any] = [
+            "kind": "sample", "experiment": experiment, "iteration": iteration,
+            "slot": iteration % slotCount, "indices": indices, "gpu_samples": gpu,
+            "gpu_begin": begin, "gpu_end": end,
+            "prior_begin": prior.0, "prior_end": prior.1, "prior_kind": prior.1 == 0 ? "" : "mapped",
+            "class": terminal.status == .completed ? classify(begin: begin, end: end, prior: prior) : "failed_command",
+            "cpu_samples": cpu, "status": terminal.status.rawValue,
+            "error": terminal.error.map { "\($0)" } ?? "", "final_drain": true,
+            "render_gpu_start_ns": UInt64(command.gpuStartTime * 1e9),
+            "render_gpu_end_ns": UInt64(command.gpuEndTime * 1e9),
+            "render_gpu_duration_ns": UInt64(max(0, command.gpuEndTime - command.gpuStartTime) * 1e9),
+        ]
+        if cpu.count == gpu.count {
+            record["gpu_matches_cpu"] = cpu == gpu
+            record["index_matches_cpu"] = zip(gpu, cpu).map(==)
+            record["index_stale"] = indices.enumerated().map { offset, index in gpu[offset] == priorByIndex[index] && gpu[offset] != 0 }
+        }
+        if gapDispatches > 0 {
+            record["gap_gpu_begin"] = words[4]
+            record["gap_gpu_end"] = words[5]
+            record["gap_gpu_ns"] = words[5] > words[4] ? words[5] - words[4] : 0
+        }
+        emit(record)
+        if publicationLatency {
+            timingLock.lock()
+            let scheduled = scheduledHostNS
+            let completed = completedHostNS
+            let firstNewHost = firstNewEndHostNS
+            let firstNewSample = firstNewEnd
+            timingLock.unlock()
+            emit(["kind": "publication", "experiment": experiment, "iteration": iteration,
+                  "commit_host_ns": commitHostNS, "scheduled_host_ns": scheduled,
+                  "completed_host_ns": completed, "gpu_start_ns": UInt64(command.gpuStartTime * 1e9),
+                  "gpu_end_ns": UInt64(command.gpuEndTime * 1e9),
+                  "first_new_end_host_ns": firstNewHost, "end_sample_ns": firstNewSample,
+                  "gpu_resolved_end": end])
+        }
+        for (offset, index) in indices.enumerated() {
+            priorByIndex[index] = gpu[offset]
+            if cpu.count == gpu.count { priorCPUByIndex[index] = cpu[offset] }
+        }
+
         let present = queue.makeCommandBuffer()!
         present.present(drawable)
         present.commit()
-        if completedResolve {
-            // Experiment 3 control: the render must be complete before the
-            // counters are resolved, in their own command buffer.
-            command.waitUntilCompleted()
-            if command.status == .error { failures += 1 }
-            let resolve = queue.makeCommandBuffer()!
-            let blit = resolve.makeBlitCommandEncoder()!
-            blit.resolveCounters(sampleBuffer, range: 0..<2, destinationBuffer: resolveBuffer, destinationOffset: 0)
-            blit.copy(from: resolveBuffer, sourceOffset: 0, to: readbacks[slot], destinationOffset: 0, size: 16)
-            blit.endEncoding()
-            resolve.commit()
-            pendingCommands.append((iteration, slot, resolve))
-        } else {
-            pendingCommands.append((iteration, slot, command))
-        }
     }
 }
-collect(final: true)
-emit(["kind": "footer", "submits": submits, "command_failures": failures, "drained": pendingCommands.isEmpty])
+let clockEnd = device.sampleTimestamps()
+emit(["kind": "footer", "experiment": experiment, "submits": submits,
+      "command_failures": failures, "drained": true,
+      "clock_end_cpu": clockEnd.cpu, "clock_end_cpu_ns": clockEnd.cpu,
+      "clock_end_gpu": clockEnd.gpu, "source_sha256": sourceSHA,
+      "executable_sha256": executableSHA])
 output.closeFile()

@@ -139,6 +139,24 @@ Telemetry `gh` carries two ownership counters since the step 3 repair: `sc`
 (backend callbacks that reached a retired or unarmed record) and `cr` (frames
 refused a timing slot after close began). Both must stay 0 in a healthy capture.
 
+`qualify/main.odin` loads an Aesir recording with Aesir's own `memwatch`
+decoder and prints the capture-health verdict, GPU reliability, cadence
+distributions and deadline counts used by the causal ledger:
+
+```sh
+../tools/odin-902106f/odin build tests/metal_timestamps/qualify \
+  -collection:src=$PWD/../aesir/src -out:/tmp/qualify_bin
+/tmp/qualify_bin artifacts/timing-game-v11/recording/<recording>.jsonl
+```
+
+The per-symptom causal ledger (owning layer, evidence, fix or limitation,
+regression, artifact) and the three-run v11 control baseline are in
+investigation.md, "Aesir qualification and causal ledger". Summary: GPU pass
+timing on this device is published `unreliable`
+(`metal_same_command_buffer_resolve`) and rejected by Aesir; presentation
+cadence has p50 8.33 ms but a mean of two periods and 37–40 % deadline misses,
+so no 120 Hz claim is made and no candidate exists.
+
 ```sh
 python3 tests/metal_timestamps/window_readiness.py \
   artifacts/timestamp-game-v5-evidence.tel.timing.json --failure 0

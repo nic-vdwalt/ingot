@@ -710,23 +710,104 @@ Aesir `memwatch`:
   are `Unknown` and rejected the same way. Deliveries (CPU, presentation)
   stay independently valid. The GPU badge shows the reason code.
 
+## September 7 Aesir qualification and causal ledger (step 6)
+
+v11 (`artifacts/timing-game-v11/`) is a fresh frozen build of the step 3–5
+sources (`prebuild-inputs.json`, `identity-audit.json` record heads, dirty flags
+and the `timestamp-aesir-capture-v7` driver hash) built with the isolated
+compiler and pinned wgpu archive, captured three times through Aesir with the
+same binaries (`capture-command.log`, `control-run2/`, `control-run3/`).
+`tests/metal_timestamps/qualify/main.odin` loads each recording with Aesir's own
+`memwatch` decoder and writes `qualification.json`; the three reports are
+collected in `control-three-runs.json`.
+
+Capture-health gates, from the recordings rather than the producer:
+
+- Complete, not truncated: `telemetry_health` is all zero except
+  `startup_absent` 1 (one tick before the sidecar existed, bounded and not a
+  loss); `unfinished_tail`, `drain_exhausted`, `discarding` false. Producer
+  stats on every line: `wf`, `eo`, `pw`, `zp`, `pd`, `pfd`, `pdd` all 0,
+  `qh` 2 of 8 packets, 49/49/47 raw lines plus summaries over 25 s (v10 had 8).
+- Loading through gameplay in one epoch: frames 1–1505, 1–1547 and 1–1471 with
+  a delivery record for every frame (`delivery_frames` equals the frame span,
+  `sequence_gaps` 0). Deliveries without a presented timestamp are counted as
+  `invalid_delivery_frames` (4, 13 and 3): the loading frames before the first
+  present (first presented frame 4, 12 and 3; run 2 frames 2–10 also carry
+  `mg`/`mp`, missing GPU and present callbacks, from the loading window) plus
+  a short run of frames without a present after loading (1414; 30–31; 1443),
+  which is also the single `delivery_gaps` in each cadence analysis. The gameplay
+  summaries carry `world.opaque`/`world.ocean` groups, and run 1 raw frames
+  1422 and 1432 record window, `world.opaque` and `world.ocean` passes, so the
+  capture crosses from loading into world rendering.
+- Exact identity joins: `conflicting_identities`, `sequence_gaps`,
+  `sequence_duplicates` 0; every presented delivery joins by exact
+  (epoch, frame) identity. `exact_join.healthy` is false because the raw GPU
+  frames are rejected (`invalid_raw_gpu_frames` 231, `invalid_timestamps`
+  1274, `joined_frames` 0) and because of the non-presented deliveries above:
+  every record carries `rl.g = unreliable`,
+  `rl.r = metal_same_command_buffer_resolve`, Aesir stores `grl` 2 with `gv`
+  false on all 51 records and `gpu_attributed` is 0. That is the required
+  behaviour for unsupported timing: a visible reason code and no fabricated
+  durations.
+- Callback and worker retirement: `gh.sc` (stray callbacks) and `gh.cr`
+  (closed rejections) are 0 on every line; the host exited 0 in all three
+  runs, which requires `telemetry_shutdown`, `game_shutdown`, `context_close`
+  and `CloseWindow` to all return true (a refusal keeps the library loaded and
+  is logged; none of the `capture.log` files contain one).
+
+### Causal ledger
+
+| Symptom | Owning layer | Evidence | Fix or limitation | Regression | Artifact |
+|---|---|---|---|---|---|
+| Reversed or zero end-of-pass GPU timestamps (window pass; 61 reversed + 3 zero in v8/v10) | ingot `gfx` timing over wgpu-hal Metal: same-command-buffer `resolveCounters` after the render pass | Exact replay of v10 frame 11: pinned WebGPU replay 286/297 reversed of 300, native Metal same-command GPU resolve 298/288 reversed, native render-completed resolve 300/300 ordered; stale-by-one-pass signature 280/292 | Limitation of the pinned stack on Apple M2 Max / macOS 15.6.1 (gfx-rs/wgpu#9414 open). Production publishes `rl.g = unreliable` with reason `metal_same_command_buffer_resolve`; no clamp, fallback or dummy work | `evaluate_replay.py` `candidate_passes` (`test_replay_attribution.py`), `gpu_timing_rejects_reversed_timestamps` | `artifacts/timing-replay-v10-f1/evaluation.json`, `attribution-manifest.json` |
+| Map callbacks outliving their slot; teardown while registrations are in flight | ingot `gfx` (`gpu_timing.odin`, `screenshot.odin`, `submission.odin`, `context.odin`) | Callback dispatch audit of pinned wgpu-native (inline delivery from `BufferMapAsync`, `QueueSubmit`, `DevicePoll`, `BufferUnmap`/`BufferDestroy`); v10 `CloseWindow` true with `gh.sc`/`gh.cr` 0 | Repaired: owned immutable map records, collector-only retirement, `_gpu_timing_retire`/`context_close -> bool` refuse until every registration is proved terminal, stray callbacks counted | `gpu_timing_stray_callbacks_are_counted_not_published`, `gpu_timing_inline_callback_completes_armed_record`, `gpu_timing_retire_refuses_until_terminal_callback_observed`, `context_close_refuses_while_timing_registration_armed`, `screenshot_stranded_registration_refuses_until_terminal_callback`, `submission_stray_callbacks_are_counted` | `artifacts/timing-game-v10/` (`gh.sc` 0, `gh.cr` 0, exit 0) |
+| Slot phase leak: `gh.s` 1175 frames without a free slot after the ownership rewrite | ingot `gfx` `_gpu_timing_frame_begin` | v9 capture: `gh.s` climbing to 1175, timing stopped after the first frames | Repaired: an unsubmitted active slot is abandoned at the next frame begin; `_gpu_timing_frame_abandon` on the no-frame path | `gpu_timing_unsubmitted_frame_frees_its_slot` | `artifacts/timing-game-v9/` (retained failing) |
+| Unreconstructable textures: 256-upload atlas budget saturated before frame 1 | ingot `gfx` diagnostic atlas retention | v6: 1482 uploads dropped before frame 1; v7: 1738 uploads, 420,681 bytes, zero drops | Repaired (diagnostics only): budget 2048 with `atlas_dropped_bytes` exported | `gpu_timing_atlas_uploads_are_owned_and_bounded`, `gpu_timing_atlas_submit_seals_upload_prefix`, `gpu_timing_atlas_failure_keeps_submitted_inputs`, `gpu_timing_atlas_draw_tracks_upload_prefix` | `artifacts/timing-game-v6/`, `-v7/` |
+| Transport loss: 8 raw lines per 25 s, `fdd` 1173 deliveries dropped in loading, synchronous frame-thread writes | ForgeCore `client/telemetry.odin` | v10 producer stats; v11 `pd`/`pfd`/`pdd`/`wf`/`eo` 0, 49 raw lines, 1505 deliveries | Repaired: eight owned packets, per-frame collection from `game_prepare` (loading included), single writer thread with byte-offset retries, bounded shutdown that refuses (`game_shutdown` false, library kept loaded) when the writer stalls | `telemetry_loading_production_beyond_capacity_is_accounted`, `telemetry_short_writes_advance_by_offset`, `telemetry_encode_overflow_is_withheld`, `telemetry_shutdown_refuses_while_writer_stalls`, `telemetry_invalid_timestamp_identity_decodes` | `artifacts/timing-game-v11/qualification.json`, `artifacts/timing-export-check-v28/` |
+| Recording marked truncated by bounded startup absence of the sidecar (`read_errors` 3 in v10) | Aesir `memwatch` telemetry tail | v10 recording `telemetry_health.read_errors` 3 with a complete producer; v11 `startup_absent` 1, `read_errors` 0 | Repaired: `startup_absent` counted separately up to `MAX_TELEMETRY_STARTUP_ABSENT`; `parse_errors`, `resets`, `unfinished_tail` distinguished; one `telemetry_health_incomplete` definition for coverage, bottlenecks and truncation | `telemetry_tail_distinguishes_startup_absence_from_read_errors`, recording/tail tests in `telemetry_tail_test.odin`, `recording_test.odin` | `artifacts/timing-game-v11/recording/` |
+| Unknown GPU samples promoted to valid attribution (v6 frame 3 marked valid at 16,275,202 ms) | Aesir `memwatch` `parse_telemetry` | v6 raw `gfd` entry with `v` true; v11 recording `gv` false, `grl` 2 on all records, `gpu_attributed` 0 | Repaired: `rl` decoded into `gpu_reliability`; anything but `gpu_pass`/`reliable` clears `gv`, invalidates raw frames and drops `gg`; legacy lines are `Unknown`; the badge shows the reason | `telemetry_parse_rejects_gpu_timing_without_reliable_scope` | `artifacts/timing-game-v11/qualification.json` (`gpu_reliability` 2) |
+| Presentation cadence measured on out-of-order deliveries | Aesir `memwatch` `recording_analysis.odin` | Raw `fd` entries arrive out of frame order (v11 sq 49: 1484, 1486, 1485, 1487) | Repaired: deliveries sorted by (epoch, frame) before intervals and deadline accounting | `recording_orders_deliveries_before_measuring_cadence` | `artifacts/timing-game-v11/control-three-runs.json` |
+| Ocean pass timing | ingot `gfx` / PlanetForger world renderer | v6–v10: no ocean pass recorded; v11: `world.ocean` present in 2/1/5 raw frames per run and in the gameplay summary, all rejected as unreliable with the window pass | Not attributed: no ocean replay bundle exists and the reliability verdict is per scope (`gpu_pass`), so ocean inherits `unreliable`; a separate replay is needed before any ocean-specific claim | none | `artifacts/timing-game-v11/timestamp-game-v11-evidence.tel` (sq 46, frames 1422 and 1432) |
+| Host unloading library code with backend completion blocks still pending | ForgeCore `host/main.odin` | Pinned wgpu-hal Metal completion block (`wgpu-hal/src/metal/mod.rs:546–564`) runs after `QueueSubmit` returns; v11 exits clean only because every retire returned true | Refusal path: `restart_game`/`reload_game`/`close_window_then_unload` keep the library loaded when `shutdown` or `context_quiesce_gpu` returns false | No automated test (host tests cover the API surface only); the refusal is observable in `capture.log` | `artifacts/timing-game-v11/capture.log` (no refusal) |
+
+### Three-run control baseline (no candidate)
+
+Fixed 2560×1440 world targets, render scale 1, refresh 120 Hz (`hz` 120,
+`bt` 8.3333 in the summaries), same v11 binaries and driver for all runs.
+Aesir's cadence numbers come from frame-ordered consecutive presentations
+(`recording_presentation_intervals`); its `deadline_samples` only count
+intervals after a summary record has published the refresh rate, so
+`presentation-deadline-all-intervals.json` applies the same 110 % rule to every
+consecutive interval in the raw `fd` records.
+
+| Run | Frames | Displayed p50 / mean / p95 (ms) | Aesir deadline misses | All-interval misses | Host CPU p50 (ms) |
+|---|---:|---|---:|---:|---:|
+| run1 | 1505 | 8.333 / 16.875 / 50.003 | 47 / 91 | 598 / 1499 (39.9 %) | 12.758 |
+| run2 | 1547 | 8.333 / 16.365 / 58.333 | 6 / 15 | 561 / 1532 (36.6 %) | 12.418 |
+| run3 | 1471 | 8.335 / 16.709 / 58.333 | 24 / 46 | 573 / 1466 (39.1 %) | 12.726 |
+
+Reading: the median interval is one 120 Hz period, but 37–40 % of intervals
+miss the 9.17 ms deadline and the mean is two periods, with p95 at six or
+seven periods. Host CPU per frame (p50 12.4–12.8 ms) alone exceeds the 8.33 ms
+budget, so the presentation cadence is CPU-bound before any GPU question
+arises. **The 120 Hz goal is not met.** No candidate build exists; the
+diagnostic replays and the CPU-wait native control are excluded from these
+numbers. GPU pass timing remains `unreliable` until a deferred-resolve
+candidate passes `evaluate_replay.py` on this device.
+
 ## Remaining gates
 
-- Finish first-frame trace metadata and classify all observed labels; gameplay was
-  not established in the bounded capture.
-- Complete source-to-installed-binary provenance (including registry crate source).
-- Callback userdata retirement and teardown refusal are implemented (step 3
-  above); the remaining lifetime hazard is the backend's own completion block
-  code when a host unloads a library that submitted work, which the ForgeCore
-  host now refuses to do while any registration is unproved.
-- Exact window replay and attribution are complete (step 4) and reliability
-  propagation is implemented (step 5); end-to-end Aesir qualification of a
-  fresh capture remains (step 6).
+- Ocean pass replay bundle and attribution (never replayed; see ledger).
+- A production GPU-timing candidate that resolves counters outside the pass's
+  command buffer without CPU waits, evaluated with `candidate_passes` before
+  `rl.g` may become `reliable`.
+- Automated regression for the host refusal path (library kept loaded when a
+  retire returns false).
+- Complete source-to-installed-binary provenance (including registry crate
+  source).
 - Concurrent repository revisions changed during investigation. Capture-specific
   source manifests, not current HEAD alone, must be used for reproducibility.
 
-Verification so far: 346 Ingot tests with diagnostics enabled and disabled; focused
-ForgeCore identity decode test; 62 Aesir memwatch tests; five Python evaluator tests.
-The Aesir startup-missing-sidecar regression reproduces a persistent read error
-after later successful reads, but neither fixes production collection nor proves
-the historical capture's error was ENOENT. No 120 Hz conclusion.
+Verification at step 6: 367 gfx tests with diagnostics enabled and disabled;
+34 Python tests; assembled telemetry check v28 (15 tests) enabled and disabled;
+ForgeCore host tests; 65 Aesir memwatch tests and the ui memory tests.
