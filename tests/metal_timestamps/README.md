@@ -130,7 +130,9 @@ python3 tests/metal_timestamps/evaluate_replay.py run.jsonl gpu.jsonl cpu.jsonl 
 The replay opens a real window at the captured attachment size and refuses to
 run when the swapchain differs. `evaluate_replay.py` counts the stale-by-one-pass
 signature (end of iteration N equals the end of iteration N-1) and only reports
-`candidate_passes` for a run with every sample ordered after one first-use zero.
+`candidate_passes` when values are current as well as ordered: every per-index
+GPU value must match the post-completion CPU value, no prior-index match is
+allowed, and the run must drain without failures.
 Result on the inspected device: the pinned WebGPU replay and the native
 same-command-buffer GPU resolve fail identically; only a render-completed
 resolve is ordered. See investigation.md, "attribution".
@@ -164,11 +166,13 @@ python3 tests/metal_timestamps/evaluate_metal_trace.py \
 
 The result on Apple M2 Max / macOS 15.6.1 is H-A: fragment-stage counter
 publication lags the fragment-end timestamp by 29.1 us median (42.7 us maximum
-run p95). Instruments shows the resolve blit starts after fragment execution
-in every exported pair, while one measured 1.717 ms GPU gap or a separately
-enqueued resolve buffer removes all reversals. The enqueued deferred-resolve
-shape is the only admitted production candidate; this evidence does not make
-current production timing reliable. See investigation.md, "Metal
+run p95). Instruments shows the same-command resolve blit starts after fragment
+execution in every exported pair, while one measured 1.717 ms GPU gap removes
+all reversals. The initial enqueued M6 result was a false positive: only the
+resolve buffer was enqueued, so Instruments shows it executed before rendering
+and copied a fully stale but numerically ordered pair. Correct render-then-resolve
+enqueue order remains stale. No nonblocking deferred-resolve candidate passed;
+production remains `unreliable`. See investigation.md, "Metal
 counter-publication mechanism".
 
 Telemetry `gh` carries two ownership counters since the step 3 repair: `sc`
@@ -191,8 +195,7 @@ investigation.md, "Aesir qualification and causal ledger". Summary: GPU pass
 timing on this device is published `unreliable`
 (`metal_same_command_buffer_resolve`) and rejected by Aesir; presentation
 cadence has p50 8.33 ms but a mean of two periods and 37–40 % deadline misses,
-so no 120 Hz claim is made. A diagnostic deferred-resolve shape now passes the
-exact replay, but no production candidate build exists.
+so no 120 Hz claim is made. No production candidate is admitted.
 
 ```sh
 python3 tests/metal_timestamps/window_readiness.py \

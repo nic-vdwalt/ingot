@@ -63,6 +63,18 @@ class EvaluateReplayTests(unittest.TestCase):
         summary = evaluate_run(run_records("webgpu_pinned_replay", ticks))
         self.assertFalse(candidate_passes(summary))
 
+    def test_ordered_but_prior_samples_do_not_pass(self):
+        records = run_records("gpu_resolve", [(100, 200), (300, 400)])
+        for index, record in enumerate(records[1:-1]):
+            record["indices"] = [0, 1]
+            record["gpu_samples"] = [100 + 200 * index, 200 + 200 * index]
+            record["cpu_samples"] = [300 + 200 * index, 400 + 200 * index]
+            record["prior_cpu_samples"] = record["gpu_samples"]
+        summary = evaluate_run(records)
+        self.assertEqual(summary["classes"]["ordered"], 2)
+        self.assertEqual(summary["stale_by_k_passes"]["1"], 2)
+        self.assertFalse(candidate_passes(summary))
+
     def test_incomplete_run_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run.jsonl"
@@ -119,11 +131,17 @@ class EvaluateReplayTests(unittest.TestCase):
     @staticmethod
     def mechanism_summary(experiment, reversed_total=0, ordered=100, samples=100,
                           gap_dispatches=0, measured_gap_ns_median=None):
+        classes = {name: 0 for name in ("ordered", "zero_end", "reversed_nonzero",
+                                        "reversed_prior_slot_value", "ordered_but_stale",
+                                        "map_failed", "failed_command")}
+        classes["ordered"] = ordered
+        classes["reversed_nonzero"] = reversed_total
         return {"experiment": experiment, "reversed_total": reversed_total, "samples": samples,
-                "classes": {"ordered": ordered}, "gap_dispatches": gap_dispatches,
+                "classes": classes, "gap_dispatches": gap_dispatches,
                 "measured_gap_ns_median": measured_gap_ns_median,
-                "first_use_zero": 128, "publication": {"observed": 100,
-                "at_or_after_gpu_end": 100}}
+                "first_use_zero": 128, "stale_by_one_pass": 0, "stale_by_k_passes": {},
+                "per_index": {}, "drained": True, "command_failures": 0,
+                "publication": {"observed": 100, "at_or_after_gpu_end": 100}}
 
     def test_mechanism_verdict_h_a(self):
         make = self.mechanism_summary
@@ -135,7 +153,26 @@ class EvaluateReplayTests(unittest.TestCase):
                      make("deferred_completed"), make("unique_indices")]
         verdict = mechanism_verdict(summaries, {"blit_before_fragment_fraction": 0})
         self.assertEqual(verdict["mechanism"], "H-A")
+        self.assertEqual(verdict["candidate"], "enqueued_deferred_resolve")
         self.assertEqual(verdict["latency_upper_bound_ns"], 900_000)
+
+    def test_mechanism_verdict_h_a_rejects_ordered_stale_deferred_run(self):
+        make = self.mechanism_summary
+        stale = make("deferred_enqueued")
+        stale["stale_by_k_passes"] = {"1": 200}
+        stale["per_index"] = {"begin": {"samples": 100, "matches_cpu": 0,
+                                          "stale_prior_index": 100}}
+        summaries = [make("publication_latency", 99, 1),
+                     make("gap_0", 99, 1), make("gap_1", 0, 100, gap_dispatches=1,
+                                                measured_gap_ns_median=900_000),
+                     make("tracked_dependency", 99, 1), stale,
+                     make("deferred_scheduled", 99, 1),
+                     make("deferred_completed"), make("unique_indices")]
+        verdict = mechanism_verdict(summaries, {"blit_before_fragment_fraction": 0})
+        self.assertEqual(verdict["mechanism"], "H-A")
+        self.assertIsNone(verdict["candidate"])
+        self.assertEqual(verdict["conflicts"],
+                         ["M6 has no current pre-completion deferred resolve"])
 
     def test_mechanism_verdict_h_b(self):
         make = self.mechanism_summary

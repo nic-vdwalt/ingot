@@ -447,6 +447,7 @@ for iteration in 0..<iterations {
             let resolve = queue.makeCommandBuffer()!
             resolve.label = "mechanism.resolve.\(iteration)"
             encodeResolve(resolve, drawable, indices, readback)
+            command.enqueue()
             resolve.enqueue()
             command.commit()
             resolve.commit()

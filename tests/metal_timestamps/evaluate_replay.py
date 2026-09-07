@@ -153,13 +153,19 @@ def evaluate_run(records):
 def candidate_passes(summary):
     counts = summary["classes"]
     first_use_zero = 1 if counts["zero_end"] == 1 else 0
+    index_current = all(
+        values["matches_cpu"] == values["samples"] and values["stale_prior_index"] == 0
+        for values in summary.get("per_index", {}).values()
+    )
     return (summary["samples"] > 0 and summary["drained"] is True
             and summary["command_failures"] == 0
             and summary["reversed_total"] == 0
             and counts["ordered_but_stale"] == 0
             and counts["map_failed"] == 0 and counts["failed_command"] == 0
             and counts["zero_end"] == first_use_zero
-            and summary["stale_by_one_pass"] == 0)
+            and summary["stale_by_one_pass"] == 0
+            and not summary.get("stale_by_k_passes")
+            and index_current)
 
 
 def evaluate_sweep(paths):
@@ -202,8 +208,8 @@ def mechanism_verdict(summaries, trace=None):
     deferred = {name: by_experiment.get("deferred_" + name, [])
                 for name in ("enqueued", "scheduled", "completed")}
     trace_before = trace is not None and trace.get("blit_before_fragment_fraction", 0) >= 0.5
-    tracked_passes = bool(tracked) and all(ordered_fraction(summary) >= 0.99 for summary in tracked)
-    all_deferred_pass = all(deferred[name] and all(ordered_fraction(summary) >= 0.99
+    tracked_passes = bool(tracked) and all(candidate_passes(summary) for summary in tracked)
+    all_deferred_pass = all(deferred[name] and all(candidate_passes(summary)
                                                    for summary in deferred[name])
                             for name in deferred)
     if tracked_passes and all_deferred_pass and trace_before:
@@ -216,12 +222,13 @@ def mechanism_verdict(summaries, trace=None):
                    for summary in group), key=lambda summary: summary["gap_dispatches"])
     baseline = by_experiment.get("gpu_resolve", []) + by_experiment.get("publication_latency", [])
     baseline_bad = bool(baseline) and any(summary["reversed_total"] > 0 for summary in baseline)
-    passing_gaps = [summary for summary in gaps if ordered_fraction(summary) >= 0.99]
+    passing_gaps = [summary for summary in gaps if candidate_passes(summary)]
     trace_after = trace is not None and trace.get("blit_before_fragment_fraction", 1) < 0.5
-    enqueued_or_scheduled = any(deferred[name] and
-                                all(ordered_fraction(summary) >= 0.99 for summary in deferred[name])
-                                for name in ("enqueued", "scheduled"))
-    if baseline_bad and passing_gaps and not tracked_passes and enqueued_or_scheduled and trace_after:
+    precompletion_deferred = [
+        name for name in ("enqueued", "scheduled")
+        if deferred[name] and all(candidate_passes(summary) for summary in deferred[name])
+    ]
+    if baseline_bad and passing_gaps and not tracked_passes and trace_after:
         threshold = min(summary["measured_gap_ns_median"] for summary in passing_gaps
                         if summary["measured_gap_ns_median"] is not None)
         publication = [summary["publication"] for summary in by_experiment.get("publication_latency", [])]
@@ -231,18 +238,24 @@ def mechanism_verdict(summaries, trace=None):
                 if item.get("sample_to_publication_ns_p95") is not None]
         evidence.extend(["M0 observes the current end sample after the resolve read",
                          "M3 finite in-buffer gap removes reversals",
-                         "M4 tracked dependency does not", "M6 pre-completion deferred resolve passes",
+                         "M4 tracked dependency does not",
                          "M7 resolve blit starts after fragment completion"])
-        return {"mechanism": "H-A", "candidate": "deferred_resolve",
+        candidate = None
+        if precompletion_deferred:
+            candidate = precompletion_deferred[0] + "_deferred_resolve"
+            evidence.append("M6 " + precompletion_deferred[0] + " deferred resolve is current")
+        else:
+            conflicts.append("M6 has no current pre-completion deferred resolve")
+        return {"mechanism": "H-A", "candidate": candidate,
                 "publication_latency_ns_median": int(statistics.median(medians)) if medians else None,
                 "publication_latency_ns_p95_max": max(p95s) if p95s else None,
                 "latency_upper_bound_ns": threshold, "evidence": evidence,
                 "excluded": ["H-B", "H-C", "H-D"], "conflicts": conflicts}
     max_gap_bad = bool(gaps) and all(summary["reversed_total"] > 0 for summary in gaps[-2:])
     only_completed = bool(deferred["completed"]) and all(
-        ordered_fraction(summary) >= 0.99 for summary in deferred["completed"])
+        candidate_passes(summary) for summary in deferred["completed"])
     only_completed = only_completed and all(
-        not deferred[name] or any(ordered_fraction(summary) < 0.99 for summary in deferred[name])
+        not deferred[name] or any(not candidate_passes(summary) for summary in deferred[name])
         for name in ("enqueued", "scheduled"))
     publication = [summary["publication"] for summary in by_experiment.get("publication_latency", [])]
     after_end = bool(publication) and all(item["observed"] and
