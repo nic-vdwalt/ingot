@@ -268,6 +268,79 @@ Direct ForgeCore-only compilation is invalid because its union package requires
 PlanetForger types/assets; the isolated assembled test supplies them. Production
 callback ownership and telemetry transport remain unrepaired.
 
+## September 7 continuation
+
+Desktop recheck returned an active console session and one screen, without the
+screen-locked flag. This removes the previously observed lock evidence, not the
+need to verify sustained visible rendering in the next Aesir run.
+
+Draw diagnostics now distinguish built-in batch and GPU-3D enum domains. A failed
+custom-shader fallback records the actual built-in shader identity (zero), and
+window attachment diagnostics retain the configured clear RGBA instead of zeros.
+The four-descriptor limit is named; overflow remains explicit.
+
+Diagnostic-profile `game_prepare` now drains into existing owned telemetry arrays
+on every host frame, including loading, without invoking serialization or writes.
+This only retains the first bounded packet: 16 GPU records and 32 delivery records.
+Once full, renderer rings can still overflow until gameplay/shutdown pumps them.
+This is not a continuous-delivery repair or a completed loading trace gate.
+
+The isolated `artifacts/timing-export-check-v8` union passed three focused tests:
+no-I/O collection with full buffers, diagnostic JSON roundtrip including prior
+samples and integers above 2^53, and invalid-timestamp identity decoding.
+The preceding v7 union passed the two wire tests with diagnostics disabled.
+Web checking with real shared types encountered existing unsupported `core:os`
+imports and a 32-bit `max(u32)`-to-int conversion in `flora_ecology.odin`; no web
+compatibility claim is made. No game recapture or timing repair is claimed.
+
+Window draw retention now owns at most 16 complete batches, each bounded to 2048
+vertices and 4096 indices. These budgets cover the observed small first-window
+batches, not arbitrary game geometry. Geometry IDs are one-based; zero denotes
+missing inputs. Only retained, unsubmitted draw bindings consume this budget;
+count mismatches are reported as dropped geometry, never partial input copies.
+The CPU projection shadow records logical dimensions at uniform upload. Alternate
+uniform bindings remain explicitly unknown. Ownership, overflow, reset and
+failure-linkage tests pass; gfx now has 353 passing tests with diagnostics enabled.
+
+The v10 nontrivial projection roundtrip exposed lossy default JSON float formatting:
+1/720 changed on decode. Draws now also carry exact `projection_bits` as four u32
+IEEE-754 words; replay must use those words, not the human-readable float array.
+The v11 union passed all three focused telemetry tests with bit-exact projection
+reconstruction and prior ticks above 2^53. Geometry float JSON still needs an exact
+wire representation; current schema-5 export is not reconstructable evidence.
+Texture/atlas versions, ocean inputs, immutable build provenance and sustained
+loading transport remain missing. No new Aesir capture or production repair occurred.
+
+Schema 6 replaces geometry float arrays with active-length vertex/index slices.
+Each vertex exports position/color/UV as explicitly sized IEEE-754 u32 words and
+mode as u32, avoiding dependence on formatter precision or host struct padding.
+The shutdown-only conversion copies into temporary owned wire arrays; source reset
+cannot alter the export. Tests cover signed zero, subnormal, rounding-sensitive,
+maximum finite, NaN payload and infinity bit patterns, plus exact drop counts above
+2^53. These patterns verify retention, not permission to submit non-finite geometry.
+The v15 union passed four focused tests enabled and disabled; formatted v16 passed
+four enabled. New assemblies use the v11 gameplay baseline plus current telemetry
+sources because fresh v12 found concurrent `marine_test.odin` using obsolete
+Planet_Coord x/y fields. No concurrent simulation code or pin was modified.
+This is test-only assembly evidence, not frozen game capture provenance.
+Texture/atlas inputs and ocean data remain unretained; step 2 is still incomplete.
+
+Schema 7 adds bounded atlas upload evidence: the first 256 glyph uploads and at
+most 1 MiB of tightly packed R8 pixels, copied before rasterizer scratch is freed.
+This budget targets initial loading text, not all fonts over the context lifetime.
+Every initialized atlas has a monotonic ID and a zero-filled 2048-square R8 base.
+Each matched draw records atlas ID, global upload prefix, filter and explicit
+known status. Reconstruct by applying only matching-ID uploads before that prefix
+in order. Samplers use clamp-to-edge, nearest mip filtering and the recorded
+point/linear min/mag filter. Any prior dropped upload conservatively makes later
+atlas draws unknown. Non-atlas textures remain unknown. Shutdown exports active
+upload/pixel slices; no GPU readback, CPU wait or frame I/O was added.
+Two new tests cover padded-row copying, ownership, bounds, invalid regions,
+capacity rejection, draw-prefix lookup and copy-out survival. All 355 gfx tests
+passed enabled and disabled; the v17 stable-baseline union passed two focused
+wire tests. Actual glyph-hook GPU execution and schema-7 atlas JSON roundtrip are
+not yet regression-covered. No new game capture, ocean retention or repair claim.
+
 ## Remaining gates
 
 - Finish first-frame trace metadata and classify all observed labels; gameplay was

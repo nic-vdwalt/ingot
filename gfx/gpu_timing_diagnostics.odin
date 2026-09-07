@@ -4,6 +4,10 @@ import wg "vendor:wgpu"
 
 GPU_TIMING_DIAGNOSTICS :: #config(INGOT_GPU_TIMING_DIAGNOSTICS, false)
 GPU_TIMING_DIAGNOSTIC_CAPACITY :: 64
+GPU_TIMING_DIAGNOSTIC_DRAWS_PER_PASS :: 4
+GPU_TIMING_DIAGNOSTIC_GEOMETRY_CAPACITY :: 16
+GPU_TIMING_DIAGNOSTIC_VERTICES_MAX :: 2048
+GPU_TIMING_DIAGNOSTIC_INDICES_MAX :: 4096
 
 #assert(!GPU_TIMING_DIAGNOSTICS || RENDER_STATS_ENABLED)
 
@@ -60,7 +64,7 @@ Gpu_Timing_Diagnostic :: struct {
 	end_tick:           u64,
 	previous:           Gpu_Timing_Diagnostic_Previous,
 	draw_count:         u32,
-	draws:              [4]Gpu_Timing_Diagnostic_Draw,
+	draws:              [GPU_TIMING_DIAGNOSTIC_DRAWS_PER_PASS]Gpu_Timing_Diagnostic_Draw,
 	draws_dropped:      u32,
 	query_begin:        u32,
 	slot_index:         u32,
@@ -81,15 +85,37 @@ Gpu_Timing_Diagnostic :: struct {
 	collection_id:      u64,
 }
 
+Gpu_Timing_Diagnostic_Draw_Path :: enum u32 {
+	Unknown,
+	Batch_Builtin,
+	Gpu_3D,
+}
+
+Gpu_Timing_Diagnostic_Geometry :: struct {
+	vertex_count: u32,
+	index_count:  u32,
+	vertices:     [GPU_TIMING_DIAGNOSTIC_VERTICES_MAX]Vertex,
+	indices:      [GPU_TIMING_DIAGNOSTIC_INDICES_MAX]u32,
+}
+
 Gpu_Timing_Diagnostic_Draw :: struct {
-	known:          bool,
-	indexed:        bool,
-	count:          u32,
-	instances:      u32,
-	shader_id:      u32,
-	pipeline_kind:  u32,
-	pipeline_style: u32,
-	scissor:        [4]u32,
+	atlas_id:           u32,
+	atlas_upload_count: u32,
+	atlas_filter:       u32,
+	atlas_known:        bool,
+	geometry_id:        u32,
+	projection:         [4]f32,
+	projection_bits:    [4]u32,
+	projection_known:   bool,
+	path:               Gpu_Timing_Diagnostic_Draw_Path,
+	known:              bool,
+	indexed:            bool,
+	count:              u32,
+	instances:          u32,
+	shader_id:          u32,
+	pipeline_kind:      u32,
+	pipeline_style:     u32,
+	scissor:            [4]u32,
 }
 
 Gpu_Timing_Diagnostic_Previous :: struct {
@@ -121,6 +147,8 @@ Gpu_Timing_Diagnostic_Category :: struct {
 }
 
 Gpu_Timing_Diagnostic_Snapshot :: struct {
+	geometry_count:    u32,
+	geometry_dropped:  u64,
 	failures:          [GPU_TIMING_DIAGNOSTIC_CAPACITY]Gpu_Timing_Diagnostic,
 	failure_count:     u32,
 	dropped:           u64,
@@ -132,6 +160,10 @@ Gpu_Timing_Diagnostic_Snapshot :: struct {
 }
 
 Gpu_Timing_Diagnostics :: struct {
+	atlas:             Gpu_Timing_Atlas_Evidence,
+	geometry:          [GPU_TIMING_DIAGNOSTIC_GEOMETRY_CAPACITY]Gpu_Timing_Diagnostic_Geometry,
+	geometry_count:    u32,
+	geometry_dropped:  u64,
 	bindings:          [GPU_TIMING_FRAME_SLOTS][GPU_TIMING_MAX_SPANS]Gpu_Timing_Diagnostic_Binding,
 	failures:          [GPU_TIMING_DIAGNOSTIC_CAPACITY]Gpu_Timing_Diagnostic,
 	encoders:          [GPU_TIMING_MAX_SPANS]Gpu_Timing_Diagnostic_Encoder,
@@ -156,6 +188,8 @@ context_gpu_timing_diagnostics :: proc(ctx: ^Context) -> Gpu_Timing_Diagnostic_S
 		state := &ctx.gpu_timing.diagnostics[0]
 		assert(state.failure_count <= GPU_TIMING_DIAGNOSTIC_CAPACITY)
 		return {
+			geometry_count = state.geometry_count,
+			geometry_dropped = state.geometry_dropped,
 			failures = state.failures,
 			failure_count = state.failure_count,
 			dropped = state.dropped,
@@ -186,6 +220,13 @@ _gpu_timing_diagnostic_attachment :: proc(
 			record.height = ctx.config.height
 			record.format = ctx.config.format
 			record.sample_count = 1
+			clear := ctx.frame.clear_color
+			record.color_clear = {
+				f64(clear.r) / 255.0,
+				f64(clear.g) / 255.0,
+				f64(clear.b) / 255.0,
+				f64(clear.a) / 255.0,
+			}
 		} else if color := context_get_texture(ctx, color_id); color != nil {
 			record.width = u32(color.width)
 			record.height = u32(color.height)
@@ -300,6 +341,44 @@ _gpu_timing_diagnostic_draw :: proc(
 	}
 }
 
+context_gpu_timing_diagnostic_geometry :: proc(
+	ctx: ^Context,
+	output: []Gpu_Timing_Diagnostic_Geometry,
+) -> u32 {
+	assert(ctx != nil)
+	when GPU_TIMING_DIAGNOSTICS {
+		state := &ctx.gpu_timing.diagnostics[0]
+		assert(state.geometry_count <= GPU_TIMING_DIAGNOSTIC_GEOMETRY_CAPACITY)
+		return u32(copy(output, state.geometry[:state.geometry_count]))
+	} else {
+		return 0
+	}
+}
+
+_gpu_timing_diagnostic_geometry :: proc(
+	state: ^Gpu_Timing_Diagnostics,
+	vertices: []Vertex,
+	indices: []u32,
+) -> u32 {
+	assert(state != nil)
+	assert(state.geometry_count <= GPU_TIMING_DIAGNOSTIC_GEOMETRY_CAPACITY)
+	if len(vertices) == 0 ||
+	   len(indices) == 0 ||
+	   len(vertices) > GPU_TIMING_DIAGNOSTIC_VERTICES_MAX ||
+	   len(indices) > GPU_TIMING_DIAGNOSTIC_INDICES_MAX ||
+	   state.geometry_count == GPU_TIMING_DIAGNOSTIC_GEOMETRY_CAPACITY {
+		state.geometry_dropped += 1
+		return 0
+	}
+	entry := &state.geometry[state.geometry_count]
+	entry.vertex_count = u32(len(vertices))
+	entry.index_count = u32(len(indices))
+	copy(entry.vertices[:], vertices)
+	copy(entry.indices[:], indices)
+	state.geometry_count += 1
+	return state.geometry_count
+}
+
 _gpu_timing_diagnostic_batch_draw :: proc(
 	ctx: ^Context,
 	renderer: ^Renderer,
@@ -317,15 +396,54 @@ _gpu_timing_diagnostic_batch_draw :: proc(
 		if ctx.frame.scissor_on {
 			scissor = {ctx.frame.sc_x, ctx.frame.sc_y, ctx.frame.sc_w, ctx.frame.sc_h}
 		}
+		state := &ctx.gpu_timing.diagnostics[0]
+		retain_geometry := false
+		for bindings in state.bindings {
+			for binding in bindings {
+				if pass != nil &&
+				   binding.pass == pass &&
+				   binding.record.submit_ordinal == 0 &&
+				   binding.record.draw_count < u32(len(binding.record.draws)) {
+					retain_geometry = true
+				}
+			}
+		}
+		atlas_id, atlas_upload_count, atlas_filter, atlas_known := _gpu_timing_atlas_draw(
+			ctx,
+			renderer,
+		)
+		geometry_id: u32
+		if retain_geometry {
+			if count == u32(len(renderer.indices)) {
+				geometry_id = _gpu_timing_diagnostic_geometry(
+					state,
+					renderer.verts[:],
+					renderer.indices[:],
+				)
+			} else {
+				state.geometry_dropped += 1
+			}
+		}
 		_gpu_timing_diagnostic_draw(
-			&ctx.gpu_timing.diagnostics[0],
+			state,
 			pass,
 			{
+				atlas_id = atlas_id,
+				atlas_upload_count = atlas_upload_count,
+				atlas_filter = atlas_filter,
+				atlas_known = atlas_known,
+				geometry_id = geometry_id,
+				projection = renderer.diagnostic_projection,
+				projection_bits = transmute([4]u32)renderer.diagnostic_projection,
+				projection_known = (renderer.cur_u == nil || renderer.cur_u == renderer.ubind) &&
+				renderer.diagnostic_projection[0] > 0 &&
+				renderer.diagnostic_projection[1] > 0,
+				path = .Batch_Builtin,
 				known = true,
 				indexed = true,
 				count = count,
 				instances = 1,
-				shader_id = renderer.active_shader,
+				shader_id = 0,
 				pipeline_kind = u32(renderer.cur_kind),
 				pipeline_style = u32(renderer.cur_blend),
 				scissor = scissor,
@@ -357,6 +475,12 @@ _gpu_timing_diagnostic_submit :: proc(state: ^Gpu_Timing_Diagnostics, encoder: w
 		for &bindings in state.bindings {
 			for &binding in bindings {
 				if binding.encoder == encoder && binding.record.submit_ordinal == 0 {
+					for &draw in binding.record.draws {
+						if draw.atlas_id != 0 {
+							draw.atlas_upload_count = state.atlas.upload_count
+							draw.atlas_known = draw.atlas_known && state.atlas.dropped == 0
+						}
+					}
 					binding.record.submit_ordinal = state.submit_ordinal
 					binding.pass = nil
 					binding.encoder = nil

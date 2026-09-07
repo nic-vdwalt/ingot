@@ -2145,6 +2145,7 @@ _gpu_3d_draw_indexed :: proc(
 	wg.RenderPassEncoderDrawIndexed(pass.pass, entry.index_count, instance_count, 0, 0, 0)
 	when GPU_TIMING_DIAGNOSTICS {
 		_gpu_timing_diagnostic_draw(&pass.owner.gpu_timing.diagnostics[0], pass.pass, {
+			path = .Gpu_3D,
 			known = true,
 			indexed = true,
 			count = entry.index_count,

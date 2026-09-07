@@ -61,6 +61,7 @@ Atlas :: struct {
 	sampler:               wg.Sampler,
 	bind:                  wg.BindGroup,
 	filter:                TextureFilter,
+	diagnostic_id:         [1 when GPU_TIMING_DIAGNOSTICS else 0]u32,
 }
 
 @(private)
@@ -348,6 +349,18 @@ _atlas_upload_glyph :: proc(ctx: ^Context, a: ^Atlas, cp: rune, x, y, width, hei
 		&{bytesPerRow = u32(stride), rowsPerImage = u32(height)},
 		&{u32(width), u32(height), 1},
 	)
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_atlas_upload(
+			&ctx.gpu_timing.diagnostics[0].atlas,
+			a.diagnostic_id[0],
+			u32(x),
+			u32(y),
+			u32(width),
+			u32(height),
+			u32(stride),
+			pixels,
+		)
+	}
 	delete(pixels)
 	return true
 }
@@ -369,6 +382,12 @@ _atlas_gpu_init :: proc(ctx: ^Context, a: ^Atlas) -> bool {
 		},
 	)
 	if a.tex == nil do return false
+	when GPU_TIMING_DIAGNOSTICS {
+		state := &ctx.gpu_timing.diagnostics[0].atlas
+		ensure(state.atlas_count < max(u32))
+		state.atlas_count += 1
+		a.diagnostic_id[0] = state.atlas_count
+	}
 	zeros := make([]byte, ATLAS_DIM * ATLAS_DIM)
 	wg.QueueWriteTexture(
 		ctx.queue,

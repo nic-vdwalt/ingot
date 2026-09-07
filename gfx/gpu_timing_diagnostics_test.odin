@@ -45,8 +45,19 @@ gpu_timing_diagnostics_window_draw_metadata_is_bounded :: proc(t: ^testing.T) {
 		ctx.frame.pass = pass
 		ctx.config.width = 2560
 		ctx.config.height = 1440
+		ctx.rend.active_shader = 99
+		ctx.rend.diagnostic_projection = _window_projection(1280, 720)
+		ctx.id = DEFAULT_CONTEXT_ID
+		ctx.gpu_timing.active_slot = 0
+		ctx.frame.clear_color = {17, 34, 51, 255}
 		_gpu_timing_diagnostic_encoder_created(state, encoder)
 		_gpu_timing_diagnostic_bind(state, 0, 0, encoder, pass, .Clear, .Store)
+		_gpu_timing_diagnostic_attachment(ctx, 0, 0, 0)
+		testing.expect_value(
+			t,
+			state.bindings[0][0].record.color_clear,
+			wg.Color{17.0 / 255.0, 34.0 / 255.0, 51.0 / 255.0, 1},
+		)
 		for index in 0 ..< 6 {
 			_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, u32(index + 3))
 		}
@@ -54,18 +65,33 @@ gpu_timing_diagnostics_window_draw_metadata_is_bounded :: proc(t: ^testing.T) {
 		testing.expect_value(t, record.draw_count, u32(6))
 		testing.expect_value(t, record.draws_dropped, u32(2))
 		testing.expect(t, record.draws[0].known)
+		testing.expect_value(
+			t,
+			record.draws[0].path,
+			Gpu_Timing_Diagnostic_Draw_Path.Batch_Builtin,
+		)
+		testing.expect(t, record.draws[0].projection_known)
+		testing.expect_value(t, record.draws[0].projection, _window_projection(1280, 720))
+		testing.expect_value(t, record.draws[0].shader_id, u32(0))
 		testing.expect_value(t, record.draws[0].count, u32(3))
 		testing.expect_value(t, record.draws[3].count, u32(6))
 		testing.expect_value(t, record.draws[0].scissor, [4]u32{0, 0, 2560, 1440})
 		_gpu_timing_diagnostic_bind(state, 0, 0, encoder, pass, .Clear, .Store)
+		ctx.rend.cur_u = cast(wg.BindGroup)uintptr(3)
 		ctx.frame.scissor_on = true
 		ctx.frame.sc_x, ctx.frame.sc_y = 5, 6
 		ctx.frame.sc_w, ctx.frame.sc_h = 20, 30
 		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 9)
 		testing.expect_value(t, state.bindings[0][0].record.draws[0].scissor, [4]u32{5, 6, 20, 30})
+		testing.expect(t, !state.bindings[0][0].record.draws[0].projection_known)
 		ctx.frame.pass = nil
 		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 10)
 		testing.expect(t, !state.bindings[0][0].record.draws[1].known)
+		testing.expect_value(
+			t,
+			state.bindings[0][0].record.draws[1].path,
+			Gpu_Timing_Diagnostic_Draw_Path.Unknown,
+		)
 	}
 }
 
