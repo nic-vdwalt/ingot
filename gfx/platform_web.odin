@@ -285,7 +285,7 @@ _web_on_device :: proc "c" (
 	ctx.queue = wg.DeviceGetQueue(ctx.device)
 	if ctx.queue == nil {
 		fmt.eprintln("gfx: web device returned no queue")
-		_close_window_context(ctx)
+		_abandon_window_context(ctx)
 		return
 	}
 	_ = _gpu_finish(ctx)

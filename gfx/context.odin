@@ -257,6 +257,7 @@ Context :: struct {
 	stats_current:              Renderer_Stats,
 	stats_latest:               Renderer_Stats,
 	gpu_timing:                 Gpu_Timing_State,
+	screenshot:                 Screenshot_Map,
 	delivery:                   Frame_Delivery_State,
 
 	// input (input.odin)
@@ -484,9 +485,28 @@ context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool 
 	return context_live(ctx)
 }
 
-context_close :: proc(ctx: ^Context) {
+// context_close retires every backend callback registration before releasing
+// anything they publish into. A false return is a refusal: the context stays
+// in .Closing with all storage and GPU objects intact, and the caller must
+// not free the Context or unload code until a retry returns true.
+context_close :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "context_close: nil context")
-	_close_window_context(ctx)
+	return _close_window_context(ctx)
+}
+
+// context_quiesce_gpu drives every outstanding backend callback registration
+// (submissions, timing maps, the screenshot map) to its terminal callback
+// without closing the context. Hosts call it before unloading code that may
+// have registered callbacks, such as a hot-reloaded game library that links
+// its own copy of the renderer. False means a registration is still unproved
+// after the bounded polls and that code must stay loaded.
+context_quiesce_gpu :: proc(ctx: ^Context) -> bool {
+	assert(ctx != nil, "context_quiesce_gpu: nil context")
+	assert(!ctx.frame.has_frame, "context_quiesce_gpu: frame is still recording")
+	if !ctx.initialized do return true
+	if !_submission_quiesce(&ctx.submissions) do return false
+	if !_screenshot_retire(ctx, true) do return false
+	return _gpu_timing_quiesce(ctx)
 }
 
 context_should_close :: proc(ctx: ^Context) -> bool {
@@ -620,13 +640,13 @@ _init_window_context :: proc(ctx: ^Context, width, height: i32, title: cstring) 
 	ctx.instance = wg.CreateInstance()
 	if ctx.instance == nil {
 		fmt.eprintln("gfx: WebGPU instance creation failed")
-		_close_window_context(ctx)
+		_abandon_window_context(ctx)
 		return
 	}
 	ctx.surface = platform_create_surface(ctx, ctx.instance)
 	if ctx.surface == nil {
 		fmt.eprintln("gfx: WebGPU surface creation failed")
-		_close_window_context(ctx)
+		_abandon_window_context(ctx)
 		return
 	}
 	ctx.pending_w, ctx.pending_h = width, height
@@ -656,20 +676,20 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_gpu_finish: nil context")
 	if ctx.surface == nil || ctx.adapter == nil || ctx.device == nil || ctx.queue == nil {
 		fmt.eprintln("gfx: incomplete GPU state; cannot configure swapchain")
-		_close_window_context(ctx)
+		_abandon_window_context(ctx)
 		return false
 	}
 	width, height := ctx.pending_w, ctx.pending_h
 	if width <= 0 || height <= 0 {
 		fmt.eprintln("gfx: invalid pending window dimensions")
-		_close_window_context(ctx)
+		_abandon_window_context(ctx)
 		return false
 	}
 
 	caps, status := wg.SurfaceGetCapabilities(ctx.surface, ctx.adapter)
 	if status != .Success || caps.formatCount == 0 || caps.formats == nil {
 		fmt.eprintln("gfx: surface reports no supported formats; cannot configure swapchain")
-		_close_window_context(ctx)
+		_abandon_window_context(ctx)
 		return false
 	}
 	// Prefer a non-sRGB (linear UNORM) surface. raylib writes 8-bit sRGB color
@@ -733,8 +753,10 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 		// The device could not supply the stream pools even at the floor.
 		// Closing here surfaces a diagnosable state; the alternative used to
 		// be an assert, which on web traps the module and freezes the canvas.
-		_gpu_timing_shutdown(ctx)
-		_close_window_context(ctx)
+		// No frame ran, so no timing map is armed and this cannot refuse.
+		timing_closed := _gpu_timing_shutdown(ctx)
+		assert(timing_closed, "_gpu_finish: unused timing state refused to close")
+		_abandon_window_context(ctx)
 		return false
 	}
 	_graphics_resources_init(&ctx.resources)
@@ -748,24 +770,44 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 	return true
 }
 
-CloseWindow :: proc() {
-	context_close(default_context())
+CloseWindow :: proc() -> bool {
+	closed := context_close(default_context())
+	if !closed {
+		fmt.eprintln("gfx: CloseWindow refused; backend callbacks outstanding, storage retained")
+	}
+	return closed
+}
+
+// _abandon_window_context tears down a context that never finished
+// initialising. Nothing has registered a backend callback yet, so the close
+// cannot be refused; a refusal here means the initialisation order changed.
+@(private)
+_abandon_window_context :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_abandon_window_context: nil context")
+	assert(!ctx.initialized, "_abandon_window_context: initialised context")
+	closed := _close_window_context(ctx)
+	assert(closed, "_abandon_window_context: uninitialised context refused to close")
 }
 
 @(private)
-_close_window_context :: proc(ctx: ^Context) {
+_close_window_context :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_close_window_context: nil context")
-	if ctx.instance == nil && ctx.win == nil do return
+	if ctx.instance == nil && ctx.win == nil do return true
 	assert(!ctx.frame.has_frame, "CloseWindow: frame is still recording")
 	ctx.lifecycle = .Closing
 	if ctx.initialized {
+		// Every registration must be proved terminal before anything that
+		// owns its storage goes away. Each retire is idempotent, so a refused
+		// close can be retried from here without re-destroying resources.
+		if !_submission_shutdown(&ctx.submissions) do return false
+		if !_screenshot_retire(ctx, true) do return false
+		if !_gpu_timing_retire(ctx) do return false
 		context_close_accessibility(ctx)
 		platform_drop_shutdown(ctx)
 		_graphics_resources_destroy(ctx, &ctx.resources)
 		renderer_shutdown(&ctx.rend)
-		ensure(_submission_shutdown(&ctx.submissions), "gfx: submissions did not drain")
 		_frame_delivery_shutdown(ctx)
-		_gpu_timing_shutdown(ctx)
+		_gpu_timing_release(ctx)
 	}
 	if ctx.surface != nil do wg.SurfaceRelease(ctx.surface)
 	if ctx.queue != nil do wg.QueueRelease(ctx.queue)
@@ -780,6 +822,7 @@ _close_window_context :: proc(ctx: ^Context) {
 	ctx.id = context_id
 	ctx.epoch = closing_epoch
 	ctx.config_flags = flags
+	return true
 }
 
 WindowShouldClose :: proc() -> bool {

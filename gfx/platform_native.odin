@@ -104,7 +104,7 @@ when !INGOT_GFX_SDL3 {
 		for !ares.done {wg.InstanceProcessEvents(ctx.instance)}
 		if ares.status != .Success || ares.adapter == nil {
 			fmt.eprintln("gfx: adapter request failed")
-			_close_window_context(ctx)
+			_abandon_window_context(ctx)
 			return
 		}
 		ctx.adapter = ares.adapter
@@ -138,14 +138,14 @@ when !INGOT_GFX_SDL3 {
 		for !dres.done {wg.InstanceProcessEvents(ctx.instance)}
 		if dres.status != .Success || dres.device == nil {
 			fmt.eprintln("gfx: device request failed")
-			_close_window_context(ctx)
+			_abandon_window_context(ctx)
 			return
 		}
 		ctx.device = dres.device
 		ctx.queue = wg.DeviceGetQueue(ctx.device)
 		if ctx.queue == nil {
 			fmt.eprintln("gfx: device returned no queue")
-			_close_window_context(ctx)
+			_abandon_window_context(ctx)
 			return
 		}
 

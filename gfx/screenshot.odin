@@ -19,6 +19,7 @@ package gfx
 
 import "base:runtime"
 import "core:strings"
+import "core:sync"
 import stbi "vendor:stb/image"
 import wg "vendor:wgpu"
 
@@ -95,10 +96,19 @@ _screenshot_bgra_to_rgba :: proc(pixels: []u8) -> bool {
 	return true
 }
 
-@(private)
+// Screenshot_Map is the one screenshot map registration a context may hold.
+// It lives in the Context, not on the stack: the pinned backend delivers the
+// callback inline from DevicePoll, BufferUnmap or BufferDestroy, so a record
+// that outlives its registration must outlive every one of those calls. While
+// `armed`, the record owns `staging` and refuses a new capture; only an
+// observed terminal callback releases either.
+// The web stub in screenshot_web.odin mirrors this layout.
 Screenshot_Map :: struct {
-	done:   bool,
-	status: wg.MapAsyncStatus,
+	staging: wg.Buffer,
+	status:  wg.MapAsyncStatus,
+	armed:   bool,
+	done:    bool,
+	stray:   u32,
 }
 
 @(private)
@@ -108,10 +118,41 @@ _screenshot_map_done :: proc "c" (
 	userdata1, userdata2: rawptr,
 ) {
 	context = runtime.default_context()
-	state := cast(^Screenshot_Map)userdata1
-	if state == nil do return
-	state.status = status
-	state.done = true
+	record := cast(^Screenshot_Map)userdata1
+	if record == nil do return
+	if !sync.atomic_load_explicit(&record.armed, .Acquire) || sync.atomic_load(&record.done) {
+		sync.atomic_add(&record.stray, 1)
+		return
+	}
+	record.status = status
+	sync.atomic_store_explicit(&record.done, true, .Release)
+}
+
+// _screenshot_retire proves the held registration terminal and releases its
+// staging buffer. `wait` bounds the device polls; false means the record is
+// still armed and the caller must not destroy the context or unload code.
+@(private)
+_screenshot_retire :: proc(ctx: ^Context, wait: bool) -> bool {
+	assert(ctx != nil, "_screenshot_retire: nil context")
+	record := &ctx.screenshot
+	ctx.gpu_timing.health.stray_callbacks += u64(sync.atomic_exchange(&record.stray, 0))
+	if !record.armed do return true
+	polls := SCREENSHOT_MAX_POLLS if wait else 1
+	for _ in 0 ..< polls {
+		if sync.atomic_load_explicit(&record.done, .Acquire) do break
+		if ctx.device == nil do break
+		wg.DevicePoll(ctx.device, wait, nil)
+	}
+	if wait && !sync.atomic_load_explicit(&record.done, .Acquire) && ctx.device != nil {
+		// Cancel is a request, not a join; the observed callback below decides.
+		wg.BufferUnmap(record.staging)
+	}
+	if !sync.atomic_load_explicit(&record.done, .Acquire) do return false
+	if record.status == .Success do wg.BufferUnmap(record.staging)
+	wg.BufferDestroy(record.staging)
+	wg.BufferRelease(record.staging)
+	record^ = {}
+	return true
 }
 
 // _screenshot_copy copies the whole texture into a fresh MapRead staging buffer
@@ -164,22 +205,33 @@ _screenshot_copy :: proc(
 }
 
 // _screenshot_map blocks until `staging` is host-readable. The poll count is
-// capped so a lost device fails instead of hanging the capture process.
+// capped so a lost device fails instead of hanging the capture process. On
+// timeout the registration stays armed in ctx.screenshot, which takes over
+// `staging`; the caller must not touch the buffer after a false return.
 @(private)
 _screenshot_map :: proc(ctx: ^Context, staging: wg.Buffer, size: int) -> bool {
 	assert(ctx != nil, "_screenshot_map: nil context")
 	assert(staging != nil, "_screenshot_map: nil staging buffer")
 	assert(size > 0, "_screenshot_map: empty mapping")
-	state := Screenshot_Map{}
+	record := &ctx.screenshot
+	assert(!record.armed, "_screenshot_map: previous registration still armed")
+	record^ = {
+		staging = staging,
+	}
+	sync.atomic_store_explicit(&record.armed, true, .Release)
 	wg.BufferMapAsync(
 		staging,
 		{.Read},
 		0,
 		uint(size),
-		{mode = .AllowProcessEvents, callback = _screenshot_map_done, userdata1 = &state},
+		{mode = .AllowProcessEvents, callback = _screenshot_map_done, userdata1 = record},
 	)
 	for _ in 0 ..< SCREENSHOT_MAX_POLLS {
-		if state.done do return state.status == .Success
+		if sync.atomic_load_explicit(&record.done, .Acquire) {
+			ok := record.status == .Success
+			record^ = {}
+			return ok
+		}
 		wg.DevicePoll(ctx.device, true, nil)
 	}
 	return false
@@ -198,6 +250,9 @@ context_screenshot_pixels :: proc(
 ) {
 	assert(ctx != nil, "context_screenshot_pixels: nil context")
 	if !ctx.initialized do return nil, false
+	// A capture stranded by an earlier timeout still owns its staging buffer;
+	// give it one non-blocking poll to retire before refusing this capture.
+	if !_screenshot_retire(ctx, false) do return nil, false
 	entry := context_get_texture(ctx, target.texture.id)
 	if entry == nil do return nil, false
 	assert(entry.tex != nil, "_screenshot_pixels: registered entry without a texture")
@@ -210,12 +265,12 @@ context_screenshot_pixels :: proc(
 	padded_bpr := _screenshot_padded_bpr(width)
 	staging := _screenshot_copy(ctx, entry.tex, width, height, padded_bpr)
 	if staging == nil do return nil, false
+	size := padded_bpr * height
+	if !_screenshot_map(ctx, staging, size) do return nil, false
 	defer {
 		wg.BufferDestroy(staging)
 		wg.BufferRelease(staging)
 	}
-	size := padded_bpr * height
-	if !_screenshot_map(ctx, staging, size) do return nil, false
 	mapped := wg.BufferGetConstMappedRange(staging, 0, uint(size))
 	if mapped == nil do return nil, false
 
