@@ -2,7 +2,7 @@ import argparse
 import json
 from pathlib import Path
 
-from replay_inputs import atlas_pixels, window_geometry
+from replay_inputs import atlas_pixels, attachment_clear_bytes, window_geometry
 
 
 def selected_window_readiness(payload, record):
@@ -22,10 +22,10 @@ def selected_window_readiness(payload, record):
             "batch_shader", "compiled built-in shader source unavailable")
     require(record.get("clear_bits_known") is True, "clear_bits_known",
             "exact attachment clear words were not retained")
-    words = record.get("color_clear_bits")
-    require(type(words) is list and len(words) == 4 and
-            all(type(word) is int and 0 <= word < 2**64 for word in words),
-            "color_clear_bits", "requires four exact f64 words")
+    try:
+        attachment_clear_bytes(record)
+    except ValueError as error:
+        require(False, "attachment_clears", str(error))
     require(type(record.get("load")) is int and record["load"] == 2,
             "load", "initial attachment contents unavailable")
     require(type(record.get("store")) is int and record["store"] == 1,
@@ -76,7 +76,8 @@ def selected_window_readiness(payload, record):
             require(type(draw.get("shader_id")) is int and draw["shader_id"] == 0,
                     prefix + ".shader_id", "custom shader unavailable")
             if draw.get("neutral_texture") is True:
-                require(draw.get("atlas_id") == 0 and draw.get("atlas_known") is False,
+                require(type(draw.get("atlas_id")) is int and draw["atlas_id"] == 0 and
+                        draw.get("atlas_known") is False,
                         prefix + ".texture", "contradictory neutral/atlas identity")
             else:
                 require(type(draw.get("atlas_filter")) is int and 0 <= draw["atlas_filter"] <= 5,
@@ -109,6 +110,7 @@ def selected_window_readiness(payload, record):
             require(type(value) is int and 0 <= value < 2**64,
                     "previous." + field, "prior mapped identity/sample missing")
     require(False, "source_manifest", "immutable actual-build shader/pipeline manifest required")
+    require(False, "pipeline_descriptor", "captured pipeline descriptor tied to build required")
     require(False, "queue_topology", "complete producer/resolve command topology required")
     return dict(bundle_version=1, ready=False, missing_inputs=missing)
 

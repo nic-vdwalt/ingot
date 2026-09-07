@@ -12,7 +12,7 @@ class WindowReadinessTests(unittest.TestCase):
                     count=3, instances=1, projection_bits=[1, 1, 1, 0], pipeline_kind=0,
                     pipeline_style=0, shader_id=0, neutral_texture=True, atlas_id=0,
                     atlas_known=False, scissor=[0, 0, 2560, 1440])
-        record = dict(clear_bits_known=True, color_clear_bits=[0, 0, 0, 0], load=2,
+        record = dict(clear_bits_known=True, color_clear_bits=[0, 0, 0, 0], depth_clear_bits=0, load=2,
                       store=1, sample_count=1, format=27, width=2560, height=1440,
                       encoder_id=1, submit_ordinal=1, resolve_ordinal=1, resolve_encoder_id=1,
                       epoch=1, frame=1, generation=1, map_request=1, depth_format=0,
@@ -21,7 +21,7 @@ class WindowReadinessTests(unittest.TestCase):
                       draw_count=1, draws=[draw], draws_dropped=0, previous=dict(valid=False))
         report = selected_window_readiness(payload, record)
         self.assertEqual({item["field"] for item in report["missing_inputs"]},
-                         {"source_manifest", "queue_topology"})
+                         {"source_manifest", "pipeline_descriptor", "queue_topology"})
         self.assertFalse(report["ready"])
         draw["neutral_texture"] = False
         report = selected_window_readiness(payload, record)

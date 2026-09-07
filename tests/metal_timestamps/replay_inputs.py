@@ -28,6 +28,17 @@ def packed_words(words, count):
     return struct.pack("<" + "I" * count, *words)
 
 
+def attachment_clear_bytes(record):
+    checked_object(record)
+    if record.get("clear_bits_known") is not True:
+        raise ValueError("exact attachment clears unavailable")
+    words = checked_array(record.get("color_clear_bits"), 4)
+    if len(words) != 4 or any(type(word) is not int or not 0 <= word < 2**64
+                              for word in words):
+        raise ValueError("invalid f64 clear words")
+    return struct.pack("<4Q", *words), packed_words([record.get("depth_clear_bits")], 1)
+
+
 def window_geometry(payload, draw):
     checked_object(payload)
     checked_object(draw)

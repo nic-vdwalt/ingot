@@ -1,7 +1,29 @@
 import base64
 import unittest
 
-from replay_inputs import ATLAS_DIM, atlas_pixels, window_geometry
+from replay_inputs import ATLAS_DIM, atlas_pixels, attachment_clear_bytes, window_geometry
+
+
+class ClearReplayTests(unittest.TestCase):
+    def test_exact_clear_words(self):
+        record = dict(clear_bits_known=True,
+                      color_clear_bits=[0x8000000000000000, 1, 0x7ff8000000001234,
+                                        0x3fb1111111111111], depth_clear_bits=0x3eaaaaab)
+        color, depth = attachment_clear_bytes(record)
+        self.assertEqual(len(color), 32)
+        self.assertEqual(color[:8].hex(), "0000000000000080")
+        self.assertEqual(color[16:24].hex(), "341200000000f87f")
+        self.assertEqual(depth.hex(), "abaaaa3e")
+
+    def test_rejects_missing_or_invalid_clear_words(self):
+        base = dict(clear_bits_known=True, color_clear_bits=[0] * 4, depth_clear_bits=0)
+        for field, value in (("clear_bits_known", False), ("color_clear_bits", [0] * 3),
+                             ("color_clear_bits", [True] * 4),
+                             ("color_clear_bits", [2**64] * 4),
+                             ("depth_clear_bits", -1), ("depth_clear_bits", None)):
+            with self.subTest(field=field, value=value):
+                with self.assertRaises(ValueError):
+                    attachment_clear_bytes(dict(base, **{field: value}))
 
 
 class GeometryReplayTests(unittest.TestCase):
@@ -13,6 +35,15 @@ class GeometryReplayTests(unittest.TestCase):
         self.draw = dict(geometry_id=1, projection_known=True, indexed=True,
                          path="Batch_Builtin", known=True,
                          count=1, instances=1, projection_bits=[1, 2, 3, 4])
+
+    def test_geometry_schema_compatibility(self):
+        expected = window_geometry(self.payload, self.draw)
+        for version in (6, 7, 8):
+            with self.subTest(version=version):
+                self.assertEqual(window_geometry(dict(self.payload, version=version), self.draw),
+                                 expected)
+        with self.assertRaises(ValueError):
+            window_geometry(dict(self.payload, version=9), self.draw)
 
     def test_exact_little_endian_vertex_layout(self):
         vertices, indices, projection = window_geometry(self.payload, self.draw)
@@ -77,6 +108,15 @@ class AtlasReplayTests(unittest.TestCase):
             ],
         }
         self.draw = dict(atlas_id=1, atlas_upload_count=2, atlas_known=True)
+
+    def test_atlas_schema_compatibility(self):
+        expected = atlas_pixels(self.payload, self.draw)
+        for version in (7, 8):
+            with self.subTest(version=version):
+                self.assertEqual(atlas_pixels(dict(self.payload, version=version), self.draw),
+                                 expected)
+        with self.assertRaises(ValueError):
+            atlas_pixels(dict(self.payload, version=6), self.draw)
 
     def test_prefix_excludes_later_updates_and_other_atlases(self):
         pixels = atlas_pixels(self.payload, self.draw)

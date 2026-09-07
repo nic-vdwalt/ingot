@@ -113,6 +113,7 @@ Renderer :: struct {
 	alt_n:                 int,
 	ubuf:                  wg.Buffer,
 	diagnostic_projection: [4 when GPU_TIMING_DIAGNOSTICS else 0]f32,
+	diagnostic_pipelines: [8 when GPU_TIMING_DIAGNOSTICS else 0]Gpu_Timing_Batch_Pipeline,
 	ubind:                 wg.BindGroup,
 	ubind_layout:          wg.BindGroupLayout,
 	tex_layout:            wg.BindGroupLayout, // group(1): texture + sampler
