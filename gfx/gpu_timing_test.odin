@@ -41,7 +41,7 @@ gpu_timing_sample_completion_transitions_are_explicit :: proc(t: ^testing.T) {
 	state := new(Gpu_Timing_State)
 	defer free(state)
 	state.slots[2] = {
-		phase       = .Recording,
+		phase       = .Resolved,
 		generation  = 7,
 		query_count = 2,
 	}
@@ -77,7 +77,7 @@ gpu_timing_sample_completion_rejects_failure_duplicate_and_stale_identity :: pro
 	state := new(Gpu_Timing_State)
 	defer free(state)
 	state.slots[0] = {
-		phase       = .Recording,
+		phase       = .Resolved,
 		generation  = 4,
 		query_count = 2,
 	}
@@ -111,7 +111,7 @@ gpu_timing_sample_failure_retires_without_a_result :: proc(t: ^testing.T) {
 	state := new(Gpu_Timing_State)
 	defer free(state)
 	state.slots[1] = {
-		phase       = .Recording,
+		phase       = .Resolved,
 		generation  = 9,
 		query_count = 2,
 	}
@@ -144,6 +144,8 @@ gpu_timing_sample_arm_requires_recording_ownership :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, !_gpu_timing_sample_arm(state, 0))
 	state.slots[0].query_count = 2
+	testing.expect(t, !_gpu_timing_sample_arm(state, 0))
+	state.slots[0].phase = .Resolved
 	testing.expect(t, _gpu_timing_sample_arm(state, 0))
 	testing.expect(t, !_gpu_timing_sample_arm(state, 0))
 	testing.expect_value(t, _gpu_timing_pending_count(state), u32(1))

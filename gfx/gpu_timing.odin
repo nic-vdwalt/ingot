@@ -50,17 +50,20 @@ Gpu_Frame_Timing_Detail :: struct {
 // A slot walks this machine and only the submitting/collecting thread moves
 // it; the backend callback never touches a slot.
 //
-//   Free -> Recording -> Sample_Pending -> Resolve_Submitted -> Map_Pending
-//   Sample_Pending -> Sample_Failed -> Free            (collector retires)
-//   Map_Pending -> Result_Ready | Map_Failed -> Free   (collector retires)
-//   Sample_Pending | Map_Pending -> Quarantined        (retire unproved at close)
-//   Quarantined -> Free                                (terminal callback observed later)
+//   Free -> Recording -> Resolved -> Sample_Pending
+//   Sample_Pending -> Resolve_Submitted -> Map_Pending (collector owns both transitions)
+//   Sample_Pending -> Sample_Failed -> Free             (collector retires)
+//   Resolve_Submitted -> Resolve_Failed -> Free         (collector retires)
+//   Map_Pending -> Result_Ready | Map_Failed -> Free    (collector retires)
+//   Sample_Pending | Map_Pending -> Quarantined         (retire unproved at close)
+//   Quarantined -> Free                                 (terminal callback observed later)
 Gpu_Timing_Phase :: enum u8 {
 	Free,
 	Recording,
 	Resolved,
 	Sample_Pending,
 	Resolve_Submitted,
+	Resolve_Failed,
 	Sample_Failed,
 	Map_Pending,
 	Result_Ready,
@@ -216,13 +219,12 @@ _gpu_timing_init :: proc(ctx: ^Context) -> bool {
 	return true
 }
 
-// _gpu_timing_slot_in_flight reports a slot whose map registration is armed
-// with the backend and has not been retired by the collector.
+// _gpu_timing_slot_in_flight reports a slot whose completion or map callback
+// registration is armed with the backend and not yet retired by the collector.
 _gpu_timing_slot_in_flight :: proc(slot: ^Gpu_Timing_Slot) -> bool {
 	assert(slot != nil)
 	return(
 		slot.phase == .Sample_Pending ||
-		slot.phase == .Resolve_Submitted ||
 		slot.phase == .Map_Pending ||
 		slot.phase == .Quarantined \
 	)
@@ -248,9 +250,9 @@ _gpu_timing_pending_count :: proc(state: ^Gpu_Timing_State) -> u32 {
 	return pending
 }
 
-// _gpu_timing_quiesce drives every armed map registration to its terminal
-// callback with bounded device polls, without closing the state. Returns
-// false when a registration is still unproved after the bound.
+// _gpu_timing_quiesce drives every armed callback registration to its terminal
+// callback with bounded device polls, without closing the state. Returns false
+// when a registration is still unproved after the bound.
 _gpu_timing_quiesce :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_gpu_timing_quiesce: nil context")
 	when ODIN_OS != .JS {
@@ -286,7 +288,9 @@ _gpu_timing_retire :: proc(ctx: ^Context) -> bool {
 	}
 	state.quarantined = 0
 	for &slot in state.slots {
-		if slot.phase == .Map_Pending do slot.phase = .Quarantined
+		if slot.phase == .Sample_Pending || slot.phase == .Map_Pending {
+			slot.phase = .Quarantined
+		}
 		if slot.phase == .Quarantined do state.quarantined += 1
 	}
 	return state.quarantined == 0
@@ -299,7 +303,7 @@ _gpu_timing_release :: proc(ctx: ^Context) {
 	assert(ctx != nil, "_gpu_timing_release: nil context")
 	assert(
 		_gpu_timing_pending_count(&ctx.gpu_timing) == 0,
-		"_gpu_timing_release: map registrations still armed",
+		"_gpu_timing_release: callback registrations still armed",
 	)
 	for &slot in ctx.gpu_timing.slots {
 		if slot.readback != nil {
@@ -450,20 +454,15 @@ _gpu_timing_frame_resolve :: proc(ctx: ^Context, encoder: wg.CommandEncoder) {
 	if ctx == nil || encoder == nil || ctx.gpu_timing.active_slot < 0 do return
 	slot := &ctx.gpu_timing.slots[ctx.gpu_timing.active_slot]
 	if slot.query_count == 0 do return
-	assert(slot.phase == .Recording, "gpu timing: resolve outside recording")
+	assert(slot.phase == .Recording, "gpu timing: frame close outside recording")
+	// Query resolution is intentionally absent from the render submission. The
+	// collector encodes it only after that submission's completion callback.
 	slot.phase = .Resolved
-	when GPU_TIMING_DIAGNOSTICS {
-		ctx.gpu_timing.diagnostics[0].resolve_encoder[ctx.gpu_timing.active_slot] = encoder
-	}
-	bytes := u64(slot.query_count) * size_of(u64)
-	wg.CommandEncoderResolveQuerySet(encoder, slot.query_set, 0, slot.query_count, slot.resolve, 0)
-	wg.CommandEncoderCopyBufferToBuffer(encoder, slot.resolve, 0, slot.readback, 0, bytes)
 }
 
-// _gpu_timing_frame_submitted arms the slot's map record and registers it.
-// The record is fully written and armed before BufferMapAsync because the
-// pinned backend may run the callback inline (validation failure now, or any
-// later QueueSubmit/DevicePoll), and the callback only trusts an armed record.
+// _gpu_timing_frame_submitted transfers ownership from the render encoder to
+// one queue-completion record. The callback may run inline, so the identity is
+// fully initialized and armed before registration.
 _gpu_timing_frame_submitted :: proc(ctx: ^Context) {
 	if ctx == nil || ctx.gpu_timing.active_slot < 0 do return
 	index := ctx.gpu_timing.active_slot
@@ -473,29 +472,18 @@ _gpu_timing_frame_submitted :: proc(ctx: ^Context) {
 		slot.phase = .Free
 		return
 	}
-	assert(slot.phase == .Resolved, "gpu timing: submit before resolve")
+	assert(slot.phase == .Resolved, "gpu timing: submit before frame close")
 	assert(slot.query_count <= GPU_TIMING_QUERY_COUNT && slot.query_count % 2 == 0)
-	ctx.gpu_timing.submission += 1
-	assert(ctx.gpu_timing.submission != 0)
-	slot.submission = ctx.gpu_timing.submission
-	record := &ctx.gpu_timing.requests[index]
-	assert(!record.armed && !record.done, "gpu timing: free slot with a live map record")
-	_gpu_timing_fold_stray(&ctx.gpu_timing, record)
-	record^ = {
-		slot_index  = u32(index),
-		generation  = slot.generation,
-		submission  = slot.submission,
-		query_count = slot.query_count,
-		readback    = slot.readback,
-	}
-	slot.phase = .Map_Pending
-	sync.atomic_store_explicit(&record.armed, true, .Release)
-	wg.BufferMapAsync(
-		slot.readback,
-		{.Read},
-		0,
-		uint(u64(slot.query_count) * size_of(u64)),
-		{mode = .AllowSpontaneos, callback = _gpu_timing_map_done, userdata1 = record},
+	assert(_gpu_timing_sample_arm(&ctx.gpu_timing, index))
+	record := &ctx.gpu_timing.sample_requests[index]
+	wg.QueueOnSubmittedWorkDone(
+		ctx.queue,
+		{
+			mode = .AllowSpontaneos,
+			callback = _gpu_timing_sample_done,
+			userdata1 = record,
+			userdata2 = rawptr(uintptr(record.submission)),
+		},
 	)
 }
 
@@ -529,7 +517,7 @@ _gpu_timing_sample_record_matches_slot :: proc(
 	if slot == nil do return false
 	return(
 		record.armed &&
-		slot.phase == .Sample_Pending &&
+		(slot.phase == .Sample_Pending || slot.phase == .Quarantined) &&
 		record.slot_index == u32(slot_index) &&
 		record.generation == slot.generation &&
 		record.submission == slot.submission &&
@@ -573,7 +561,7 @@ _gpu_timing_sample_arm :: proc(state: ^Gpu_Timing_State, slot_index: int) -> boo
 	if state == nil || slot_index < 0 || slot_index >= GPU_TIMING_FRAME_SLOTS do return false
 	slot := &state.slots[slot_index]
 	record := &state.sample_requests[slot_index]
-	if slot.phase != .Recording || slot.query_count == 0 || record.armed || record.done do return false
+	if slot.phase != .Resolved || slot.query_count == 0 || record.armed || record.done do return false
 	state.submission += 1
 	if state.submission == 0 do return false
 	slot.submission = state.submission
@@ -668,49 +656,118 @@ _gpu_timing_detail :: proc(
 	return result, true
 }
 
-// _gpu_timing_collect is the only retirer of map records. It consumes each
-// published result into the slot, then clears the record; a callback arriving
-// after that point is stray by the backend contract and only counted.
+_gpu_timing_map_arm :: proc(ctx: ^Context, slot_index: int) {
+	assert(ctx != nil && slot_index >= 0 && slot_index < GPU_TIMING_FRAME_SLOTS)
+	slot := &ctx.gpu_timing.slots[slot_index]
+	record := &ctx.gpu_timing.requests[slot_index]
+	assert(slot.phase == .Resolve_Submitted, "gpu timing: map before resolve submission")
+	assert(!record.armed && !record.done, "gpu timing: map record already owned")
+	record^ = {
+		slot_index  = u32(slot_index),
+		generation  = slot.generation,
+		submission  = slot.submission,
+		query_count = slot.query_count,
+		readback    = slot.readback,
+	}
+	slot.phase = .Map_Pending
+	sync.atomic_store_explicit(&record.armed, true, .Release)
+	wg.BufferMapAsync(
+		slot.readback,
+		{.Read},
+		0,
+		uint(u64(slot.query_count) * size_of(u64)),
+		{mode = .AllowSpontaneos, callback = _gpu_timing_map_done, userdata1 = record},
+	)
+}
+
+_gpu_timing_resolve_submit :: proc(ctx: ^Context, slot_index: int) -> bool {
+	assert(ctx != nil && slot_index >= 0 && slot_index < GPU_TIMING_FRAME_SLOTS)
+	slot := &ctx.gpu_timing.slots[slot_index]
+	assert(slot.phase == .Resolve_Submitted, "gpu timing: resolve has no completion owner")
+	encoder := _gpu_timing_command_encoder(ctx, "gpu timing completion resolve")
+	if encoder == nil do return false
+	bytes := u64(slot.query_count) * size_of(u64)
+	wg.CommandEncoderResolveQuerySet(encoder, slot.query_set, 0, slot.query_count, slot.resolve, 0)
+	wg.CommandEncoderCopyBufferToBuffer(encoder, slot.resolve, 0, slot.readback, 0, bytes)
+	when GPU_TIMING_DIAGNOSTICS {
+		ctx.gpu_timing.diagnostics[0].resolve_encoder[slot_index] = encoder
+	}
+	command := wg.CommandEncoderFinish(encoder, nil)
+	if command == nil {
+		_gpu_timing_diagnostic_encoder_retire(&ctx.gpu_timing.diagnostics[0], encoder)
+		wg.CommandEncoderRelease(encoder)
+		return false
+	}
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_diagnostic_submit(&ctx.gpu_timing.diagnostics[0], encoder)
+	}
+	wg.QueueSubmit(ctx.queue, {command})
+	wg.CommandBufferRelease(command)
+	wg.CommandEncoderRelease(encoder)
+	_gpu_timing_map_arm(ctx, slot_index)
+	return true
+}
+
+_gpu_timing_collect_map :: proc(ctx: ^Context, slot: ^Gpu_Timing_Slot, slot_index: int) {
+	assert(ctx != nil && slot != nil)
+	record := &ctx.gpu_timing.requests[slot_index]
+	assert(_gpu_timing_record_matches_slot(record^, slot, slot_index))
+	slot.map_status = record.status
+	if record.mapped {
+		slot.phase = .Result_Ready
+		copy(slot.ticks[:record.query_count], record.ticks[:record.query_count])
+		_gpu_timing_diagnostic_collect(ctx, slot_index)
+		detail, ok := _gpu_timing_detail(
+			slot.ticks[:],
+			slot.labels[:],
+			slot.query_count / 2,
+			ctx.gpu_timing.timestamp_period,
+		)
+		if ok {
+			detail.frame_index = slot.frame_index
+			detail.epoch = slot.epoch
+			_gpu_timing_enqueue(&ctx.gpu_timing, detail)
+		} else {
+			_gpu_timing_record_invalid(&ctx.gpu_timing, slot, slot_index)
+		}
+	} else {
+		slot.phase = .Map_Failed
+		ctx.gpu_timing.health.map_failure += 1
+	}
+	if record.status == .Success && slot.readback != nil do wg.BufferUnmap(slot.readback)
+	record^ = {}
+	slot.query_count = 0
+	slot.phase = .Free
+}
+
+// _gpu_timing_collect is the sole owner of slot transitions after submission.
+// Callbacks only publish terminal status into their stable request records.
 _gpu_timing_collect :: proc(ctx: ^Context) {
 	if ctx == nil || !ctx.gpu_timing.available do return
 	for &slot, slot_index in ctx.gpu_timing.slots {
-		record := &ctx.gpu_timing.requests[slot_index]
-		_gpu_timing_fold_sample_stray(&ctx.gpu_timing, &ctx.gpu_timing.sample_requests[slot_index])
-		_gpu_timing_fold_stray(&ctx.gpu_timing, record)
-		if !_gpu_timing_slot_in_flight(&slot) do continue
-		if !sync.atomic_load_explicit(&record.done, .Acquire) do continue
-		assert(
-			_gpu_timing_record_matches_slot(record^, &slot, slot_index),
-			"gpu timing: map record identity diverged from its slot",
-		)
-		slot.map_status = record.status
-		if record.mapped {
-			slot.phase = .Result_Ready
-			copy(slot.ticks[:record.query_count], record.ticks[:record.query_count])
-			_gpu_timing_diagnostic_collect(ctx, slot_index)
-			detail, ok := _gpu_timing_detail(
-				slot.ticks[:],
-				slot.labels[:],
-				slot.query_count / 2,
-				ctx.gpu_timing.timestamp_period,
-			)
-			if ok {
-				detail.frame_index = slot.frame_index
-				detail.epoch = slot.epoch
-				_gpu_timing_enqueue(&ctx.gpu_timing, detail)
-			} else {
-				_gpu_timing_record_invalid(&ctx.gpu_timing, &slot, slot_index)
+		sample := &ctx.gpu_timing.sample_requests[slot_index]
+		map := &ctx.gpu_timing.requests[slot_index]
+		_gpu_timing_fold_sample_stray(&ctx.gpu_timing, sample)
+		_gpu_timing_fold_stray(&ctx.gpu_timing, map)
+		if sample.armed && sync.atomic_load_explicit(&sample.done, .Acquire) {
+			transition := _gpu_timing_sample_retire(&ctx.gpu_timing, slot_index)
+			assert(transition == .Resolve_Ready || transition == .Failed)
+			if transition == .Failed || ctx.gpu_timing.closing {
+				slot.query_count = 0
+				slot.phase = .Free
+				continue
 			}
-		} else {
-			slot.phase = .Map_Failed
-			ctx.gpu_timing.health.map_failure += 1
+			if !_gpu_timing_resolve_submit(ctx, slot_index) {
+				slot.phase = .Resolve_Failed
+				ctx.gpu_timing.health.resolve_failure += 1
+				slot.query_count = 0
+				slot.phase = .Free
+				continue
+			}
 		}
-		// Only a Success status left the range mapped; unmapping anything else
-		// would raise a backend validation error for a buffer that never mapped.
-		if record.status == .Success && slot.readback != nil do wg.BufferUnmap(slot.readback)
-		record^ = {}
-		slot.query_count = 0
-		slot.phase = .Free
+		if map.armed && sync.atomic_load_explicit(&map.done, .Acquire) {
+			_gpu_timing_collect_map(ctx, &slot, slot_index)
+		}
 	}
 }
 
