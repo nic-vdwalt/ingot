@@ -334,12 +334,14 @@ func encodeRender(_ command: MTLCommandBuffer, _ drawable: CAMetalDrawable, _ in
     pass.colorAttachments[0].loadAction = manifest.attachment.load == 2 ? .clear : .load
     pass.colorAttachments[0].storeAction = manifest.attachment.store == 1 ? .store : .dontCare
     pass.colorAttachments[0].clearColor = MTLClearColor(red: clear[0], green: clear[1], blue: clear[2], alpha: clear[3])
-    let samples = pass.sampleBufferAttachments[0]!
-    samples.sampleBuffer = sampleBuffer
-    samples.startOfVertexSampleIndex = indices[0]
-    samples.endOfVertexSampleIndex = indices.count == 4 ? indices[1] : MTLCounterDontSample
-    samples.startOfFragmentSampleIndex = indices.count == 4 ? indices[2] : MTLCounterDontSample
-    samples.endOfFragmentSampleIndex = indices.last!
+    if !blitBoundarySamples {
+        let samples = pass.sampleBufferAttachments[0]!
+        samples.sampleBuffer = sampleBuffer
+        samples.startOfVertexSampleIndex = indices[0]
+        samples.endOfVertexSampleIndex = indices.count == 4 ? indices[1] : MTLCounterDontSample
+        samples.startOfFragmentSampleIndex = indices.count == 4 ? indices[2] : MTLCounterDontSample
+        samples.endOfFragmentSampleIndex = indices.last!
+    }
     let encoder = command.makeRenderCommandEncoder(descriptor: pass)!
     encoder.label = "mechanism.render"
     for draw in draws {
@@ -522,7 +524,10 @@ for iteration in 0..<iterations {
         if cpu.count == gpu.count {
             record["gpu_matches_cpu"] = cpu == gpu
             record["index_matches_cpu"] = zip(gpu, cpu).map(==)
-            record["index_stale"] = indices.enumerated().map { offset, index in gpu[offset] == priorByIndex[index] && gpu[offset] != 0 }
+            record["prior_cpu_samples"] = indices.map { priorCPUByIndex[$0] }
+            record["index_stale"] = indices.enumerated().map { offset, index in
+                gpu[offset] == priorCPUByIndex[index] && gpu[offset] != 0
+            }
         }
         if gapDispatches > 0 {
             record["gap_gpu_begin"] = words[4]
