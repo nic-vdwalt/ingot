@@ -638,11 +638,11 @@ GPU pass durations resolved in the same command buffer are unsupported on
 Apple M2 Max / macOS 15.6.1. gfx-rs/wgpu#9414 is a different symptom: all-zero
 legacy counter-sample-buffer results on macOS 26 / Metal 4, not this
 stale-by-one-pass result on macOS 15. Its community thread contains an unmerged
-completion-handler-deferred resolve proposal relevant a candidate topology;
+completion-handler-deferred resolve proposal relevant to a candidate topology;
 nothing merged upstream. The render-completed control is not a production
-pair: it it waits on the CPU and
-serialises submissions. No timestamp clamp, vertex-end substitution or dummy
-work is authorised; production must publish this timing scope as unreliable
+repair: it waits on the CPU and serialises submissions. No timestamp clamp,
+vertex-end substitution or dummy work is authorised; production must publish
+this timing scope as unreliable
 (step 5 reliability fields) until a nonblocking deferred-resolve candidate
 built from identical pinned sources passes `evaluate_replay.py`
 (`candidate_passes`: every sample ordered after a single first-use zero, no
@@ -797,6 +797,62 @@ diagnostic replays and the CPU-wait native control are excluded from these
 numbers. GPU pass timing remains `unreliable` until a deferred-resolve
 candidate passes `evaluate_replay.py` on this device.
 
+## September 7 Metal counter-publication mechanism (post step 6)
+
+`artifacts/timing-mechanism-v1/` runs the exact v10 frame-11 pass through pure
+Metal on the Apple M2 Max / macOS 15.6.1. The source and executable SHA are in
+every JSONL header and footer; `run-consistency.json` verifies two 300-iteration
+runs per mode agree within 5 %. This is correctness evidence, not performance
+evidence and not a production repair.
+
+| Experiment | Run 1 | Run 2 | Mechanism evidence |
+|---|---:|---:|---|
+| M0, same-command resolve plus CPU publication polling | 299/300 reversed | 299/300 reversed | The in-buffer read gets the prior end sample while CPU polling sees the current end a median 28.5/29.6 us after its GPU timestamp and 19.8/20.8 us after `command.gpuEndTime`; all 600 observations precede the completed handler. |
+| M1, unique indices | 64 first-use zero + 236 stale-by-64 | identical | The resolve reads the previous value of the same index, not the latest value from another index; excludes H-D. |
+| M2, all four stage boundaries | 298/299 stale fragment pairs | 299/299 stale fragment pairs | Start/end vertex match post-completion CPU values in all 600 iterations; start/end fragment are stale in 596/598 index samples. Publication latency is fragment-stage-specific. |
+| M3, measured compute gap 0 | 299/300 reversed | 299/300 reversed | Baseline race. |
+| M3, one 64 MiB compute dispatch | 300/300 ordered; 1.717 ms median gap | 300/300 ordered; 1.718 ms | Finite GPU distance removes the race. Every larger gap through 32 dispatches is also 300/300 ordered. This gives a coarse 1.717 ms upper bound, not the minimum required distance. |
+| M4, tracked colour-attachment dependency | 295/300 reversed | 299/300 reversed | A real tracked resource dependency does not publish the fragment samples; excludes H-C's resource-hazard explanation. |
+| M5, blit-boundary barrier samples | unsupported | unsupported | `supportsCounterSampling(.atBlitBoundary)` is false on this M2 Max, so this candidate shape cannot be tested or used here. |
+| M6, second resolve buffer enqueued before render commit | 299 ordered + one first-use zero | identical | Nonblocking queue order supplies enough distance and passes `candidate_passes`. This is the selected candidate topology, not yet a production implementation. |
+| M6, resolve committed from scheduled handler | 299/300 reversed | identical | Host scheduling is too early; merely splitting command buffers does not establish sample publication. |
+| M6, resolve committed from completed handler | 300/300 ordered | identical | Completion is sufficient but is not necessary; H-B completion-only snapshot semantics are excluded by M3 and enqueued M6. |
+| Controls | same-command 299/300 reversed; completed 300/300 ordered | identical | Reproduces the September 7 attribution with the extended replay. |
+
+M7 is an Instruments Metal System Trace, not an inference from counter values.
+`evaluate_metal_trace.py` joins the exported `metal-gpu-intervals` rows by the
+labelled command-buffer ID. In 690/690 render/resolve pairs, the resolve blit
+starts **after** fragment execution ends: minimum 0.666 us, median 1.125 us,
+maximum 5.084 us. Therefore Metal did not schedule the resolve ahead of the
+fragment stage; it scheduled it after fragment execution but before that
+stage's counter sample became visible to `resolveCounters`.
+
+`mechanism-verdict.json` selects **H-A: late asynchronous fragment-stage counter
+publication**. The measured publication lag is 29.1 us median and 42.7 us max
+of the two run p95s; M3 proves only that a 1.717 ms measured gap is sufficient.
+The values are compatible: M3's first gap step is deliberately much larger
+than M0's measured lag. H-B is excluded because finite in-buffer distance and
+a resolve command buffer enqueued before render commit both pass. H-C is
+excluded by the tracked dependency failure and the trace order. H-D is
+excluded by the unique-index result.
+
+This is Metal driver/firmware behaviour: the same application with no wgpu or
+ingot code exhibits it. Apple's public `resolveCounters` documentation does
+not specify when a stage-boundary sample becomes visible to a following
+encoder, so the evidence cannot decide whether Apple classifies it as a driver
+defect or unspecified timing. Production remains `unreliable`; only the M6
+enqueued deferred-resolve shape is admitted to a follow-on candidate plan,
+and it must pass the exact replay plus game/Aesir gates before reliability can
+change. gfx-rs/wgpu#9414 remains only a related macOS 26 all-zero report, not
+evidence of this mechanism.
+
+Artifacts: `evaluation.json`, `sweep.json`, `mechanism-verdict.json`,
+`run-consistency.json`; complete M0–M6 JSONLs; the M7 `.trace` bundle and
+`m7-{gpu-intervals,application-encoders,command-buffers}.xml` exports;
+`m7-order.json` and `m7-encoder-order.csv`. The long-running M7 JSONL is
+intentionally incomplete because the process was terminated after the trace;
+`m7-manifest.json` separates it from evaluator input and hashes the trace.
+
 ## Remaining gates
 
 - Ocean pass replay bundle and attribution (never replayed; see ledger).
@@ -813,3 +869,7 @@ candidate passes `evaluate_replay.py` on this device.
 Verification at step 6: 367 gfx tests with diagnostics enabled and disabled;
 34 Python tests; assembled telemetry check v28 (15 tests) enabled and disabled;
 ForgeCore host tests; 65 Aesir memwatch tests and the ui memory tests.
+Post-step-6 mechanism verification: 41 Python tests; Swift replay builds with
+`-warnings-as-errors`; two 300-iteration runs for every M0–M6 mode with
+per-class repeatability within 5 %; 690 M7 render/resolve pairs parsed from the
+exported Instruments table.

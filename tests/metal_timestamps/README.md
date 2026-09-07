@@ -135,6 +135,42 @@ Result on the inspected device: the pinned WebGPU replay and the native
 same-command-buffer GPU resolve fail identically; only a render-completed
 resolve is ordered. See investigation.md, "attribution".
 
+Mechanism experiments reuse the same bundle and write only to a new artifact
+directory. Run each command twice with 300 iterations:
+
+```sh
+swiftc -warnings-as-errors -O \
+  -o artifacts/timing-mechanism-v1/replay-native-metal \
+  tests/metal_timestamps/native_replay.swift
+BIN=artifacts/timing-mechanism-v1/replay-native-metal
+BUNDLE=artifacts/timing-replay-v10-f1
+$BIN $BUNDLE 300 m0.jsonl --publication-latency
+$BIN $BUNDLE 300 m1.jsonl --unique-indices
+$BIN $BUNDLE 300 m2.jsonl --all-stages
+$BIN $BUNDLE 300 m3.jsonl --gap 1
+$BIN $BUNDLE 300 m4.jsonl --tracked-dependency
+$BIN $BUNDLE 300 m5.jsonl --blit-boundary-samples
+$BIN $BUNDLE 300 m6a.jsonl --deferred-resolve enqueued
+$BIN $BUNDLE 300 m6b.jsonl --deferred-resolve scheduled
+$BIN $BUNDLE 300 m6c.jsonl --deferred-resolve completed
+python3 tests/metal_timestamps/evaluate_replay.py m*.jsonl \
+  --manifest evaluation.json --sweep sweep.json \
+  --trace artifacts/timing-mechanism-v1/m7-order.json \
+  --verdict mechanism-verdict.json
+python3 tests/metal_timestamps/evaluate_metal_trace.py \
+  artifacts/timing-mechanism-v1/m7-gpu-intervals.xml \
+  --output m7-order.json --csv m7-encoder-order.csv
+```
+
+The result on Apple M2 Max / macOS 15.6.1 is H-A: fragment-stage counter
+publication lags the fragment-end timestamp by 29.1 us median (42.7 us maximum
+run p95). Instruments shows the resolve blit starts after fragment execution
+in every exported pair, while one measured 1.717 ms GPU gap or a separately
+enqueued resolve buffer removes all reversals. The enqueued deferred-resolve
+shape is the only admitted production candidate; this evidence does not make
+current production timing reliable. See investigation.md, "Metal
+counter-publication mechanism".
+
 Telemetry `gh` carries two ownership counters since the step 3 repair: `sc`
 (backend callbacks that reached a retired or unarmed record) and `cr` (frames
 refused a timing slot after close began). Both must stay 0 in a healthy capture.
@@ -155,7 +191,8 @@ investigation.md, "Aesir qualification and causal ledger". Summary: GPU pass
 timing on this device is published `unreliable`
 (`metal_same_command_buffer_resolve`) and rejected by Aesir; presentation
 cadence has p50 8.33 ms but a mean of two periods and 37–40 % deadline misses,
-so no 120 Hz claim is made and no candidate exists.
+so no 120 Hz claim is made. A diagnostic deferred-resolve shape now passes the
+exact replay, but no production candidate build exists.
 
 ```sh
 python3 tests/metal_timestamps/window_readiness.py \
