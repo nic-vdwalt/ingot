@@ -450,7 +450,7 @@ _gpu_timing_encoder_end :: proc(
 	wg.CommandEncoderWriteTimestamp(encoder, slot.query_set, token.query_end)
 }
 
-_gpu_timing_frame_resolve :: proc(ctx: ^Context, encoder: wg.CommandEncoder) {
+_gpu_timing_frame_close :: proc(ctx: ^Context, encoder: wg.CommandEncoder) {
 	if ctx == nil || encoder == nil || ctx.gpu_timing.active_slot < 0 do return
 	slot := &ctx.gpu_timing.slots[ctx.gpu_timing.active_slot]
 	if slot.query_count == 0 do return
@@ -694,7 +694,9 @@ _gpu_timing_resolve_submit :: proc(ctx: ^Context, slot_index: int) -> bool {
 	}
 	command := wg.CommandEncoderFinish(encoder, nil)
 	if command == nil {
-		_gpu_timing_diagnostic_encoder_retire(&ctx.gpu_timing.diagnostics[0], encoder)
+		when GPU_TIMING_DIAGNOSTICS {
+			_gpu_timing_diagnostic_encoder_retire(&ctx.gpu_timing.diagnostics[0], encoder)
+		}
 		wg.CommandEncoderRelease(encoder)
 		return false
 	}
@@ -713,7 +715,17 @@ _gpu_timing_collect_map :: proc(ctx: ^Context, slot: ^Gpu_Timing_Slot, slot_inde
 	record := &ctx.gpu_timing.requests[slot_index]
 	assert(_gpu_timing_record_matches_slot(record^, slot, slot_index))
 	slot.map_status = record.status
-	if record.mapped {
+	mapped := record.status == .Success
+	if mapped && record.readback != nil {
+		bytes := uint(u64(record.query_count) * size_of(u64))
+		range := wg.BufferGetConstMappedRange(record.readback, 0, bytes)
+		if range == nil {
+			mapped = false
+		} else {
+			mem.copy(raw_data(record.ticks[:]), raw_data(range), int(bytes))
+		}
+	}
+	if mapped {
 		slot.phase = .Result_Ready
 		copy(slot.ticks[:record.query_count], record.ticks[:record.query_count])
 		_gpu_timing_diagnostic_collect(ctx, slot_index)
@@ -746,9 +758,9 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 	if ctx == nil || !ctx.gpu_timing.available do return
 	for &slot, slot_index in ctx.gpu_timing.slots {
 		sample := &ctx.gpu_timing.sample_requests[slot_index]
-		map := &ctx.gpu_timing.requests[slot_index]
+		map_record := &ctx.gpu_timing.requests[slot_index]
 		_gpu_timing_fold_sample_stray(&ctx.gpu_timing, sample)
-		_gpu_timing_fold_stray(&ctx.gpu_timing, map)
+		_gpu_timing_fold_stray(&ctx.gpu_timing, map_record)
 		if sample.armed && sync.atomic_load_explicit(&sample.done, .Acquire) {
 			transition := _gpu_timing_sample_retire(&ctx.gpu_timing, slot_index)
 			assert(transition == .Resolve_Ready || transition == .Failed)
@@ -765,7 +777,7 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 				continue
 			}
 		}
-		if map.armed && sync.atomic_load_explicit(&map.done, .Acquire) {
+		if map_record.armed && sync.atomic_load_explicit(&map_record.done, .Acquire) {
 			_gpu_timing_collect_map(ctx, &slot, slot_index)
 		}
 	}
@@ -884,17 +896,6 @@ _gpu_timing_map_done :: proc "c" (
 		sync.atomic_add(&record.stray, 1)
 		return
 	}
-	ok := status == .Success
-	if ok {
-		bytes := uint(u64(record.query_count) * size_of(u64))
-		mapped := wg.BufferGetConstMappedRange(record.readback, 0, bytes)
-		if mapped == nil {
-			ok = false
-		} else {
-			mem.copy(raw_data(record.ticks[:]), raw_data(mapped), int(bytes))
-		}
-	}
 	record.status = status
-	record.mapped = ok
 	sync.atomic_store_explicit(&record.done, true, .Release)
 }

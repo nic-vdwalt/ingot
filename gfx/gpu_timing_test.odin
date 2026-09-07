@@ -152,6 +152,82 @@ gpu_timing_sample_arm_requires_recording_ownership :: proc(t: ^testing.T) {
 }
 
 @(test)
+gpu_timing_sample_completions_retire_out_of_order :: proc(t: ^testing.T) {
+	state := new(Gpu_Timing_State)
+	defer free(state)
+	for &slot, index in state.slots {
+		slot = {
+			phase       = .Resolved,
+			generation  = u64(index + 1),
+			query_count = 2,
+		}
+		testing.expect(t, _gpu_timing_sample_arm(state, index))
+	}
+	testing.expect_value(t, _gpu_timing_pending_count(state), u32(GPU_TIMING_FRAME_SLOTS))
+	for index in 0 ..< GPU_TIMING_FRAME_SLOTS {
+		slot_index := GPU_TIMING_FRAME_SLOTS - index - 1
+		record := &state.sample_requests[slot_index]
+		_gpu_timing_sample_done(.Success, {}, record, rawptr(uintptr(record.submission)))
+		testing.expect_value(
+			t,
+			_gpu_timing_sample_retire(state, slot_index),
+			Gpu_Timing_Sample_Transition.Resolve_Ready,
+		)
+		testing.expect_value(t, state.slots[slot_index].phase, Gpu_Timing_Phase.Resolve_Submitted)
+	}
+	testing.expect_value(t, _gpu_timing_pending_count(state), u32(0))
+}
+
+@(test)
+gpu_timing_sample_inline_delivery_and_quarantine_retire :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.gpu_timing.available = true
+	slot := &ctx.gpu_timing.slots[3]
+	slot^ = {
+		phase       = .Resolved,
+		generation  = 11,
+		query_count = 2,
+	}
+	testing.expect(t, _gpu_timing_sample_arm(&ctx.gpu_timing, 3))
+	record := &ctx.gpu_timing.sample_requests[3]
+	_gpu_timing_sample_done(.Success, {}, record, rawptr(uintptr(record.submission)))
+	testing.expect(t, record.done)
+	slot.phase = .Quarantined
+	ctx.gpu_timing.closing = true
+	ctx.gpu_timing.quarantined = 1
+	_gpu_timing_collect(ctx)
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Free)
+	testing.expect(t, !record.armed && !record.done)
+	testing.expect_value(t, _gpu_timing_pending_count(&ctx.gpu_timing), u32(0))
+	testing.expect_value(t, ctx.gpu_timing.completed_count, u32(0))
+}
+
+@(test)
+gpu_timing_sample_stale_identity_cannot_advance_slot :: proc(t: ^testing.T) {
+	state := new(Gpu_Timing_State)
+	defer free(state)
+	state.slots[1] = {
+		phase       = .Resolved,
+		generation  = 5,
+		query_count = 2,
+	}
+	testing.expect(t, _gpu_timing_sample_arm(state, 1))
+	slot := &state.slots[1]
+	record := &state.sample_requests[1]
+	_gpu_timing_sample_done(.Success, {}, record, rawptr(uintptr(record.submission)))
+	slot.submission += 1
+	testing.expect_value(
+		t,
+		_gpu_timing_sample_retire(state, 1),
+		Gpu_Timing_Sample_Transition.Stale,
+	)
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Sample_Pending)
+	testing.expect(t, record.armed && record.done)
+	testing.expect_value(t, state.health.sample_failure, u64(0))
+}
+
+@(test)
 gpu_timing_synthetic_cadence_preserves_delayed_completions :: proc(t: ^testing.T) {
 	rates := [2]int{120, 240}
 	for rate in rates {

@@ -999,7 +999,7 @@ context_end_drawing :: proc(ctx: ^Context) {
 		retirement := _submission_reserve(&ctx.submissions)
 		if retirement != 0 do assert(_stream_slot_upload(ctx, &ctx.rend))
 		_gpu_timing_encoder_end(ctx, ctx.frame.encoder, ctx.frame.timing)
-		_gpu_timing_frame_resolve(ctx, ctx.frame.encoder)
+		_gpu_timing_frame_close(ctx, ctx.frame.encoder)
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
 			ctx,
 			ctx.frame.encoder,
