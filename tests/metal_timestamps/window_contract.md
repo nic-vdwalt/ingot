@@ -1,4 +1,4 @@
-# Selected window replay contract, schema 8
+# Selected window replay contract, schema 9
 
 This contract covers the complete built-in window pass, not arbitrary image/custom
 shader draws or ocean passes. A missing input rejects reconstruction rather than
@@ -30,6 +30,16 @@ scissor, which must fit the recorded physical attachment extent.
 Color and alpha use identical Add blending. Slots: Alpha = One/OneMinusSrcAlpha;
 Additive = One/One; Multiplied = Dst/OneMinusSrcAlpha. Custom factors are not retained.
 Output is premultiplied; the selected Unorm target does not add sRGB encoding.
+
+Schema 9 exports `batch_pipelines`: the eight (kind x blend slot) descriptors
+`_make_pipe` handed to the device, keyed `slot + kind * 4`, as pinned wgpu integer
+values (vertex stride/attributes, step mode, primitive, multisample, blend color and
+alpha components, write mask as the bit-set word). Only the first format recorded per
+entry is retained, which is the swapchain set built by `renderer_init`; alt-format
+sets never displace it. `replay_inputs.batch_pipeline` accepts a draw only when the
+descriptor it selected is known, targets the record's attachment format and matches
+the fixed batch contract exactly. The descriptor is captured from the running build,
+but it is still not tied to immutable build provenance.
 
 Window load is Clear (2), store is Store (1). Clear input is four original f64
 words, not parsed human-readable JSON floats. Depth clear is an original f32 word,
@@ -73,8 +83,10 @@ exporter. It checks the retained subset and always reports these outstanding gat
    the pipeline construction sources that accompany the exported WGSL.
 2. Complete producer/resolve command topology for the selected game submission.
 
-The archived `artifacts/timing-window-contract-v1/` source snapshot and SHA manifest
-establish what was inspected, not what built a historical or future game capture.
+The archived `artifacts/timing-window-contract-v1/` and `-v2/` source snapshots and
+SHA manifests establish what was inspected (v2 adds `gpu_timing_pipeline.odin` and
+the schema 9 exporter state; the WGSL hash is unchanged), not what built a
+historical or future game capture.
 Historical v5 additionally lacks exact clears, shader text and all retained draw
 geometry/texture input data. No fill-in operation can retroactively recover those.
 

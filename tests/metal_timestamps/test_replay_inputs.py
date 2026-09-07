@@ -38,12 +38,12 @@ class GeometryReplayTests(unittest.TestCase):
 
     def test_geometry_schema_compatibility(self):
         expected = window_geometry(self.payload, self.draw)
-        for version in (6, 7, 8):
+        for version in (6, 7, 8, 9):
             with self.subTest(version=version):
                 self.assertEqual(window_geometry(dict(self.payload, version=version), self.draw),
                                  expected)
         with self.assertRaises(ValueError):
-            window_geometry(dict(self.payload, version=9), self.draw)
+            window_geometry(dict(self.payload, version=10), self.draw)
 
     def test_exact_little_endian_vertex_layout(self):
         vertices, indices, projection = window_geometry(self.payload, self.draw)
@@ -111,12 +111,14 @@ class AtlasReplayTests(unittest.TestCase):
 
     def test_atlas_schema_compatibility(self):
         expected = atlas_pixels(self.payload, self.draw)
-        for version in (7, 8):
+        for version in (7, 8, 9):
             with self.subTest(version=version):
                 self.assertEqual(atlas_pixels(dict(self.payload, version=version), self.draw),
                                  expected)
         with self.assertRaises(ValueError):
             atlas_pixels(dict(self.payload, version=6), self.draw)
+        with self.assertRaises(ValueError):
+            atlas_pixels(dict(self.payload, version=10), self.draw)
 
     def test_prefix_excludes_later_updates_and_other_atlases(self):
         pixels = atlas_pixels(self.payload, self.draw)

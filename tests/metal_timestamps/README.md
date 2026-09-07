@@ -84,7 +84,7 @@ verified before claiming an exact binary-source match.
 
 `replay_inputs.py` reconstructs little-endian 36-byte vertices, u32 indices and
 16-byte projection uniforms without parsing float text. Geometry supports schemas
-6–8; atlas reconstruction supports 7–8. Atlas uploads apply in recorded order to a
+6–9; atlas reconstruction supports 7–9; pipeline descriptors require schema 9. Atlas uploads apply in recorded order to a
 zero 2048-square R8 base, using only the draw's submitted upload prefix. Later
 capture-wide drops do not invalidate an already sealed known prefix.
 
@@ -93,6 +93,12 @@ identity and exact attachment clear words: four u64 words for WebGPU f64 color a
 one u32 word for f32 depth. Human-readable float values are not replay authority.
 A neutral texture is a 1×1 white RGBA8Unorm texture with nearest/clamp sampling;
 a nil or unrelated binding is not neutral evidence.
+
+Schema 9 adds `batch_pipelines`: the retained swapchain-format descriptors for all
+eight built-in (kind x blend) batch pipelines, written as pinned wgpu integers.
+`window_readiness.py` now verifies the descriptor each draw selected against the
+fixed batch contract instead of reporting `pipeline_descriptor` as unconditionally
+missing. Remaining unconditional gates are `source_manifest` and `queue_topology`.
 
 ```sh
 python3 tests/metal_timestamps/window_readiness.py \

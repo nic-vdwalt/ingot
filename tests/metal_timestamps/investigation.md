@@ -388,10 +388,21 @@ pipeline manifest and complete producer/resolve command topology; it cannot cert
 replay even when the retained buffer subset is complete. The report is not a GPU
 replay. No new game capture was made during this implementation.
 
-Verification: 358 gfx tests enabled/disabled after submit-hook changes; enabled
-rerun after projection-binding guards; 19 Python tests; v22 five focused telemetry
-tests enabled and disabled. v22 remains preserved-baseline union evidence, not
-current gameplay build verification. Gfx assertion checking passes after adding
+Schema 9 closes the pipeline-descriptor input: `_make_pipe` now records the exact
+descriptor it hands to the device (vertex layout, primitive, multisample, blend,
+write mask, target format) into `Renderer.diagnostic_pipelines`, keyed by (kind,
+blend slot), keeping only the swapchain-format set. ForgeCore exports the eight
+entries as pinned integers under `batch_pipelines`. `replay_inputs.batch_pipeline`
+verifies the draw's selected descriptor against the fixed contract and the record's
+attachment format; readiness now reports only `source_manifest` and
+`queue_topology` unconditionally. The v5 capture additionally fails this check.
+The `timing-window-contract-v2` snapshot records the post-change sources; its WGSL
+hash equals v1.
+
+Verification: 359 gfx tests enabled/disabled after pipeline retention; 26 Python
+tests; v23 six focused telemetry tests enabled and disabled (adds
+`telemetry_diagnostic_pipeline_roundtrips_pinned_values`). v22/v23 remain
+preserved-baseline union evidence, not current gameplay build verification. Gfx assertion checking passes after adding
 actual query/slot bounds at the render-pass hook. A direct gfx style scan reports
 pre-existing long JavaScript strings in platform_web.odin. Concurrent repository
 hygiene-script changes were left untouched.
