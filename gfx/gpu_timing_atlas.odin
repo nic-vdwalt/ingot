@@ -81,11 +81,11 @@ _gpu_timing_atlas_upload :: proc(
 		byte_count  = u32(byte_count),
 	}
 	for row in 0 ..< height {
-		source_offset := row * stride
+		source_offset := u64(row) * u64(stride)
 		target_offset := state.byte_count + row * width
 		copy(
 			state.bytes[target_offset:target_offset + width],
-			pixels[source_offset:source_offset + width],
+			pixels[source_offset:source_offset + u64(width)],
 		)
 	}
 	state.byte_count += u32(byte_count)

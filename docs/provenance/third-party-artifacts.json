@@ -118,6 +118,47 @@
           "sha256": "13f2cb734b2c0c63a47a5aa3d1faab0d06ed5c44e388a2b92dc5688133cbc336"
         }
       ]
+    },
+    {
+      "name": "Metal timestamp investigation retained binaries",
+      "version": "v4-v5",
+      "source": "tests/metal_timestamps/investigation.md",
+      "build": "Isolated diagnostic host/client builds using artifacts/timing-odin-control/odin and the source-built wgpu backend; not production dependencies or CI executables",
+      "identity_audits": [
+        "artifacts/timestamp-control-v4-identity-audit.json",
+        "artifacts/timing-game-v5/identity-audit.json"
+      ],
+      "limitations": [
+        "Retention records identify surviving bytes, not exhaustive pre-build provenance or proof of capture-time immutability.",
+        "The v4 and v5 audits identify the compiler and build/game.dylib artifacts; the remaining v4 game libraries share the current surviving-byte checksum but are not independently identified by those audits.",
+        "These entries preserve investigation evidence only; they do not qualify timing correctness, capture health, or reproducibility."
+      ],
+      "artifacts": [
+        {
+          "path": "artifacts/timing-game-v5/build/game.dylib",
+          "sha256": "1d4444a5e025f62c45c96003263b48310c1ae40d12c9b1b1116215d885a3c352"
+        },
+        {
+          "path": "artifacts/timing-odin-control/odin",
+          "sha256": "5baf1357026c5eab3e6a729f951e9caeacd192df2bf7a5be58107cb830f9110b"
+        },
+        {
+          "path": "artifacts/timing-source-control/build/game.dylib",
+          "sha256": "8146074b905fb7e1d50b46dd44e11759a1f5ee1bc64d50ed2cb853798bb38751"
+        },
+        {
+          "path": "artifacts/timing-source-control/build/game_45950_0.dylib",
+          "sha256": "4c0523c8ce6aa9805d74f8ff509a957ed588ea4e9d4ce7b5b58c773db0987e34"
+        },
+        {
+          "path": "artifacts/timing-source-control/build/game_47743_0.dylib",
+          "sha256": "4c0523c8ce6aa9805d74f8ff509a957ed588ea4e9d4ce7b5b58c773db0987e34"
+        },
+        {
+          "path": "artifacts/timing-source-control/game.dylib",
+          "sha256": "4c0523c8ce6aa9805d74f8ff509a957ed588ea4e9d4ce7b5b58c773db0987e34"
+        }
+      ]
     }
   ]
 }

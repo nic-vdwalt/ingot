@@ -2,7 +2,6 @@
 package gfx
 
 import "core:testing"
-import wg "vendor:wgpu"
 
 @(test)
 gpu_timing_geometry_failure_keeps_draw_inputs :: proc(t: ^testing.T) {
@@ -10,8 +9,8 @@ gpu_timing_geometry_failure_keeps_draw_inputs :: proc(t: ^testing.T) {
 		ctx := new(Context)
 		defer free(ctx)
 		state := &ctx.gpu_timing.diagnostics[0]
-		encoder := cast(wg.CommandEncoder)uintptr(1)
-		pass := cast(wg.RenderPassEncoder)uintptr(2)
+		encoder := cast(type_of(state.bindings[0][0].encoder))uintptr(1)
+		pass := cast(type_of(state.bindings[0][0].pass))uintptr(2)
 		ctx.frame.pass = pass
 		ctx.rend.diagnostic_projection = _window_projection(1280, 720)
 		append(&ctx.rend.verts, Vertex{pos = {11, 23}})
@@ -40,13 +39,42 @@ gpu_timing_geometry_failure_keeps_draw_inputs :: proc(t: ^testing.T) {
 }
 
 @(test)
+gpu_timing_geometry_identifies_only_explicit_neutral_texture :: proc(t: ^testing.T) {
+	when GPU_TIMING_DIAGNOSTICS {
+		ctx := new(Context)
+		defer free(ctx)
+		state := &ctx.gpu_timing.diagnostics[0]
+		encoder := cast(type_of(state.bindings[0][0].encoder))uintptr(1)
+		pass := cast(type_of(state.bindings[0][0].pass))uintptr(2)
+		ctx.frame.pass = pass
+		ctx.rend.neutral_bind = cast(type_of(ctx.rend.cur_bind))uintptr(3)
+		_gpu_timing_diagnostic_encoder_created(state, encoder)
+		_gpu_timing_diagnostic_bind(state, 0, 0, encoder, pass, .Clear, .Store)
+		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 0)
+		ctx.rend.cur_bind = ctx.rend.neutral_bind
+		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 0)
+		ctx.rend.cur_bind = cast(type_of(ctx.rend.cur_bind))uintptr(4)
+		_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 0)
+		_gpu_timing_diagnostic_submit(state, encoder)
+		slot := &ctx.gpu_timing.slots[0]
+		slot.query_count = 2
+		slot.ticks[0], slot.ticks[1] = 123, 0
+		_gpu_timing_diagnostic_collect(ctx, 0)
+		testing.expect_value(t, state.failure_count, u32(1))
+		testing.expect(t, !state.failures[0].draws[0].neutral_texture)
+		testing.expect(t, state.failures[0].draws[1].neutral_texture)
+		testing.expect(t, !state.failures[0].draws[2].neutral_texture)
+	}
+}
+
+@(test)
 gpu_timing_geometry_only_retains_linked_draws :: proc(t: ^testing.T) {
 	when GPU_TIMING_DIAGNOSTICS {
 		ctx := new(Context)
 		defer free(ctx)
 		state := &ctx.gpu_timing.diagnostics[0]
-		encoder := cast(wg.CommandEncoder)uintptr(1)
-		pass := cast(wg.RenderPassEncoder)uintptr(2)
+		encoder := cast(type_of(state.bindings[0][0].encoder))uintptr(1)
+		pass := cast(type_of(state.bindings[0][0].pass))uintptr(2)
 		ctx.frame.pass = pass
 		append(&ctx.rend.verts, Vertex{pos = {1, 2}})
 		append(&ctx.rend.indices, u32(0))

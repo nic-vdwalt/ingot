@@ -2,7 +2,6 @@
 package gfx
 
 import "core:testing"
-import wg "vendor:wgpu"
 
 @(test)
 gpu_timing_atlas_uploads_are_owned_and_bounded :: proc(t: ^testing.T) {
@@ -47,8 +46,8 @@ gpu_timing_atlas_submit_seals_upload_prefix :: proc(t: ^testing.T) {
 	when GPU_TIMING_DIAGNOSTICS {
 		state := new(Gpu_Timing_Diagnostics)
 		defer free(state)
-		encoder := cast(wg.CommandEncoder)uintptr(1)
-		pass := cast(wg.RenderPassEncoder)uintptr(2)
+		encoder := cast(type_of(state.bindings[0][0].encoder))uintptr(1)
+		pass := cast(type_of(state.bindings[0][0].pass))uintptr(2)
 		_gpu_timing_diagnostic_encoder_created(state, encoder)
 		_gpu_timing_diagnostic_bind(state, 0, 0, encoder, pass, .Clear, .Store)
 		_gpu_timing_diagnostic_draw(
@@ -71,12 +70,66 @@ gpu_timing_atlas_submit_seals_upload_prefix :: proc(t: ^testing.T) {
 }
 
 @(test)
+gpu_timing_atlas_failure_keeps_submitted_inputs :: proc(t: ^testing.T) {
+	when GPU_TIMING_DIAGNOSTICS {
+		cases := [2]bool{false, true}
+		for lose_upload in cases {
+			ctx := new(Context)
+			defer free(ctx)
+			state := &ctx.gpu_timing.diagnostics[0]
+			atlas: Atlas
+			atlas.bind = cast(type_of(atlas.bind))uintptr(3)
+			atlas.diagnostic_id[0] = 1
+			atlas.filter = .POINT
+			ctx.resources.atlases.slots[0] = {occupied = true, entry = &atlas}
+			ctx.rend.cur_bind = atlas.bind
+			state.atlas.atlas_count = 1
+			pixels := [1]u8{127}
+			_gpu_timing_atlas_upload(&state.atlas, 1, 0, 0, 1, 1, 1, pixels[:])
+			encoder := cast(type_of(state.bindings[0][0].encoder))uintptr(1)
+			pass := cast(type_of(state.bindings[0][0].pass))uintptr(2)
+			ctx.frame.pass = pass
+			ctx.rend.diagnostic_projection = _window_projection(1280, 720)
+			append(&ctx.rend.verts, Vertex{pos = {11, 23}, mode = .Text})
+			append(&ctx.rend.indices, u32(0))
+			_gpu_timing_diagnostic_encoder_created(state, encoder)
+			_gpu_timing_diagnostic_bind(state, 0, 0, encoder, pass, .Clear, .Store)
+			_gpu_timing_diagnostic_batch_draw(ctx, &ctx.rend, pass, 1)
+			clear(&ctx.rend.verts)
+			clear(&ctx.rend.indices)
+			pixels[0] = 255
+			x := u32(0)
+			if lose_upload do x = ATLAS_DIM
+			_gpu_timing_atlas_upload(&state.atlas, 1, x, 0, 1, 1, 1, pixels[:])
+			_gpu_timing_diagnostic_submit(state, encoder)
+			pixels[0] = 64
+			_gpu_timing_atlas_upload(&state.atlas, 1, 0, 0, 1, 1, 1, pixels[:])
+			slot := &ctx.gpu_timing.slots[0]
+			slot.query_count = 2
+			slot.ticks[0], slot.ticks[1] = 123, 0
+			_gpu_timing_diagnostic_collect(ctx, 0)
+			testing.expect_value(t, state.failure_count, u32(1))
+			draw := state.failures[0].draws[0]
+			testing.expect_value(t, draw.geometry_id, u32(1))
+			testing.expect_value(t, draw.atlas_id, u32(1))
+			testing.expect_value(t, draw.atlas_known, !lose_upload)
+			expected_prefix := u32(2)
+			if lose_upload do expected_prefix = 1
+			testing.expect_value(t, draw.atlas_upload_count, expected_prefix)
+			testing.expect_value(t, draw.atlas_filter, u32(TextureFilter.POINT))
+			testing.expect_value(t, state.atlas.bytes[0], u8(127))
+			testing.expect_value(t, state.geometry[0].vertices[0].mode, Vertex_Mode.Text)
+		}
+	}
+}
+
+@(test)
 gpu_timing_atlas_draw_tracks_upload_prefix :: proc(t: ^testing.T) {
 	when GPU_TIMING_DIAGNOSTICS {
 		ctx := new(Context)
 		defer free(ctx)
 		atlas: Atlas
-		atlas.bind = cast(wg.BindGroup)uintptr(1)
+		atlas.bind = cast(type_of(atlas.bind))uintptr(1)
 		atlas.diagnostic_id[0] = 1
 		atlas.filter = .POINT
 		ctx.resources.atlases.slots[0] = {

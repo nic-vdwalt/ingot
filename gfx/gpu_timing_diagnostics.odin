@@ -46,8 +46,11 @@ _gpu_timing_diagnostic_render_pass :: proc(
 		record.depth_load = depth.depthLoadOp
 		record.depth_store = depth.depthStoreOp
 		record.depth_clear = depth.depthClearValue
+		record.depth_clear_bits = transmute(u32)depth.depthClearValue
 		record.depth_read_only = depth.depthReadOnly
 		record.color_clear = color.clearValue
+		record.color_clear_bits = transmute([4]u64)color.clearValue
+		record.clear_bits_known = true
 	}
 }
 
@@ -80,6 +83,9 @@ Gpu_Timing_Diagnostic :: struct {
 	depth_clear:        f32,
 	depth_read_only:    wg.Bool,
 	color_clear:        wg.Color,
+	color_clear_bits:   [4]u64,
+	depth_clear_bits:   u32,
+	clear_bits_known:   bool,
 	sample_count:       u32,
 	callback_status:    wg.MapAsyncStatus,
 	collection_id:      u64,
@@ -99,6 +105,7 @@ Gpu_Timing_Diagnostic_Geometry :: struct {
 }
 
 Gpu_Timing_Diagnostic_Draw :: struct {
+	neutral_texture:    bool,
 	atlas_id:           u32,
 	atlas_upload_count: u32,
 	atlas_filter:       u32,
@@ -227,6 +234,8 @@ _gpu_timing_diagnostic_attachment :: proc(
 				f64(clear.b) / 255.0,
 				f64(clear.a) / 255.0,
 			}
+			record.color_clear_bits = transmute([4]u64)record.color_clear
+			record.clear_bits_known = true
 		} else if color := context_get_texture(ctx, color_id); color != nil {
 			record.width = u32(color.width)
 			record.height = u32(color.height)
@@ -428,6 +437,8 @@ _gpu_timing_diagnostic_batch_draw :: proc(
 			state,
 			pass,
 			{
+				neutral_texture = renderer.neutral_bind != nil &&
+				renderer.cur_bind == renderer.neutral_bind,
 				atlas_id = atlas_id,
 				atlas_upload_count = atlas_upload_count,
 				atlas_filter = atlas_filter,

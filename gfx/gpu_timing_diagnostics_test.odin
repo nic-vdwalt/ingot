@@ -284,6 +284,9 @@ gpu_timing_diagnostics_multisample_attachment :: proc(t: ^testing.T) {
 			testing.expect_value(t, record.depth_store, wg.StoreOp.Store)
 			testing.expect_value(t, record.depth_clear, f32(0.5))
 			testing.expect_value(t, record.color_clear.r, f64(0.25))
+			testing.expect(t, record.clear_bits_known)
+			testing.expect_value(t, record.depth_clear_bits, transmute(u32)f32(0.5))
+			testing.expect_value(t, record.color_clear_bits, transmute([4]u64)record.color_clear)
 			testing.expect_value(
 				t,
 				ctx.gpu_timing.diagnostics[0].bindings[0][0].record.sample_count,

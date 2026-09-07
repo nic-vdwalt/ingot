@@ -32,6 +32,26 @@ class GeometryReplayTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     window_geometry(self.payload, draw)
 
+    def test_rejects_malformed_geometry_types(self):
+        for field in self.draw:
+            for value in (None, [], {}, True, 1.0):
+                if value is True and field in ("known", "indexed", "projection_known"):
+                    continue
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(ValueError):
+                        window_geometry(self.payload, dict(self.draw, **{field: value}))
+        for payload in (None, [], {}, dict(self.payload, geometry=None),
+                        dict(self.payload, geometry=[None])):
+            with self.subTest(payload=payload):
+                with self.assertRaises(ValueError):
+                    window_geometry(payload, self.draw)
+        for field in self.vertex:
+            original = self.vertex[field]
+            self.vertex[field] = None
+            with self.assertRaises(ValueError):
+                window_geometry(self.payload, self.draw)
+            self.vertex[field] = original
+
     def test_rejects_invalid_index_and_words(self):
         self.payload["geometry"][0]["indices"] = [1]
         with self.assertRaises(ValueError):
@@ -86,6 +106,36 @@ class AtlasReplayTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     atlas_pixels(self.payload, self.draw)
                 upload[field] = original
+
+    def test_rejects_malformed_atlas_types(self):
+        for field in self.draw:
+            for value in (None, [], {}, True, 1.0):
+                if field == "atlas_known" and value is True:
+                    continue
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(ValueError):
+                        atlas_pixels(self.payload, dict(self.draw, **{field: value}))
+        for field in self.payload:
+            if field == "atlas_dropped":
+                continue
+            with self.subTest(field=field):
+                with self.assertRaises(ValueError):
+                    atlas_pixels(dict(self.payload, **{field: None}), self.draw)
+        for data in ([True], [1.0], [-1], [256], "!", "é"):
+            with self.subTest(data=data):
+                with self.assertRaises(ValueError):
+                    atlas_pixels(dict(self.payload, atlas_bytes=data), self.draw)
+
+    def test_rejects_malformed_foreign_upload_in_prefix(self):
+        upload = self.payload["atlas_uploads"][1]
+        for field in upload:
+            original = upload[field]
+            for value in (None, True, 1.0, -1, 0x100000000):
+                upload[field] = value
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(ValueError):
+                        atlas_pixels(self.payload, self.draw)
+            upload[field] = original
 
     def test_zero_base_and_numeric_byte_array(self):
         self.payload["atlas_bytes"] = [11, 12, 99, 21]

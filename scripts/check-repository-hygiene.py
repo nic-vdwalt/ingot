@@ -63,7 +63,7 @@ def main() -> int:
 
     for path in sorted(tracked):
         full_path = ROOT / path
-        if full_path.is_file() and full_path.stat().st_size >= MAX_UNLISTED_BYTES and path not in approved:
+        if full_path.is_file() and full_path.lstat().st_size >= MAX_UNLISTED_BYTES and path not in approved:
             errors.append(f"large tracked file lacks provenance approval: {path}")
 
     if errors:

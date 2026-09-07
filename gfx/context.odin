@@ -54,10 +54,10 @@ context_submit_gpu_commands :: proc(commands: ^Gpu_Command_List) -> bool {
 		}
 		return false
 	}
-	wg.QueueSubmit(commands.owner.queue, {command})
 	when GPU_TIMING_DIAGNOSTICS {
 		_gpu_timing_diagnostic_submit(&commands.owner.gpu_timing.diagnostics[0], commands.encoder)
 	}
+	wg.QueueSubmit(commands.owner.queue, {command})
 	wg.CommandBufferRelease(command)
 	wg.CommandEncoderRelease(commands.encoder)
 	commands^ = {}
