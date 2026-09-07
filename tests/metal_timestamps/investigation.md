@@ -341,6 +341,30 @@ passed enabled and disabled; the v17 stable-baseline union passed two focused
 wire tests. Actual glyph-hook GPU execution and schema-7 atlas JSON roundtrip are
 not yet regression-covered. No new game capture, ocean retention or repair claim.
 
+Atlas continuation: the v18 stable-baseline union passed five focused tests,
+including schema-7 byte/upload/draw roundtrip with values 128/255 and drop counts
+above 2^53. `replay_inputs.py` reconstructs the zero-based R8 atlas using only the
+matching atlas ID and retained upload prefix, rejecting unknown evidence and
+invalid ranges. Four Python regressions verify overlapping writes, other-atlas
+isolation, excluded later writes, invalid prefixes/ranges and zero initialization;
+the combined Python suite now passes nine tests.
+
+The draw prefix is now sealed at encoder submission, not merely draw encoding:
+queue texture writes issued after encoding but before submission precede that
+command buffer. A drop before submission invalidates its atlas completeness;
+later drops do not rewrite previously submitted evidence. The submit regression
+passes; gfx now passes 356 tests in both diagnostic modes. These are CPU evidence
+and wire tests, not native replay or a newly captured game failure.
+
+Window geometry reconstruction now converts retained u32 words into explicit
+little-endian 36-byte vertices, u32 indices and 16-byte projection uniforms without
+round-tripping through Python floats. It rejects unknown/non-batch draw paths,
+missing identities, retention-limit violations, mismatched counts, unsupported
+instance counts and indices outside the retained vertices. Three new regressions
+cover exact signed-zero/NaN-payload bytes and rejection cases; all 12 Python tests
+pass. This reconstructs input buffers only, not shaders, pipelines, attachment
+contents or GPU execution, and does not satisfy the game-replay gate.
+
 ## Remaining gates
 
 - Finish first-frame trace metadata and classify all observed labels; gameplay was

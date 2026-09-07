@@ -1,4 +1,43 @@
 import base64
+import struct
+
+
+def packed_words(words, count):
+    if len(words) != count or any(type(word) is not int or not 0 <= word <= 0xffffffff
+                                  for word in words):
+        raise ValueError("invalid u32 word array")
+    return struct.pack("<" + "I" * count, *words)
+
+
+def window_geometry(payload, draw):
+    if payload.get("version") not in (6, 7):
+        raise ValueError("unsupported geometry schema")
+    identity = draw.get("geometry_id", 0)
+    geometry = payload["geometry"]
+    if type(identity) is not int or not 0 < identity <= len(geometry) <= 16:
+        raise ValueError("missing geometry identity")
+    if not draw.get("projection_known") or not draw.get("indexed"):
+        raise ValueError("incomplete window draw")
+    if draw.get("path") not in (1, "Batch_Builtin") or not draw.get("known"):
+        raise ValueError("not a known built-in batch draw")
+    entry = geometry[identity - 1]
+    vertices, indices = entry["vertices"], entry["indices"]
+    if not 0 < len(vertices) <= 2048 or not 0 < len(indices) <= 4096:
+        raise ValueError("geometry exceeds retention bounds")
+    if draw["count"] != len(indices) or draw["instances"] != 1:
+        raise ValueError("draw geometry mismatch")
+    if any(type(index) is not int or not 0 <= index < len(vertices) for index in indices):
+        raise ValueError("index outside retained vertices")
+    vertex_bytes = bytearray()
+    for vertex in vertices:
+        vertex_bytes.extend(packed_words(vertex["position_bits"], 2))
+        vertex_bytes.extend(packed_words(vertex["color_bits"], 4))
+        vertex_bytes.extend(packed_words(vertex["uv_bits"], 2))
+        if vertex["mode"] not in (0, 1):
+            raise ValueError("unsupported vertex mode")
+        vertex_bytes.extend(packed_words([vertex["mode"]], 1))
+    return (bytes(vertex_bytes), packed_words(indices, len(indices)),
+            packed_words(draw["projection_bits"], 4))
 
 
 ATLAS_DIM = 2048

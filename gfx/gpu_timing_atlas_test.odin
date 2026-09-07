@@ -43,6 +43,34 @@ gpu_timing_atlas_uploads_are_owned_and_bounded :: proc(t: ^testing.T) {
 }
 
 @(test)
+gpu_timing_atlas_submit_seals_upload_prefix :: proc(t: ^testing.T) {
+	when GPU_TIMING_DIAGNOSTICS {
+		state := new(Gpu_Timing_Diagnostics)
+		defer free(state)
+		encoder := cast(wg.CommandEncoder)uintptr(1)
+		pass := cast(wg.RenderPassEncoder)uintptr(2)
+		_gpu_timing_diagnostic_encoder_created(state, encoder)
+		_gpu_timing_diagnostic_bind(state, 0, 0, encoder, pass, .Clear, .Store)
+		_gpu_timing_diagnostic_draw(
+			state,
+			pass,
+			{atlas_id = 1, atlas_upload_count = 1, atlas_known = true},
+		)
+		state.atlas.upload_count = 3
+		_gpu_timing_diagnostic_submit(state, encoder)
+		testing.expect_value(t, state.bindings[0][0].record.draws[0].atlas_upload_count, u32(3))
+		testing.expect(t, state.bindings[0][0].record.draws[0].atlas_known)
+		_gpu_timing_diagnostic_encoder_created(state, encoder)
+		_gpu_timing_diagnostic_bind(state, 1, 0, encoder, pass, .Clear, .Store)
+		_gpu_timing_diagnostic_draw(state, pass, {atlas_id = 1, atlas_known = true})
+		state.atlas.dropped = 1
+		_gpu_timing_diagnostic_submit(state, encoder)
+		testing.expect(t, !state.bindings[1][0].record.draws[0].atlas_known)
+		testing.expect(t, state.bindings[0][0].record.draws[0].atlas_known)
+	}
+}
+
+@(test)
 gpu_timing_atlas_draw_tracks_upload_prefix :: proc(t: ^testing.T) {
 	when GPU_TIMING_DIAGNOSTICS {
 		ctx := new(Context)
