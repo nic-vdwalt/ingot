@@ -1,4 +1,4 @@
-# Selected window replay contract, schema 9
+# Selected window replay contract, schema 11
 
 This contract covers the complete built-in window pass, not arbitrary image/custom
 shader draws or ocean passes. A missing input rejects reconstruction rather than
@@ -74,19 +74,34 @@ ordinal does not assert GPU success. Geometry uploads, projection writes, atlas
 writes and other passes in the same command buffer affect topology. Capturing only
 the window render descriptor is insufficient to claim exact queue replay.
 
+## Submission topology and build manifest
+
+Schema 11 records `span_count` (timed spans in the submitted slot) and
+`encoder_spans` (of those, recorded in this pass's encoder) on every failure.
+`replay_inputs.submission_topology` accepts only the single-span, single-encoder
+shape—pass, resolve query set, copy to readback, submit, map—with
+`resolve_encoder_id == encoder_id` and `resolve_ordinal == submit_ordinal`. Any
+other shape is an explicit rejection rather than a partially replayed frame.
+
+`build_manifest.verify_build_manifest` ties a capture to the frozen build tree that
+`freeze_build_inputs.py` produced before compiling: every hashed compile input must
+still match, the exported shader must equal the frozen `batch.odin` literal, and if
+`identity-audit.json` exists, the built library and the capture file itself must be
+the audited ones. Schema 10 added `atlas_dropped_bytes` and raised the retained
+upload budget to 2048 after the v6 loading capture saturated 256 before frame 1.
+
 ## Readiness and remaining inputs
 
-`window_readiness.py` is a conservative rejection report, not yet a replay bundle
-exporter. It checks the retained subset and always reports these outstanding gates:
+`window_readiness.py --build-dir <frozen build>` now certifies a frame only when the
+retained inputs, topology and build manifest all verify (`bundle_version` 2). Without
+`--build-dir` it still reports `source_manifest` as missing. The v8 capture
+(`artifacts/timing-game-v8/`) certifies frames 1–4; frame 2 is a reversed-end window
+failure with its prior mapped sample present.
 
-1. Immutable actual-build source/compiler/dependency/assets provenance, including
-   the pipeline construction sources that accompany the exported WGSL.
-2. Complete producer/resolve command topology for the selected game submission.
-
-The archived `artifacts/timing-window-contract-v1/` and `-v2/` source snapshots and
-SHA manifests establish what was inspected (v2 adds `gpu_timing_pipeline.odin` and
-the schema 9 exporter state; the WGSL hash is unchanged), not what built a
-historical or future game capture.
+The archived `artifacts/timing-window-contract-v1/`, `-v2/` and `-v3/` source
+snapshots and SHA manifests establish what was inspected; v3 hashes equal the frozen
+v8 build inputs, so it is also what built that capture. The WGSL hash is unchanged
+across all three.
 Historical v5 additionally lacks exact clears, shader text and all retained draw
 geometry/texture input data. No fill-in operation can retroactively recover those.
 

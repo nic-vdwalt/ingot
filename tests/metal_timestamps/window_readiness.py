@@ -10,7 +10,7 @@ from replay_inputs import (atlas_pixels, attachment_clear_bytes, batch_pipeline,
 def selected_window_readiness(payload, record, build_dir=None, capture_path=None):
     missing = []
     if type(payload) is not dict or type(record) is not dict:
-        return dict(bundle_version=1, ready=False,
+        return dict(bundle_version=2, ready=False,
                     missing_inputs=[dict(field="root", reason="expected evidence objects")])
 
     def require(condition, field, reason):

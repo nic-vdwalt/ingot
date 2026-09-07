@@ -1,7 +1,12 @@
 import copy
+import hashlib
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
-from replay_inputs import batch_pipeline
+from build_manifest import verify_build_manifest
+from replay_inputs import batch_pipeline, submission_topology
 from window_readiness import selected_window_readiness
 
 
@@ -28,7 +33,7 @@ def batch_pipeline_set(fmt=27):
 class WindowReadinessTests(unittest.TestCase):
     def test_retained_inputs_still_require_build_and_topology(self):
         vertex = dict(position_bits=[0, 0], color_bits=[0, 0, 0, 0], uv_bits=[0, 0], mode=0)
-        payload = dict(version=9, batch_shader="captured shader",
+        payload = dict(version=11, batch_shader="captured shader",
                        batch_pipelines=batch_pipeline_set(),
                        geometry=[dict(vertices=[vertex], indices=[0, 0, 0])])
         draw = dict(geometry_id=1, projection_known=True, indexed=True, path=1, known=True,
@@ -41,11 +46,27 @@ class WindowReadinessTests(unittest.TestCase):
                       epoch=1, frame=1, generation=1, map_request=1, depth_format=0,
                       label=dict(length=6, bytes=list(b"window")), callback_status=1,
                       query_begin=0, slot_index=0, begin_tick=123, end_tick=0,
+                      span_count=1, encoder_spans=1,
                       draw_count=1, draws=[draw], draws_dropped=0, previous=dict(valid=False))
         report = selected_window_readiness(payload, record)
         self.assertEqual({item["field"] for item in report["missing_inputs"]},
-                         {"source_manifest", "queue_topology"})
+                         {"source_manifest"})
         self.assertFalse(report["ready"])
+        with tempfile.TemporaryDirectory() as directory:
+            build = frozen_build(Path(directory), "captured shader")
+            report = selected_window_readiness(payload, record, build)
+            self.assertEqual(report["missing_inputs"], [])
+            self.assertTrue(report["ready"])
+            self.assertEqual(report["bundle_version"], 2)
+            record["span_count"] = 2
+            report = selected_window_readiness(payload, record, build)
+            self.assertEqual({item["field"] for item in report["missing_inputs"]},
+                             {"queue_topology"})
+            record["span_count"] = 1
+            (build / "ingot/gfx/batch.odin").write_text("BATCH_SHADER := `other`" + chr(10))
+            report = selected_window_readiness(payload, record, build)
+            self.assertEqual({item["field"] for item in report["missing_inputs"]},
+                             {"source_manifest"})
         draw["neutral_texture"] = False
         report = selected_window_readiness(payload, record)
         self.assertIn("draws[0].texture", {item["field"] for item in report["missing_inputs"]})
@@ -60,9 +81,63 @@ class WindowReadinessTests(unittest.TestCase):
             {item["field"] for item in report["missing_inputs"]}))
 
 
+def frozen_build(directory, shader):
+    source = directory / "ingot/gfx/batch.odin"
+    source.parent.mkdir(parents=True)
+    source.write_text("BATCH_SHADER := `" + shader + "`" + chr(10))
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    (directory / "prebuild-inputs.json").write_text(json.dumps(dict(
+        sha256={"ingot/gfx/batch.odin": digest}, compiler=dict(sha256="c"),
+        wgpu_archive=dict(sha256="w"), repositories={})))
+    return directory
+
+
+class BuildManifestTests(unittest.TestCase):
+    def test_manifest_ties_shader_and_audit_to_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            build = frozen_build(Path(directory) / "timing-game-x", "s")
+            summary = verify_build_manifest(dict(batch_shader="s"), build)
+            self.assertEqual(summary["files"], 1)
+            with self.assertRaises(ValueError):
+                verify_build_manifest(dict(batch_shader="t"), build)
+            library = build / "build.dylib"
+            library.write_bytes(b"lib")
+            capture = build / "capture.json"
+            capture.write_bytes(b"cap")
+            audit = {"timing-game-x/build.dylib": hashlib.sha256(b"lib").hexdigest()}
+            (build / "identity-audit.json").write_text(json.dumps(dict(sha256=audit)))
+            verify_build_manifest(dict(batch_shader="s"), build)
+            with self.assertRaises(ValueError):
+                verify_build_manifest(dict(batch_shader="s"), build, capture)
+            audit["timing-game-x/capture.json"] = hashlib.sha256(b"cap").hexdigest()
+            (build / "identity-audit.json").write_text(json.dumps(dict(sha256=audit)))
+            summary = verify_build_manifest(dict(batch_shader="s"), build, capture)
+            self.assertEqual(len(summary["audited"]), 2)
+            library.write_bytes(b"changed")
+            with self.assertRaises(ValueError):
+                verify_build_manifest(dict(batch_shader="s"), build, capture)
+            with self.assertRaises(ValueError):
+                verify_build_manifest(dict(batch_shader="s"), Path(directory) / "missing")
+
+
+class SubmissionTopologyTests(unittest.TestCase):
+    def test_single_span_same_encoder_is_replayable(self):
+        record = dict(span_count=1, encoder_spans=1, query_begin=0, encoder_id=4,
+                      resolve_encoder_id=4, submit_ordinal=4, resolve_ordinal=4)
+        self.assertEqual(submission_topology(dict(version=11), record)["spans"], 1)
+        with self.assertRaises(ValueError):
+            submission_topology(dict(version=10), record)
+        for mutate in (dict(span_count=2), dict(encoder_spans=0), dict(query_begin=2),
+                       dict(query_begin=1), dict(resolve_encoder_id=5),
+                       dict(resolve_ordinal=3), dict(span_count=2, encoder_spans=2),
+                       dict(encoder_id=0)):
+            with self.assertRaises(ValueError):
+                submission_topology(dict(version=11), dict(record, **mutate))
+
+
 class BatchPipelineTests(unittest.TestCase):
     def setUp(self):
-        self.payload = dict(version=9, batch_pipelines=batch_pipeline_set())
+        self.payload = dict(version=11, batch_pipelines=batch_pipeline_set())
         self.record = dict(format=27)
 
     def test_selected_descriptor_matches_contract(self):
@@ -109,6 +184,7 @@ class BatchPipelineTests(unittest.TestCase):
         fields = {entry["field"] for entry in report["missing_inputs"]}
         self.assertTrue({"draws", "clear_bits_known", "source_manifest",
                          "queue_topology"}.issubset(fields))
+        self.assertFalse(selected_window_readiness({"version": 11}, {"span_count": 1})["ready"])
 
     def test_numeric_clear_store_are_recognized(self):
         report = selected_window_readiness({"version": 7}, {"load": 2, "store": 1})

@@ -98,7 +98,19 @@ Schema 9 adds `batch_pipelines`: the retained swapchain-format descriptors for a
 eight built-in (kind x blend) batch pipelines, written as pinned wgpu integers.
 `window_readiness.py` now verifies the descriptor each draw selected against the
 fixed batch contract instead of reporting `pipeline_descriptor` as unconditionally
-missing. Remaining unconditional gates are `source_manifest` and `queue_topology`.
+missing. Schema 11 adds submission topology (`span_count`, `encoder_spans`) and the
+validator verifies a frozen build manifest when `--build-dir` is given:
+
+```sh
+python3 tests/metal_timestamps/freeze_build_inputs.py --root ..   --dest artifacts/timing-game-vN --odin artifacts/timing-odin-control/odin
+python3 tests/metal_timestamps/window_readiness.py   artifacts/timing-game-v8/timestamp-game-v8-evidence.tel.timing.json   --failure 1 --build-dir artifacts/timing-game-v8
+```
+
+`freeze_build_inputs.py` copies the union game packages, demo assets and Ingot
+collection packages into the destination and hashes them before any build, along
+with the compiler and pinned wgpu archive identities. Build the host and library
+from that tree (commands in `timing-game-v8/build-commands.log`), then write the
+post-capture `identity-audit.json` so the validator can tie the capture file back.
 
 ```sh
 python3 tests/metal_timestamps/window_readiness.py \

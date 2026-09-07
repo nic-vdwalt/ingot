@@ -407,6 +407,49 @@ actual query/slot bounds at the render-pass hook. A direct gfx style scan report
 pre-existing long JavaScript strings in platform_web.odin. Concurrent repository
 hygiene-script changes were left untouched.
 
+## September 7 frozen loading-inclusive captures (v6, v7, v8)
+
+Desktop visibility was rechecked (`CGSSessionScreenIsLocked` absent, on console, one
+screen) before each launch. `freeze_build_inputs.py` copied the live forgecore +
+planetforger union, demo assets and every Ingot collection package into
+`artifacts/timing-game-v{6,7,8}/` and hashed 849 files each before building with the
+isolated compiler (`5baf1357…`) and the pinned source-built wgpu archive
+(`d923b033…`). Repository heads and dirty flags are in each `prebuild-inputs.json`;
+planetforger was dirty with concurrent ocean/surf work, which built cleanly and was
+not modified. Each tree was built with the same diagnostics ABI for host and library
+(`build-commands.log`) and launched through the rebuilt Aesir capture driver
+(`timestamp-aesir-capture-v6`, `0c0dd44e…`) with absolute paths and explicit
+`AESIR_TELEMETRY`.
+
+v6 (schema 9): 64 window failures over frames 1–68, 492 dropped; 62 reversed ends
+and 2 zero ends. Textures were unreconstructable because the 256-upload atlas budget
+saturated before frame 1 (1482 dropped). Every reversed end equals the begin tick of
+the frame two frames earlier plus 109–212 µs while begin ticks stay monotonic—the
+stale end-of-pass sample signature. Attribution is deferred to the replay step.
+
+v7 (schema 10): with the budget raised to 2048 and `atlas_dropped_bytes` exported,
+all 1738 uploads (420,681 bytes) were retained with zero drops, and frames 1–5 held
+every draw input. Topology fields and the build-manifest check did not exist yet.
+
+v8 (schema 11): `span_count`/`encoder_spans` are exported. With
+`--build-dir artifacts/timing-game-v8`, `window_readiness.py` certifies frames 1–4
+(`readiness-all.json`): frame 1 zero end with prior sample explicitly absent, frame 2
+reversed end with frame 1's sample present, frames 3–4 zero ends. All certified
+frames are single-span, same-encoder submissions. 64 records cover frames 1–67 with
+1252 later failures dropped and 4528 geometry drops accounted; only the `window`
+category appeared—no ocean pass was recorded, so ocean remains uncovered.
+
+Aesir independently rejected every capture: the recording is flagged truncated,
+`telemetry_health.read_errors` is 1, and only 8–12 raw telemetry lines were written
+over 25 s. Raw `gfd` entries additionally mark frames such as v6 frame 3 as valid
+with an absurd 16,275,202 ms duration, promoting an unknown sample. These are
+transport and reliability defects for the later step, not timing repairs. A
+concurrent PlanetForger profile hook also writes a `.terrain-<sha>.wgsl` sidecar
+next to the telemetry path; it is not part of this evidence.
+
+Verification: 360 gfx tests enabled and disabled; 29 Python tests; v24 and v25 six
+focused telemetry tests enabled and disabled; assertion and style checks clean.
+
 ## Remaining gates
 
 - Finish first-frame trace metadata and classify all observed labels; gameplay was
