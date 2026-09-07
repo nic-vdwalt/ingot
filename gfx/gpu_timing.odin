@@ -752,6 +752,16 @@ _gpu_timing_collect_map :: proc(ctx: ^Context, slot: ^Gpu_Timing_Slot, slot_inde
 	slot.phase = .Free
 }
 
+_gpu_timing_resolve_fail :: proc(state: ^Gpu_Timing_State, slot_index: int) {
+	assert(state != nil && slot_index >= 0 && slot_index < GPU_TIMING_FRAME_SLOTS)
+	slot := &state.slots[slot_index]
+	assert(slot.phase == .Resolve_Submitted)
+	slot.phase = .Resolve_Failed
+	state.health.resolve_failure += 1
+	slot.query_count = 0
+	slot.phase = .Free
+}
+
 // _gpu_timing_collect is the sole owner of slot transitions after submission.
 // Callbacks only publish terminal status into their stable request records.
 _gpu_timing_collect :: proc(ctx: ^Context) {
@@ -770,10 +780,7 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 				continue
 			}
 			if !_gpu_timing_resolve_submit(ctx, slot_index) {
-				slot.phase = .Resolve_Failed
-				ctx.gpu_timing.health.resolve_failure += 1
-				slot.query_count = 0
-				slot.phase = .Free
+				_gpu_timing_resolve_fail(&ctx.gpu_timing, slot_index)
 				continue
 			}
 		}

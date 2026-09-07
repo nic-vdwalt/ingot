@@ -573,32 +573,7 @@ submit_resolve :: proc(r: ^Replay, slot: ^Slot) -> bool {
 	return true
 }
 
-iteration :: proc(r: ^Replay, iteration: int) -> bool {
-	ctx := r.ctx
-	collect(r, false)
-	index := free_slot(r)
-	if index < 0 {
-		emit(r, fmt.tprintf(`{{"kind":"no_free_slot","iteration":%d}}`, iteration))
-		wg.DevicePoll(ctx.device, true, nil)
-		return true
-	}
-	slot := &r.slots[index]
-	surface := wg.SurfaceGetCurrentTexture(ctx.surface)
-	if surface.status != .SuccessOptimal && surface.status != .SuccessSuboptimal {
-		emit(
-			r,
-			fmt.tprintf(
-				`{{"kind":"acquire","iteration":%d,"status":%d}}`,
-				iteration,
-				int(surface.status),
-			),
-		)
-		if surface.texture != nil do wg.TextureRelease(surface.texture)
-		return true
-	}
-	view := wg.TextureCreateView(surface.texture, nil)
-	wg.DevicePushErrorScope(ctx.device, .Validation)
-	encoder := wg.DeviceCreateCommandEncoder(ctx.device, &{label = "replay"})
+encode_sample :: proc(r: ^Replay, encoder: wg.CommandEncoder, view: wg.TextureView) {
 	writes := wg.PassTimestampWrites {
 		querySet                  = r.query_set,
 		beginningOfPassWriteIndex = 0,
@@ -641,6 +616,35 @@ iteration :: proc(r: ^Replay, iteration: int) -> bool {
 	}
 	wg.RenderPassEncoderEnd(pass)
 	wg.RenderPassEncoderRelease(pass)
+}
+
+iteration :: proc(r: ^Replay, iteration: int) -> bool {
+	ctx := r.ctx
+	collect(r, false)
+	index := free_slot(r)
+	if index < 0 {
+		emit(r, fmt.tprintf(`{{"kind":"no_free_slot","iteration":%d}}`, iteration))
+		wg.DevicePoll(ctx.device, true, nil)
+		return true
+	}
+	slot := &r.slots[index]
+	surface := wg.SurfaceGetCurrentTexture(ctx.surface)
+	if surface.status != .SuccessOptimal && surface.status != .SuccessSuboptimal {
+		emit(
+			r,
+			fmt.tprintf(
+				`{{"kind":"acquire","iteration":%d,"status":%d}}`,
+				iteration,
+				int(surface.status),
+			),
+		)
+		if surface.texture != nil do wg.TextureRelease(surface.texture)
+		return true
+	}
+	view := wg.TextureCreateView(surface.texture, nil)
+	wg.DevicePushErrorScope(ctx.device, .Validation)
+	encoder := wg.DeviceCreateCommandEncoder(ctx.device, &{label = "replay"})
+	encode_sample(r, encoder, view)
 	if !r.completion_gated {
 		wg.CommandEncoderResolveQuerySet(encoder, r.query_set, 0, 2, r.resolve, 0)
 		wg.CommandEncoderCopyBufferToBuffer(encoder, r.resolve, 0, slot.readback, 0, 16)

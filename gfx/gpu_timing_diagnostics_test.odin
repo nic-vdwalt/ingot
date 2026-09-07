@@ -35,6 +35,28 @@ gpu_timing_diagnostics_capture_only_encoded_draws :: proc(t: ^testing.T) {
 }
 
 @(test)
+gpu_timing_diagnostics_separates_sample_and_resolve_submissions :: proc(t: ^testing.T) {
+	when !GPU_TIMING_DIAGNOSTICS do return
+	state := new(Gpu_Timing_Diagnostics)
+	defer free(state)
+	sample := cast(wg.CommandEncoder)uintptr(1)
+	resolve := cast(wg.CommandEncoder)uintptr(2)
+	_gpu_timing_diagnostic_encoder_created(state, sample)
+	_gpu_timing_diagnostic_bind(state, 3, 0, sample, nil, .Load, .Store)
+	_gpu_timing_diagnostic_submit(state, sample)
+	_gpu_timing_diagnostic_encoder_created(state, resolve)
+	state.resolve_encoder[3] = resolve
+	_gpu_timing_diagnostic_submit(state, resolve)
+	record := state.bindings[3][0].record
+	testing.expect_value(t, record.encoder_id, u64(1))
+	testing.expect_value(t, record.submit_ordinal, u64(1))
+	testing.expect_value(t, record.resolve_encoder_id, u64(2))
+	testing.expect_value(t, state.resolve_ordinal[3], u64(2))
+	testing.expect(t, record.encoder_id != record.resolve_encoder_id)
+	testing.expect(t, record.submit_ordinal < state.resolve_ordinal[3])
+}
+
+@(test)
 gpu_timing_diagnostics_window_draw_metadata_is_bounded :: proc(t: ^testing.T) {
 	when GPU_TIMING_DIAGNOSTICS {
 		ctx := new(Context)

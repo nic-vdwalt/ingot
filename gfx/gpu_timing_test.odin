@@ -132,6 +132,24 @@ gpu_timing_sample_failure_retires_without_a_result :: proc(t: ^testing.T) {
 }
 
 @(test)
+gpu_timing_resolve_failure_retires_without_a_result :: proc(t: ^testing.T) {
+	state := new(Gpu_Timing_State)
+	defer free(state)
+	state.slots[4] = {
+		phase       = .Resolve_Submitted,
+		generation  = 12,
+		submission  = 8,
+		query_count = 4,
+	}
+	_gpu_timing_resolve_fail(state, 4)
+	testing.expect_value(t, state.slots[4].phase, Gpu_Timing_Phase.Free)
+	testing.expect_value(t, state.slots[4].query_count, u32(0))
+	testing.expect_value(t, state.health.resolve_failure, u64(1))
+	testing.expect_value(t, state.completed_count, u32(0))
+	testing.expect_value(t, _gpu_timing_pending_count(state), u32(0))
+}
+
+@(test)
 gpu_timing_sample_arm_requires_recording_ownership :: proc(t: ^testing.T) {
 	state := new(Gpu_Timing_State)
 	defer free(state)
@@ -225,6 +243,35 @@ gpu_timing_sample_stale_identity_cannot_advance_slot :: proc(t: ^testing.T) {
 	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Sample_Pending)
 	testing.expect(t, record.armed && record.done)
 	testing.expect_value(t, state.health.sample_failure, u64(0))
+}
+
+@(test)
+gpu_timing_sample_pressure_omits_without_reusing_slots :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.gpu_timing.available = true
+	ctx.gpu_timing.active_slot = -1
+	for &slot, index in ctx.gpu_timing.slots {
+		slot = {
+			phase       = .Resolved,
+			generation  = u64(index + 1),
+			query_count = 2,
+		}
+		testing.expect(t, _gpu_timing_sample_arm(&ctx.gpu_timing, index))
+	}
+	_gpu_timing_frame_begin(ctx)
+	testing.expect_value(t, ctx.gpu_timing.active_slot, -1)
+	testing.expect_value(t, ctx.gpu_timing.health.no_free_slot, u64(1))
+	testing.expect_value(
+		t,
+		_gpu_timing_pending_count(&ctx.gpu_timing),
+		u32(GPU_TIMING_FRAME_SLOTS),
+	)
+	for slot, index in ctx.gpu_timing.slots {
+		testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Sample_Pending)
+		testing.expect_value(t, slot.generation, u64(index + 1))
+		testing.expect(t, ctx.gpu_timing.sample_requests[index].armed)
+	}
 }
 
 @(test)

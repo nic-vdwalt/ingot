@@ -44,6 +44,41 @@ context_close_refuses_while_timing_registration_armed :: proc(t: ^testing.T) {
 }
 
 @(test)
+context_close_refuses_while_sample_completion_armed :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.instance = cast(wg.Instance)uintptr(1)
+	ctx.initialized = true
+	ctx.lifecycle = .Ready
+	ctx.gpu_timing.available = true
+	_submission_init(&ctx.submissions, ctx)
+	slot := &ctx.gpu_timing.slots[2]
+	slot^ = {
+		phase       = .Resolved,
+		generation  = 7,
+		query_count = 2,
+	}
+	testing.expect(t, _gpu_timing_sample_arm(&ctx.gpu_timing, 2))
+	record := &ctx.gpu_timing.sample_requests[2]
+	testing.expect(t, !context_quiesce_gpu(ctx))
+	testing.expect(t, !context_close(ctx))
+	testing.expect_value(t, ctx.lifecycle, Context_Lifecycle.Closing)
+	testing.expect(t, ctx.initialized)
+	testing.expect(t, ctx.instance != nil)
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Quarantined)
+	testing.expect(t, record.armed && !record.done)
+	_gpu_timing_sample_done(.Success, {}, record, rawptr(uintptr(record.submission)))
+	testing.expect(t, record.done)
+	testing.expect(t, _gpu_timing_retire(ctx))
+	testing.expect_value(t, ctx.gpu_timing.quarantined, u32(0))
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Free)
+	testing.expect(t, !record.armed && !record.done)
+	testing.expect_value(t, ctx.gpu_timing.completed_count, u32(0))
+	testing.expect(t, context_quiesce_gpu(ctx))
+	ctx.instance = nil
+}
+
+@(test)
 context_quiesce_does_not_close :: proc(t: ^testing.T) {
 	ctx := new(Context)
 	defer free(ctx)
