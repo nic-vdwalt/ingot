@@ -68,7 +68,8 @@ let uniqueIndices = arguments.contains("--unique-indices")
 let allStages = arguments.contains("--all-stages")
 let trackedDependency = arguments.contains("--tracked-dependency")
 let blitBoundarySamples = arguments.contains("--blit-boundary-samples")
-let gapDispatches = arguments.firstIndex(of: "--gap").map { Int(arguments[$0 + 1])! } ?? 0
+let gapArgument = arguments.firstIndex(of: "--gap")
+let gapDispatches = gapArgument.map { Int(arguments[$0 + 1])! } ?? 0
 let deferredResolve = arguments.firstIndex(of: "--deferred-resolve").map { arguments[$0 + 1] }
 if let deferredResolve { precondition(["enqueued", "scheduled", "completed"].contains(deferredResolve)) }
 let experiment: String = {
@@ -77,7 +78,7 @@ let experiment: String = {
     if allStages { return "all_stages" }
     if trackedDependency { return "tracked_dependency" }
     if blitBoundarySamples { return "blit_boundary_samples" }
-    if gapDispatches > 0 { return "gap_\(gapDispatches)" }
+    if gapArgument != nil { return "gap_\(gapDispatches)" }
     if let deferredResolve { return "deferred_\(deferredResolve)" }
     return completedResolve ? "completed_resolve" : "gpu_resolve"
 }()
@@ -317,7 +318,8 @@ precondition(Int(layer.drawableSize.width) == manifest.attachment.width && Int(l
 if blitBoundarySamples && !blitBoundarySupported {
     emit(["kind": "unsupported", "experiment": experiment, "reason": "at_blit_boundary_unsupported"])
     emit(["kind": "footer", "experiment": experiment, "submits": 0,
-          "command_failures": 0, "drained": true, "source_sha256": sourceSHA])
+          "command_failures": 0, "drained": true, "source_sha256": sourceSHA,
+          "executable_sha256": executableSHA])
     output.closeFile()
     exit(0)
 }
