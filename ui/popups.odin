@@ -191,20 +191,15 @@ modal_begin :: proc(
 	// Dimmed inside the modal's z scope so it paints at the modal tier and
 	// covers every lower tier, including content submitted after modal_end.
 	draw_rectangle(frame, config.screen.x, config.screen.y, screen_w, screen_h, style.modal_dim)
-	if config.placement == .Bottom {
-		draw_surface(
-			frame,
-			{f32(mx), f32(my), f32(mw), f32(mh)},
-			.Popup,
-			.Rest,
-			.LG,
-			.Hairline,
-			.Modal,
-		)
-	} else {
-		draw_rectangle(frame, mx, my, mw, mh, style.bg_secondary)
-		draw_rectangle_lines(frame, mx, my, mw, mh, style.border_color)
-	}
+	draw_surface(
+		frame,
+		{f32(mx), f32(my), f32(mw), f32(mh)},
+		.Popup,
+		.Rest,
+		.LG,
+		.Hairline,
+		.Modal,
+	)
 	begin_scissor_mode(frame, mx, my, mw, mh)
 	semantic_push(frame, .Modal, st.rect, title)
 

@@ -111,11 +111,12 @@ modal_inside_a_pane_is_not_double_translated :: proc(t: ^testing.T) {
 	}
 	modal_begin(&frame, &st, "Title", {size = {200, 120}, screen = {0, 0, 640, 480}})
 	testing.expect(t, output.overlay.count >= 2)
-	// commands[0] is the full-screen dim, commands[1] the centered panel.
+	// commands[0] is the full-screen dim, commands[1] the panel shadow, and
+	// commands[2] the centered panel fill.
 	testing.expect_value(t, output.overlay.commands[0].rect.x, f32(0))
 	testing.expect_value(t, output.overlay.commands[0].rect.width, f32(640))
-	testing.expect_value(t, output.overlay.commands[1].rect.x, f32(220))
-	testing.expect_value(t, output.overlay.commands[1].rect.y, f32(180))
+	testing.expect_value(t, output.overlay.commands[2].rect.x, f32(220))
+	testing.expect_value(t, output.overlay.commands[2].rect.y, f32(180))
 	modal_end(&st)
 	ui_frame_pane_pop(&frame)
 	ui_frame_end(&frame)
