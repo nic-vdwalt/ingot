@@ -37,6 +37,119 @@ gpu_timing_test_deliver :: proc(ctx: ^Context, index: int, status: wg.MapAsyncSt
 }
 
 @(test)
+gpu_timing_sample_completion_transitions_are_explicit :: proc(t: ^testing.T) {
+	state := new(Gpu_Timing_State)
+	defer free(state)
+	state.slots[2] = {
+		phase       = .Recording,
+		generation  = 7,
+		query_count = 2,
+	}
+	testing.expect(t, _gpu_timing_sample_arm(state, 2))
+	slot := &state.slots[2]
+	record := &state.sample_requests[2]
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Sample_Pending)
+	testing.expect_value(t, slot.submission, u64(1))
+	testing.expect(t, record.armed && !record.done)
+	testing.expect_value(
+		t,
+		_gpu_timing_sample_transition(record^, slot, 2),
+		Gpu_Timing_Sample_Transition.Pending,
+	)
+	_gpu_timing_sample_done(.Success, {}, record, rawptr(uintptr(record.submission)))
+	testing.expect_value(
+		t,
+		_gpu_timing_sample_transition(record^, slot, 2),
+		Gpu_Timing_Sample_Transition.Resolve_Ready,
+	)
+	testing.expect_value(
+		t,
+		_gpu_timing_sample_retire(state, 2),
+		Gpu_Timing_Sample_Transition.Resolve_Ready,
+	)
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Resolve_Submitted)
+	testing.expect_value(t, slot.sample_status, wg.QueueWorkDoneStatus.Success)
+	testing.expect(t, !record.armed && !record.done)
+}
+
+@(test)
+gpu_timing_sample_completion_rejects_failure_duplicate_and_stale_identity :: proc(t: ^testing.T) {
+	state := new(Gpu_Timing_State)
+	defer free(state)
+	state.slots[0] = {
+		phase       = .Recording,
+		generation  = 4,
+		query_count = 2,
+	}
+	testing.expect(t, _gpu_timing_sample_arm(state, 0))
+	slot := &state.slots[0]
+	record := &state.sample_requests[0]
+	_gpu_timing_sample_done(.Error, {}, record, rawptr(uintptr(record.submission)))
+	testing.expect_value(
+		t,
+		_gpu_timing_sample_transition(record^, slot, 0),
+		Gpu_Timing_Sample_Transition.Failed,
+	)
+	_gpu_timing_sample_done(.Success, {}, record, rawptr(uintptr(record.submission)))
+	testing.expect_value(t, record.stray, u32(1))
+	record.done = false
+	record.status = {}
+	_gpu_timing_sample_done(.Success, {}, record, rawptr(uintptr(record.submission + 1)))
+	testing.expect_value(t, record.stray, u32(2))
+	slot.generation += 1
+	testing.expect_value(
+		t,
+		_gpu_timing_sample_transition(record^, slot, 0),
+		Gpu_Timing_Sample_Transition.Stale,
+	)
+	_gpu_timing_fold_sample_stray(state, record)
+	testing.expect_value(t, state.health.stray_callbacks, u64(2))
+}
+
+@(test)
+gpu_timing_sample_failure_retires_without_a_result :: proc(t: ^testing.T) {
+	state := new(Gpu_Timing_State)
+	defer free(state)
+	state.slots[1] = {
+		phase       = .Recording,
+		generation  = 9,
+		query_count = 2,
+	}
+	testing.expect(t, _gpu_timing_sample_arm(state, 1))
+	slot := &state.slots[1]
+	record := &state.sample_requests[1]
+	_gpu_timing_sample_done(.Error, {}, record, rawptr(uintptr(record.submission)))
+	testing.expect_value(
+		t,
+		_gpu_timing_sample_retire(state, 1),
+		Gpu_Timing_Sample_Transition.Failed,
+	)
+	testing.expect_value(t, slot.phase, Gpu_Timing_Phase.Sample_Failed)
+	testing.expect_value(t, slot.sample_status, wg.QueueWorkDoneStatus.Error)
+	testing.expect_value(t, state.health.sample_failure, u64(1))
+	testing.expect_value(t, state.completed_count, u32(0))
+	testing.expect(t, !record.armed && !record.done)
+}
+
+@(test)
+gpu_timing_sample_arm_requires_recording_ownership :: proc(t: ^testing.T) {
+	state := new(Gpu_Timing_State)
+	defer free(state)
+	testing.expect(t, !_gpu_timing_sample_arm(nil, 0))
+	testing.expect(t, !_gpu_timing_sample_arm(state, -1))
+	testing.expect(t, !_gpu_timing_sample_arm(state, GPU_TIMING_FRAME_SLOTS))
+	state.slots[0] = {
+		phase      = .Recording,
+		generation = 1,
+	}
+	testing.expect(t, !_gpu_timing_sample_arm(state, 0))
+	state.slots[0].query_count = 2
+	testing.expect(t, _gpu_timing_sample_arm(state, 0))
+	testing.expect(t, !_gpu_timing_sample_arm(state, 0))
+	testing.expect_value(t, _gpu_timing_pending_count(state), u32(1))
+}
+
+@(test)
 gpu_timing_synthetic_cadence_preserves_delayed_completions :: proc(t: ^testing.T) {
 	rates := [2]int{120, 240}
 	for rate in rates {

@@ -32,12 +32,15 @@ DRAIN_POLLS :: 4096
 VERTEX_STRIDE :: 36
 
 SAMPLE_FORMAT ::
-	`{{"kind":"sample","iteration":%d,"slot":%d,"submit":%d,"status":%d,"mapped":%v,` +
-	`"begin":%d,"end":%d,"prior_begin":%d,"prior_end":%d,"prior_kind":"%s",` +
-	`"class":"%s","final_drain":%v}}`
+	`{{"kind":"sample","iteration":%d,"slot":%d,"submit":%d,"resolve_submit":%d,` +
+	`"completion_status":%d,"status":%d,"mapped":%v,"begin":%d,"end":%d,` +
+	`"indices":[0,1],"gpu_samples":[%d,%d],"cpu_samples":[%d,%d],` +
+	`"prior_cpu_samples":[%d,%d],"prior_begin":%d,"prior_end":%d,` +
+	`"prior_kind":"%s","class":"%s","final_drain":%v}}`
 HEADER_FORMAT ::
-	`{{"kind":"header","bundle":%q,"frame":%d,"iterations":%d,"fb_width":%d,` +
-	`"fb_height":%d,"format":%d,"timestamp_period_ns":%v,"draws":%d,"started":%q}}`
+	`{{"kind":"header","mode":%q,"experiment":%q,"bundle":%q,"frame":%d,` +
+	`"iterations":%d,"fb_width":%d,"fb_height":%d,"format":%d,` +
+	`"timestamp_period_ns":%v,"draws":%d,"started":%q}}`
 
 Manifest_Attribute :: struct {
 	format:          u32,
@@ -116,20 +119,29 @@ Manifest :: struct {
 // request, published by the callback with a release store, retired by the
 // collector after consumption.
 Map_Record :: struct {
-	ticks:  [2]u64,
+	ticks:  [4]u64,
 	status: wg.MapAsyncStatus,
 	mapped: bool,
 	armed:  bool,
 	done:   bool,
 }
 
+Work_Record :: struct {
+	status: wg.QueueWorkDoneStatus,
+	armed:  bool,
+	done:   bool,
+}
+
 Slot :: struct {
-	readback:   wg.Buffer,
-	record:     Map_Record,
-	iteration:  int,
-	submit:     u64,
-	prior:      [2]u64,
-	prior_kind: string,
+	readback:          wg.Buffer,
+	record:            Map_Record,
+	work:              Work_Record,
+	iteration:         int,
+	submit:            u64,
+	resolve_submit:    u64,
+	completion_status: wg.QueueWorkDoneStatus,
+	prior:             [2]u64,
+	prior_kind:        string,
 }
 
 Error_Scope :: struct {
@@ -138,25 +150,37 @@ Error_Scope :: struct {
 }
 
 Replay :: struct {
-	ctx:        ^rl.Context,
-	manifest:   Manifest,
-	shader:     wg.ShaderModule,
-	ubind_lay:  wg.BindGroupLayout,
-	tex_lay:    wg.BindGroupLayout,
-	ubuf:       wg.Buffer,
-	ubind:      wg.BindGroup,
-	neutral:    wg.BindGroup,
-	atlas_bind: map[u32]wg.BindGroup,
-	pipelines:  []wg.RenderPipeline,
-	vbufs:      []wg.Buffer,
-	ibufs:      []wg.Buffer,
-	query_set:  wg.QuerySet,
-	resolve:    wg.Buffer,
-	slots:      [SLOTS]Slot,
-	out:        ^os.File,
-	period:     f64,
-	submits:    u64,
-	errors:     Error_Scope,
+	ctx:              ^rl.Context,
+	manifest:         Manifest,
+	completion_gated: bool,
+	shader:           wg.ShaderModule,
+	ubind_lay:        wg.BindGroupLayout,
+	tex_lay:          wg.BindGroupLayout,
+	ubuf:             wg.Buffer,
+	ubind:            wg.BindGroup,
+	neutral:          wg.BindGroup,
+	atlas_bind:       map[u32]wg.BindGroup,
+	pipelines:        []wg.RenderPipeline,
+	vbufs:            []wg.Buffer,
+	ibufs:            []wg.Buffer,
+	query_set:        wg.QuerySet,
+	resolve:          wg.Buffer,
+	slots:            [SLOTS]Slot,
+	out:              ^os.File,
+	period:           f64,
+	submits:          u64,
+	errors:           Error_Scope,
+}
+
+work_done :: proc "c" (
+	status: wg.QueueWorkDoneStatus,
+	message: wg.StringView,
+	userdata1, userdata2: rawptr,
+) {
+	record := cast(^Work_Record)userdata1
+	if record == nil || !sync.atomic_load(&record.armed) || sync.atomic_load(&record.done) do return
+	record.status = status
+	sync.atomic_store_explicit(&record.done, true, .Release)
 }
 
 map_done :: proc "c" (
@@ -170,9 +194,9 @@ map_done :: proc "c" (
 	record.mapped = false
 	if status == .Success {
 		slot := cast(^Slot)userdata2
-		mapped := wg.BufferGetConstMappedRange(slot.readback, 0, 16)
-		if mapped != nil && len(mapped) >= 16 {
-			words := cast(^[2]u64)raw_data(mapped)
+		mapped := wg.BufferGetConstMappedRange(slot.readback, 0, 32)
+		if mapped != nil && len(mapped) >= 32 {
+			words := cast(^[4]u64)raw_data(mapped)
 			record.ticks = words^
 			record.mapped = true
 		}
@@ -482,10 +506,18 @@ collect :: proc(r: ^Replay, final: bool) {
 			slot.iteration,
 			index,
 			slot.submit,
+			slot.resolve_submit,
+			int(slot.completion_status),
 			int(record.status),
 			record.mapped,
 			record.ticks[0],
 			record.ticks[1],
+			record.ticks[0],
+			record.ticks[1],
+			record.ticks[2],
+			record.ticks[3],
+			slot.prior[0],
+			slot.prior[1],
 			slot.prior[0],
 			slot.prior[1],
 			slot.prior_kind,
@@ -494,7 +526,7 @@ collect :: proc(r: ^Replay, final: bool) {
 		)
 		emit(r, line)
 		if record.mapped {
-			slot.prior = record.ticks
+			slot.prior = {record.ticks[0], record.ticks[1]}
 			slot.prior_kind = "mapped"
 		} else {
 			slot.prior_kind = "unmapped"
@@ -506,6 +538,39 @@ collect :: proc(r: ^Replay, final: bool) {
 free_slot :: proc(r: ^Replay) -> int {
 	for &slot, index in r.slots do if !slot.record.armed do return index
 	return -1
+}
+
+wait_for_sample :: proc(r: ^Replay, slot: ^Slot) -> bool {
+	slot.work = {}
+	sync.atomic_store_explicit(&slot.work.armed, true, .Release)
+	wg.QueueOnSubmittedWorkDone(
+		r.ctx.queue,
+		{mode = .AllowSpontaneos, callback = work_done, userdata1 = &slot.work},
+	)
+	for _ in 0 ..< DRAIN_POLLS {
+		if sync.atomic_load_explicit(&slot.work.done, .Acquire) do break
+		wg.DevicePoll(r.ctx.device, true, nil)
+	}
+	if !sync.atomic_load_explicit(&slot.work.done, .Acquire) do return false
+	slot.completion_status = slot.work.status
+	return slot.work.status == .Success
+}
+
+submit_resolve :: proc(r: ^Replay, slot: ^Slot) -> bool {
+	encoder := wg.DeviceCreateCommandEncoder(r.ctx.device, &{label = "replay.resolve.completed"})
+	if encoder == nil do return false
+	wg.CommandEncoderResolveQuerySet(encoder, r.query_set, 0, 2, r.resolve, 0)
+	wg.CommandEncoderResolveQuerySet(encoder, r.query_set, 0, 2, r.resolve, 256)
+	wg.CommandEncoderCopyBufferToBuffer(encoder, r.resolve, 0, slot.readback, 0, 16)
+	wg.CommandEncoderCopyBufferToBuffer(encoder, r.resolve, 256, slot.readback, 16, 16)
+	command := wg.CommandEncoderFinish(encoder, nil)
+	wg.CommandEncoderRelease(encoder)
+	if command == nil do return false
+	wg.QueueSubmit(r.ctx.queue, {command})
+	wg.CommandBufferRelease(command)
+	r.submits += 1
+	slot.resolve_submit = r.submits
+	return true
 }
 
 iteration :: proc(r: ^Replay, iteration: int) -> bool {
@@ -576,16 +641,22 @@ iteration :: proc(r: ^Replay, iteration: int) -> bool {
 	}
 	wg.RenderPassEncoderEnd(pass)
 	wg.RenderPassEncoderRelease(pass)
-	wg.CommandEncoderResolveQuerySet(encoder, r.query_set, 0, 2, r.resolve, 0)
-	wg.CommandEncoderCopyBufferToBuffer(encoder, r.resolve, 0, slot.readback, 0, 16)
+	if !r.completion_gated {
+		wg.CommandEncoderResolveQuerySet(encoder, r.query_set, 0, 2, r.resolve, 0)
+		wg.CommandEncoderCopyBufferToBuffer(encoder, r.resolve, 0, slot.readback, 0, 16)
+	}
 	command := wg.CommandEncoderFinish(encoder, nil)
 	ok := command != nil
 	if ok {
 		wg.QueueSubmit(ctx.queue, {command})
 		wg.CommandBufferRelease(command)
 		r.submits += 1
+		slot.submit = r.submits
 	}
 	wg.CommandEncoderRelease(encoder)
+	if ok && r.completion_gated {
+		ok = wait_for_sample(r, slot) && submit_resolve(r, slot)
+	}
 	r.errors.done = false
 	wg.DevicePopErrorScope(
 		ctx.device,
@@ -604,14 +675,17 @@ iteration :: proc(r: ^Replay, iteration: int) -> bool {
 	}
 	if ok {
 		slot.iteration = iteration
-		slot.submit = r.submits
+		if !r.completion_gated {
+			slot.resolve_submit = slot.submit
+			slot.completion_status = .Success
+		}
 		slot.record = {}
 		sync.atomic_store_explicit(&slot.record.armed, true, .Release)
 		wg.BufferMapAsync(
 			slot.readback,
 			{.Read},
 			0,
-			16,
+			32,
 			{
 				mode = .AllowSpontaneos,
 				callback = map_done,
@@ -642,8 +716,10 @@ drain :: proc(r: ^Replay) -> bool {
 }
 
 main :: proc() {
-	if len(os.args) < 4 {
-		fmt.eprintln("usage: replay <bundle-dir> <iterations> <output.jsonl>")
+	if len(os.args) < 4 || len(os.args) > 5 {
+		fmt.eprintln(
+			"usage: replay <bundle-dir> <iterations> <output.jsonl> [--completion-gated-resolve]",
+		)
 		os.exit(2)
 	}
 	dir := os.args[1]
@@ -653,6 +729,10 @@ main :: proc() {
 	if err != nil do os.exit(2)
 	r: Replay
 	r.out = out
+	if len(os.args) == 5 {
+		if os.args[4] != "--completion-gated-resolve" do os.exit(2)
+		r.completion_gated = true
+	}
 	r.manifest = load_manifest(dir)
 	attachment := r.manifest.attachment
 	rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI})
@@ -694,6 +774,8 @@ main :: proc() {
 		&r,
 		fmt.tprintf(
 			HEADER_FORMAT,
+			r.completion_gated ? "webgpu_completion_gated_replay" : "webgpu_pinned_replay",
+			r.completion_gated ? "completion_gated_resolve" : "webgpu_pinned_replay",
 			dir,
 			r.manifest.frame,
 			iterations,

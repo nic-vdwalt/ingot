@@ -23,7 +23,7 @@ def run_records(mode, ticks, prior_kind="mapped"):
             klass = "ordered"
         record = {"kind": "sample", "iteration": index, "slot": index % 2, "class": klass,
                   "prior_begin": prior[0], "prior_end": prior[1], "prior_kind": prior_kind}
-        if mode == "webgpu_pinned_replay":
+        if mode.startswith("webgpu_"):
             record.update(begin=begin, end=end, status=1, mapped=True)
         else:
             record.update(gpu_begin=begin, gpu_end=end, status=4)
@@ -74,6 +74,24 @@ class EvaluateReplayTests(unittest.TestCase):
         self.assertEqual(summary["classes"]["ordered"], 2)
         self.assertEqual(summary["stale_by_k_passes"]["1"], 2)
         self.assertFalse(candidate_passes(summary))
+
+    def test_completion_gated_current_samples_pass(self):
+        records = run_records("webgpu_completion_gated_replay", [(100, 200), (300, 400)])
+        for record in records[1:-1]:
+            record["indices"] = [0, 1]
+            record["gpu_samples"] = [record["begin"], record["end"]]
+            record["cpu_samples"] = list(record["gpu_samples"])
+            record["prior_cpu_samples"] = [0, 0]
+        self.assertTrue(candidate_passes(evaluate_run(records)))
+
+    def test_completion_gated_ordered_prior_generation_fails(self):
+        records = run_records("webgpu_completion_gated_replay", [(100, 200), (300, 400)])
+        for index, record in enumerate(records[1:-1]):
+            record["indices"] = [0, 1]
+            record["gpu_samples"] = [100 + 200 * index, 200 + 200 * index]
+            record["cpu_samples"] = [300 + 200 * index, 400 + 200 * index]
+            record["prior_cpu_samples"] = list(record["gpu_samples"])
+        self.assertFalse(candidate_passes(evaluate_run(records)))
 
     def test_incomplete_run_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

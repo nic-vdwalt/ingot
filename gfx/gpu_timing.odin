@@ -50,18 +50,39 @@ Gpu_Frame_Timing_Detail :: struct {
 // A slot walks this machine and only the submitting/collecting thread moves
 // it; the backend callback never touches a slot.
 //
-//   Free -> Recording -> Resolved -> Map_Pending
+//   Free -> Recording -> Sample_Pending -> Resolve_Submitted -> Map_Pending
+//   Sample_Pending -> Sample_Failed -> Free            (collector retires)
 //   Map_Pending -> Result_Ready | Map_Failed -> Free   (collector retires)
-//   Map_Pending -> Quarantined                        (retire unproved at close)
-//   Quarantined -> Free                               (terminal callback observed later)
+//   Sample_Pending | Map_Pending -> Quarantined        (retire unproved at close)
+//   Quarantined -> Free                                (terminal callback observed later)
 Gpu_Timing_Phase :: enum u8 {
 	Free,
 	Recording,
 	Resolved,
+	Sample_Pending,
+	Resolve_Submitted,
+	Sample_Failed,
 	Map_Pending,
 	Result_Ready,
 	Map_Failed,
 	Quarantined,
+}
+
+Gpu_Timing_Sample_Request :: struct {
+	slot_index: u32,
+	generation: u64,
+	submission: u64,
+	status:     wg.QueueWorkDoneStatus,
+	armed:      bool,
+	done:       bool,
+	stray:      u32,
+}
+
+Gpu_Timing_Sample_Transition :: enum u8 {
+	Pending,
+	Resolve_Ready,
+	Failed,
+	Stale,
 }
 
 // One backend map registration. The submitter writes the identity and arms
@@ -87,18 +108,19 @@ Gpu_Timing_Map_Request :: struct {
 }
 
 Gpu_Timing_Slot :: struct {
-	phase:       Gpu_Timing_Phase,
-	generation:  u64,
-	submission:  u64,
-	epoch:       u64,
-	query_set:   wg.QuerySet,
-	resolve:     wg.Buffer,
-	readback:    wg.Buffer,
-	frame_index: u64,
-	query_count: u32,
-	labels:      [GPU_TIMING_MAX_SPANS]Gpu_Timing_Label,
-	ticks:       [GPU_TIMING_QUERY_COUNT]u64,
-	map_status:  wg.MapAsyncStatus,
+	phase:         Gpu_Timing_Phase,
+	generation:    u64,
+	submission:    u64,
+	epoch:         u64,
+	query_set:     wg.QuerySet,
+	resolve:       wg.Buffer,
+	readback:      wg.Buffer,
+	frame_index:   u64,
+	query_count:   u32,
+	labels:        [GPU_TIMING_MAX_SPANS]Gpu_Timing_Label,
+	ticks:         [GPU_TIMING_QUERY_COUNT]u64,
+	sample_status: wg.QueueWorkDoneStatus,
+	map_status:    wg.MapAsyncStatus,
 }
 
 Gpu_Timing_Invalid_Pair :: struct {
@@ -124,6 +146,8 @@ Gpu_Timing_Health :: struct {
 	no_free_slot:          u64,
 	pair_exhaustion:       u64,
 	map_failure:           u64,
+	sample_failure:        u64,
+	resolve_failure:       u64,
 	group_truncation:      u64,
 	invalid_timestamps:    u64,
 	stray_callbacks:       u64,
@@ -142,6 +166,7 @@ Gpu_Timing_State :: struct {
 	completed_count:  u32,
 	health:           Gpu_Timing_Health,
 	slots:            [GPU_TIMING_FRAME_SLOTS]Gpu_Timing_Slot,
+	sample_requests:  [GPU_TIMING_FRAME_SLOTS]Gpu_Timing_Sample_Request,
 	requests:         [GPU_TIMING_FRAME_SLOTS]Gpu_Timing_Map_Request,
 	active_slot:      int,
 	timestamp_period: f64,
@@ -195,19 +220,30 @@ _gpu_timing_init :: proc(ctx: ^Context) -> bool {
 // with the backend and has not been retired by the collector.
 _gpu_timing_slot_in_flight :: proc(slot: ^Gpu_Timing_Slot) -> bool {
 	assert(slot != nil)
-	return slot.phase == .Map_Pending || slot.phase == .Quarantined
+	return(
+		slot.phase == .Sample_Pending ||
+		slot.phase == .Resolve_Submitted ||
+		slot.phase == .Map_Pending ||
+		slot.phase == .Quarantined \
+	)
 }
 
 _gpu_timing_pending_count :: proc(state: ^Gpu_Timing_State) -> u32 {
 	assert(state != nil)
 	pending := u32(0)
 	for &slot, index in state.slots {
-		in_flight := _gpu_timing_slot_in_flight(&slot)
+		sample_armed := sync.atomic_load(&state.sample_requests[index].armed)
+		map_armed := sync.atomic_load(&state.requests[index].armed)
+		assert(!(sample_armed && map_armed), "gpu timing: slot has two callback owners")
+		if sample_armed || map_armed do pending += 1
 		assert(
-			in_flight == sync.atomic_load(&state.requests[index].armed),
-			"gpu timing: slot phase and map record disagree",
+			!sample_armed || slot.phase == .Sample_Pending || slot.phase == .Quarantined,
+			"gpu timing: sample record phase disagreement",
 		)
-		if in_flight do pending += 1
+		assert(
+			!map_armed || slot.phase == .Map_Pending || slot.phase == .Quarantined,
+			"gpu timing: map record phase disagreement",
+		)
 	}
 	return pending
 }
@@ -477,6 +513,101 @@ _gpu_timing_fold_stray :: proc(state: ^Gpu_Timing_State, record: ^Gpu_Timing_Map
 	state.health.stray_callbacks += u64(sync.atomic_exchange(&record.stray, 0))
 }
 
+_gpu_timing_fold_sample_stray :: proc(
+	state: ^Gpu_Timing_State,
+	record: ^Gpu_Timing_Sample_Request,
+) {
+	assert(state != nil && record != nil)
+	state.health.stray_callbacks += u64(sync.atomic_exchange(&record.stray, 0))
+}
+
+_gpu_timing_sample_record_matches_slot :: proc(
+	record: Gpu_Timing_Sample_Request,
+	slot: ^Gpu_Timing_Slot,
+	slot_index: int,
+) -> bool {
+	if slot == nil do return false
+	return(
+		record.armed &&
+		slot.phase == .Sample_Pending &&
+		record.slot_index == u32(slot_index) &&
+		record.generation == slot.generation &&
+		record.submission == slot.submission &&
+		record.generation != 0 &&
+		record.submission != 0 \
+	)
+}
+
+_gpu_timing_sample_transition :: proc(
+	record: Gpu_Timing_Sample_Request,
+	slot: ^Gpu_Timing_Slot,
+	slot_index: int,
+) -> Gpu_Timing_Sample_Transition {
+	if !_gpu_timing_sample_record_matches_slot(record, slot, slot_index) do return .Stale
+	if !record.done do return .Pending
+	if record.status != .Success do return .Failed
+	return .Resolve_Ready
+}
+
+_gpu_timing_sample_retire :: proc(
+	state: ^Gpu_Timing_State,
+	slot_index: int,
+) -> Gpu_Timing_Sample_Transition {
+	if state == nil || slot_index < 0 || slot_index >= GPU_TIMING_FRAME_SLOTS do return .Stale
+	slot := &state.slots[slot_index]
+	record := &state.sample_requests[slot_index]
+	transition := _gpu_timing_sample_transition(record^, slot, slot_index)
+	if transition == .Pending || transition == .Stale do return transition
+	slot.sample_status = record.status
+	record^ = {}
+	if transition == .Failed {
+		slot.phase = .Sample_Failed
+		state.health.sample_failure += 1
+	} else {
+		slot.phase = .Resolve_Submitted
+	}
+	return transition
+}
+
+_gpu_timing_sample_arm :: proc(state: ^Gpu_Timing_State, slot_index: int) -> bool {
+	if state == nil || slot_index < 0 || slot_index >= GPU_TIMING_FRAME_SLOTS do return false
+	slot := &state.slots[slot_index]
+	record := &state.sample_requests[slot_index]
+	if slot.phase != .Recording || slot.query_count == 0 || record.armed || record.done do return false
+	state.submission += 1
+	if state.submission == 0 do return false
+	slot.submission = state.submission
+	record^ = {
+		slot_index = u32(slot_index),
+		generation = slot.generation,
+		submission = slot.submission,
+	}
+	slot.phase = .Sample_Pending
+	sync.atomic_store_explicit(&record.armed, true, .Release)
+	return true
+}
+
+_gpu_timing_sample_done :: proc "c" (
+	status: wg.QueueWorkDoneStatus,
+	message: wg.StringView,
+	userdata1, userdata2: rawptr,
+) {
+	context = runtime.default_context()
+	_ = message
+	record := cast(^Gpu_Timing_Sample_Request)userdata1
+	submission := u64(uintptr(userdata2))
+	if record == nil do return
+	if !sync.atomic_load_explicit(&record.armed, .Acquire) ||
+	   sync.atomic_load(&record.done) ||
+	   submission == 0 ||
+	   submission != record.submission {
+		sync.atomic_add(&record.stray, 1)
+		return
+	}
+	record.status = status
+	sync.atomic_store_explicit(&record.done, true, .Release)
+}
+
 _gpu_timing_invalid_pair :: proc(ticks: []u64, span_count: u32) -> (u32, bool) {
 	if span_count == 0 || int(span_count) * 2 > len(ticks) do return 0, false
 	for span in 0 ..< int(span_count) {
@@ -544,6 +675,7 @@ _gpu_timing_collect :: proc(ctx: ^Context) {
 	if ctx == nil || !ctx.gpu_timing.available do return
 	for &slot, slot_index in ctx.gpu_timing.slots {
 		record := &ctx.gpu_timing.requests[slot_index]
+		_gpu_timing_fold_sample_stray(&ctx.gpu_timing, &ctx.gpu_timing.sample_requests[slot_index])
 		_gpu_timing_fold_stray(&ctx.gpu_timing, record)
 		if !_gpu_timing_slot_in_flight(&slot) do continue
 		if !sync.atomic_load_explicit(&record.done, .Acquire) do continue
