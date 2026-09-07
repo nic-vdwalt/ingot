@@ -42,7 +42,7 @@ def attachment_clear_bytes(record):
 def window_geometry(payload, draw):
     checked_object(payload)
     checked_object(draw)
-    if checked_u32(payload.get("version")) not in (6, 7, 8):
+    if checked_u32(payload.get("version")) not in (6, 7, 8, 9):
         raise ValueError("unsupported geometry schema")
     identity = draw.get("geometry_id", 0)
     geometry = checked_array(payload.get("geometry"), 16)
@@ -85,7 +85,7 @@ ATLAS_BYTES_MAX = 1024 * 1024
 def atlas_pixels(payload, draw):
     checked_object(payload)
     checked_object(draw)
-    if checked_u32(payload.get("version")) not in (7, 8) or draw.get("atlas_known") is not True:
+    if checked_u32(payload.get("version")) not in (7, 8, 9) or draw.get("atlas_known") is not True:
         raise ValueError("unsupported or incomplete atlas evidence")
     identity = checked_u32(draw.get("atlas_id"))
     prefix = checked_u32(draw.get("atlas_upload_count"))
@@ -129,3 +129,91 @@ def atlas_pixels(payload, draw):
             target = (y + row) * ATLAS_DIM + x
             output[target:target + width] = data[source:source + width]
     return output
+
+
+# Pinned wgpu enum values (tools/odin-902106f/vendor/wgpu/wgpu.odin) the batch
+# pipeline contract is written against. Any other value is a different pipeline.
+VERTEX_FLOAT32X2 = 0x1D
+VERTEX_FLOAT32X4 = 0x1F
+VERTEX_UINT32 = 0x20
+STEP_MODE_VERTEX = 1
+TOPOLOGY_TRIANGLE_LIST = 4
+FRONT_FACE_CCW = 1
+CULL_MODE_NONE = 1
+BLEND_ADD = 0
+BLEND_ONE = 2
+BLEND_ONE_MINUS_SRC_ALPHA = 6
+BLEND_DST = 7
+WRITE_MASK_ALL = 0xF
+BATCH_PIPELINE_COUNT = 8
+BLEND_SLOT_COUNT = 4
+BATCH_ATTRIBUTES = (
+    (VERTEX_FLOAT32X2, 0, 0),
+    (VERTEX_FLOAT32X4, 8, 1),
+    (VERTEX_FLOAT32X2, 24, 2),
+    (VERTEX_UINT32, 32, 3),
+)
+BATCH_BLENDS = {
+    0: (BLEND_ADD, BLEND_ONE, BLEND_ONE_MINUS_SRC_ALPHA),
+    1: (BLEND_ADD, BLEND_ONE, BLEND_ONE),
+    2: (BLEND_ADD, BLEND_DST, BLEND_ONE_MINUS_SRC_ALPHA),
+}
+
+
+def checked_blend(value):
+    checked_object(value)
+    return tuple(checked_u32(value.get(field))
+                 for field in ("operation", "src_factor", "dst_factor"))
+
+
+def batch_pipeline(payload, draw, record):
+    """Return the retained descriptor the draw's (kind, blend) selected at the
+    record's attachment format, verified against the fixed batch contract."""
+    checked_object(payload)
+    checked_object(draw)
+    checked_object(record)
+    if checked_u32(payload.get("version")) != 9:
+        raise ValueError("unsupported pipeline schema")
+    kind = checked_u32(draw.get("pipeline_kind"))
+    style = checked_u32(draw.get("pipeline_style"))
+    if kind > 1 or style >= BLEND_SLOT_COUNT:
+        raise ValueError("draw selects no batch pipeline")
+    pipelines = checked_array(payload.get("batch_pipelines"), BATCH_PIPELINE_COUNT)
+    if len(pipelines) != BATCH_PIPELINE_COUNT:
+        raise ValueError("incomplete batch pipeline set")
+    entry = checked_object(pipelines[style + kind * BLEND_SLOT_COUNT])
+    if entry.get("known") is not True:
+        raise ValueError("selected pipeline descriptor not retained")
+    if checked_u32(entry.get("format")) != checked_u32(record.get("format")):
+        raise ValueError("retained pipeline targets another format")
+    if type(entry.get("vertex_stride")) is not int or entry["vertex_stride"] != 36:
+        raise ValueError("unexpected vertex stride")
+    if checked_u32(entry.get("step_mode")) != STEP_MODE_VERTEX:
+        raise ValueError("unexpected vertex step mode")
+    attributes = checked_array(entry.get("attributes"), 4)
+    if len(attributes) != 4:
+        raise ValueError("incomplete vertex attributes")
+    for attribute, expected in zip(attributes, BATCH_ATTRIBUTES):
+        checked_object(attribute)
+        actual = (checked_u32(attribute.get("format")),
+                  attribute.get("offset"), checked_u32(attribute.get("shader_location")))
+        if type(actual[1]) is not int or actual != expected:
+            raise ValueError("vertex attribute differs from batch contract")
+    if (checked_u32(entry.get("topology")) != TOPOLOGY_TRIANGLE_LIST or
+            checked_u32(entry.get("front_face")) != FRONT_FACE_CCW or
+            checked_u32(entry.get("cull_mode")) != CULL_MODE_NONE or
+            entry.get("unclipped_depth") is not False):
+        raise ValueError("unexpected primitive state")
+    if (checked_u32(entry.get("sample_count")) != 1 or
+            checked_u32(entry.get("sample_mask")) != 0xffffffff or
+            entry.get("alpha_to_coverage") is not False):
+        raise ValueError("unexpected multisample state")
+    if entry.get("blend_enabled") is not True:
+        raise ValueError("blend disabled on a blendable window target")
+    color = checked_blend(entry.get("blend_color"))
+    alpha = checked_blend(entry.get("blend_alpha"))
+    if style not in BATCH_BLENDS or color != BATCH_BLENDS[style] or alpha != color:
+        raise ValueError("blend state differs from the recorded style")
+    if type(entry.get("write_mask")) is not int or entry["write_mask"] != WRITE_MASK_ALL:
+        raise ValueError("unexpected colour write mask")
+    return entry

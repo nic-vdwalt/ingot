@@ -113,7 +113,7 @@ Renderer :: struct {
 	alt_n:                 int,
 	ubuf:                  wg.Buffer,
 	diagnostic_projection: [4 when GPU_TIMING_DIAGNOSTICS else 0]f32,
-	diagnostic_pipelines: [8 when GPU_TIMING_DIAGNOSTICS else 0]Gpu_Timing_Batch_Pipeline,
+	diagnostic_pipelines:  [GPU_TIMING_BATCH_PIPELINE_SLOTS]Gpu_Timing_Batch_Pipeline,
 	ubind:                 wg.BindGroup,
 	ubind_layout:          wg.BindGroupLayout,
 	tex_layout:            wg.BindGroupLayout, // group(1): texture + sampler
@@ -275,6 +275,11 @@ _make_pipe :: proc(
 		writeMask = wg.ColorWriteMaskFlags_All,
 	}
 	if _format_blendable(format) do target.blend = &blend
+	primitive := wg.PrimitiveState{topology = .TriangleList, frontFace = .CCW, cullMode = .None}
+	multisample := wg.MultisampleState{count = 1, mask = ~u32(0)}
+	when GPU_TIMING_DIAGNOSTICS {
+		_gpu_timing_batch_pipeline(r, slot, fs, format, vbl, primitive, multisample, blend, target)
+	}
 	layouts := [2]wg.BindGroupLayout{r.ubind_layout, r.tex_layout}
 	pl := wg.DeviceCreatePipelineLayout(
 		device,
@@ -286,8 +291,8 @@ _make_pipe :: proc(
 		&{
 			layout = pl,
 			vertex = {module = r.shader, entryPoint = "vs_main", bufferCount = 1, buffers = &vbl},
-			primitive = {topology = .TriangleList, frontFace = .CCW, cullMode = .None},
-			multisample = {count = 1, mask = ~u32(0)},
+			primitive = primitive,
+			multisample = multisample,
 			fragment = &wg.FragmentState {
 				module = r.shader,
 				entryPoint = fs,
@@ -581,7 +586,12 @@ renderer_init :: proc(ctx: ^Context, r: ^Renderer) -> bool {
 	r.cust_dst = .OneMinusSrcAlpha
 	r.cust_op = .Add
 
-	// build every (kind × blend_slot) pipeline once.
+	// build every (kind × blend_slot) pipeline once. The retained descriptors
+	// are cleared first so a re-initialised window records its own swapchain
+	// set rather than keeping a previous window's format.
+	when GPU_TIMING_DIAGNOSTICS {
+		r.diagnostic_pipelines = {}
+	}
 	for kind in Pipe_Kind {
 		fs, textured := _fs_for(kind)
 		for slot in Blend_Slot {

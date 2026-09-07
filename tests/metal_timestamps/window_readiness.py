@@ -2,7 +2,8 @@ import argparse
 import json
 from pathlib import Path
 
-from replay_inputs import atlas_pixels, attachment_clear_bytes, window_geometry
+from replay_inputs import (atlas_pixels, attachment_clear_bytes, batch_pipeline,
+                           window_geometry)
 
 
 def selected_window_readiness(payload, record):
@@ -15,8 +16,8 @@ def selected_window_readiness(payload, record):
         if not condition:
             missing.append(dict(field=field, reason=reason))
 
-    require(type(payload.get("version")) is int and payload["version"] == 8,
-            "version", "requires schema 8 selected-pass inputs")
+    require(type(payload.get("version")) is int and payload["version"] == 9,
+            "version", "requires schema 9 selected-pass inputs")
     shader = payload.get("batch_shader")
     require(type(shader) is str and 0 < len(shader) <= 65536,
             "batch_shader", "compiled built-in shader source unavailable")
@@ -75,6 +76,10 @@ def selected_window_readiness(payload, record):
                     "custom blend factors unavailable")
             require(type(draw.get("shader_id")) is int and draw["shader_id"] == 0,
                     prefix + ".shader_id", "custom shader unavailable")
+            try:
+                batch_pipeline(payload, draw, record)
+            except ValueError as error:
+                require(False, prefix + ".pipeline_descriptor", str(error))
             if draw.get("neutral_texture") is True:
                 require(type(draw.get("atlas_id")) is int and draw["atlas_id"] == 0 and
                         draw.get("atlas_known") is False,
@@ -110,7 +115,6 @@ def selected_window_readiness(payload, record):
             require(type(value) is int and 0 <= value < 2**64,
                     "previous." + field, "prior mapped identity/sample missing")
     require(False, "source_manifest", "immutable actual-build shader/pipeline manifest required")
-    require(False, "pipeline_descriptor", "captured pipeline descriptor tied to build required")
     require(False, "queue_topology", "complete producer/resolve command topology required")
     return dict(bundle_version=1, ready=False, missing_inputs=missing)
 
