@@ -1,0 +1,199 @@
+// ingot:gfx - event-driven frame scheduling (power-save) policy.
+//
+// Immediate-mode apps rebuild and present every frame even when nothing
+// changes. With SetFrameStrategy(.Event_Driven) the engine instead idles
+// between frames: the native pump blocks in platform_wait_events until input
+// or OS damage arrives, and the web step() early-outs without running the app
+// frame (the browser's rAF keeps ticking cheaply). The policy here is
+// platform-neutral; platforms contribute two primitives - platform_wait_events
+// and platform_wake - plus activity marks from their input callbacks.
+//
+// A frame runs when:
+//   - input or OS damage arrives (platform callbacks call _idle_note_activity)
+//   - the app calls RequestRedraw() (thread-safe; wakes a blocked native wait)
+//   - a RequestRedrawIn(seconds) deadline falls due
+// After any activity a burst of IDLE_SETTLE_FRAMES full frames runs before
+// idling again, so hover/release/focus visuals settle (standard immediate-mode
+// practice; egui does the same).
+//
+// Note for future platform work: any input source that is polled rather than
+// callback-driven must also call _idle_note_activity, or event-driven apps
+// will not wake for it.
+package gfx
+
+import "core:sync"
+
+Frame_Strategy :: enum {
+	Continuous, // today's behavior: a frame every loop iteration (default)
+	Event_Driven, // idle between frames; wake on input/damage/redraw requests
+}
+
+// Frames rendered after the last activity before idling again.
+IDLE_SETTLE_FRAMES :: 3
+
+// Maximum seconds a native wait may block. Bounds close-button latency and
+// guarantees a periodic frame (a ~1 fps idle floor keeps content fresh). Web
+// applies the same floor in _idle_web_gate, so background data (WS/HTTP)
+// becomes visible within IDLE_MAX_WAIT on every target.
+IDLE_MAX_WAIT :: 1.0
+
+SURFACE_RETRY_WAIT :: 0.016
+
+Idle_State :: struct {
+	surface_unavailable: bool,
+	strategy:            Frame_Strategy,
+	settle_frames:       i32, // full frames still owed after the last activity
+	redraw_deadline:     f64, // absolute _now() time of earliest RequestRedrawIn; 0 = none
+	redraw_pending:      bool, // worker-published redraw request; accessed atomically
+	last_frame_time:     f64, // _now() of the last granted frame (web idle floor)
+}
+
+// --- public API -------------------------------------------------------------
+
+SetFrameStrategy :: proc(s: Frame_Strategy) {
+	context_set_frame_strategy(default_context(), s)
+}
+
+GetFrameStrategy :: proc() -> Frame_Strategy {
+	return context_get_frame_strategy(default_context())
+}
+
+// RequestRedraw schedules an immediate frame (plus settle burst). Safe to call
+// from any thread ("c"/contextless): platform_wake unblocks a native wait in
+// progress, so background work (net callbacks, timers) can trigger a repaint.
+RequestRedraw :: proc "contextless" () {
+	RequestRedrawContext(&default_context_storage)
+}
+
+RequestRedrawContext :: proc "contextless" (ctx: ^Context) {
+	if ctx == nil do return
+	_idle_request_redraw(&ctx.idle)
+	platform_wake()
+}
+
+// RequestRedrawIn schedules a frame after `seconds` (caret blink, delayed
+// animations). Multiple pending requests keep the earliest deadline.
+RequestRedrawIn :: proc(seconds: f64) {
+	context_request_redraw_in(default_context(), seconds)
+}
+
+context_request_redraw_in :: proc(ctx: ^Context, seconds: f64) {
+	if ctx == nil do return
+	assert(ctx.start_time_s >= 0, "context_request_redraw_in: invalid start time")
+	assert(seconds == seconds, "context_request_redraw_in: NaN delay")
+	now := platform_now() - ctx.start_time_s
+	_idle_request_in(&ctx.idle, now, seconds)
+}
+
+RequestRedrawInContext :: proc(ctx: ^Context, seconds: f64) {
+	context_request_redraw_in(ctx, seconds)
+}
+
+// raylib-compat aliases.
+EnableEventWaiting :: proc() {
+	SetFrameStrategy(.Event_Driven)
+}
+
+DisableEventWaiting :: proc() {
+	SetFrameStrategy(.Continuous)
+}
+
+// --- policy core (pure; unit-tested headless) -------------------------------
+
+@(private)
+_idle_note_activity :: proc "contextless" (s: ^Idle_State) {
+	assert_contextless(s != nil, "_idle_note_activity: nil state")
+	s.settle_frames = IDLE_SETTLE_FRAMES
+}
+
+@(private)
+_idle_request_redraw :: proc "contextless" (s: ^Idle_State) {
+	sync.atomic_store(&s.redraw_pending, true)
+}
+
+@(private)
+_idle_request_in :: proc "contextless" (s: ^Idle_State, now, seconds: f64) {
+	assert_contextless(s != nil, "_idle_request_in: nil state")
+	assert_contextless(now == now && seconds == seconds, "_idle_request_in: NaN time")
+	d := now + max(seconds, 0)
+	if s.redraw_deadline == 0 || d < s.redraw_deadline {
+		s.redraw_deadline = d
+	}
+}
+
+// _idle_take_frame fires a due deadline and consumes one frame of settle
+// credit; returns whether a frame should run now. Must be called exactly once
+// per frame per target: from _idle_timeout on native, from _idle_web_gate
+// (step()) on web.
+@(private)
+_idle_take_frame :: proc "contextless" (s: ^Idle_State, now: f64) -> bool {
+	assert_contextless(s != nil, "_idle_take_frame: nil state")
+	assert_contextless(now == now, "_idle_take_frame: NaN time")
+	if sync.atomic_exchange(&s.redraw_pending, false) {
+		s.settle_frames = max(s.settle_frames, IDLE_SETTLE_FRAMES)
+	}
+	if s.strategy == .Continuous do return true
+	if s.redraw_deadline != 0 && now >= s.redraw_deadline {
+		s.redraw_deadline = 0
+		s.settle_frames = max(s.settle_frames, IDLE_SETTLE_FRAMES)
+	}
+	if s.settle_frames > 0 {
+		s.settle_frames -= 1
+		return true
+	}
+	return false
+}
+
+// _idle_wait_timeout returns how long the native pump may block: until the
+// next deadline, capped at IDLE_MAX_WAIT.
+@(private)
+_idle_wait_timeout :: proc "contextless" (s: ^Idle_State, now: f64) -> f64 {
+	assert_contextless(s != nil, "_idle_wait_timeout: nil state")
+	assert_contextless(now == now, "_idle_wait_timeout: NaN time")
+	t := f64(IDLE_MAX_WAIT)
+	if s.redraw_deadline != 0 {
+		t = min(t, max(s.redraw_deadline - now, 0.001))
+	}
+	return t
+}
+
+// _idle_web_gate is the web pump gate, called once per rAF tick from step().
+// The native pump gets a ~1 fps idle floor for free: platform_wait_events
+// blocks at most IDLE_MAX_WAIT and the frame runs anyway when it returns. Web
+// has no blocking wait - step() skips the app frame entirely - so without an
+// explicit floor, data arriving outside the input path (WS messages queued
+// JS-side, HTTP completions) would sit invisible until user input. Granting a
+// frame whenever IDLE_MAX_WAIT has elapsed since the last one restores parity.
+@(private)
+_idle_web_gate :: proc "contextless" (s: ^Idle_State, now: f64) -> bool {
+	if _idle_take_frame(s, now) || now - s.last_frame_time >= IDLE_MAX_WAIT {
+		s.last_frame_time = now
+		return true
+	}
+	return false
+}
+
+// _idle_timeout is the native pump gate, called once per frame from
+// input_poll. Web never waits - rAF paces the loop and step() gates instead
+// (waiting here would block the browser event loop).
+@(private)
+_idle_timeout :: proc(ctx: ^Context) -> (should_wait: bool, timeout: f64) {
+	assert(ctx != nil, "_idle_timeout: nil context")
+	when ODIN_OS == .JS {
+		return false, 0
+	} else {
+		if ctx.idle.surface_unavailable {
+			return true, SURFACE_RETRY_WAIT
+		}
+		// Minimized: nothing is visible, so render nothing - just wait in
+		// bounded slices (events still wake us; restore marks activity).
+		if ctx.idle.strategy == .Event_Driven && platform_window_iconified(ctx) {
+			return true, IDLE_MAX_WAIT
+		}
+		now := _now(ctx)
+		if _idle_take_frame(&ctx.idle, now) {
+			return false, 0
+		}
+		return true, _idle_wait_timeout(&ctx.idle, now)
+	}
+}

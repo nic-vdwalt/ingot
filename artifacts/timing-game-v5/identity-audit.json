@@ -1,0 +1,14 @@
+{
+  "scope": "post-capture identity audit, not exhaustive pre-build provenance",
+  "sha256": {
+    "artifacts/timing-game-v5/planetforger_timing.bin": "d5415b62c27f5e18ef8249edf85a4c6ea554f22a0ec6e362356ddfbc584d960f",
+    "artifacts/timing-game-v5/build/game.dylib": "1d4444a5e025f62c45c96003263b48310c1ae40d12c9b1b1116215d885a3c352",
+    "artifacts/timing-odin-control/odin": "5baf1357026c5eab3e6a729f951e9caeacd192df2bf7a5be58107cb830f9110b",
+    "artifacts/wgpu-native-control/target/release/libwgpu_native.a": "d923b0330e61053baac096a457ce14e8ac27a1e591336ecfbf428486c1feb7b6",
+    "artifacts/timestamp-aesir-capture": "9d880174ca87945bc79073c5e2d2817f79b90f00a38793dc0d078363fd1bc6b0",
+    "artifacts/timestamp-game-v5-evidence.tel": "5a9a996d536b10b6826ae757b4d679d5757769edfa9eeb8ac3b20a9992fd1d70",
+    "artifacts/timestamp-game-v5-evidence.tel.timing.json": "f50d01f8b1b09e3c7cdf60d726937c37f12418f3fa28b7b52801e35c62e00b7e",
+    "artifacts/aesir-profile-1788722622-85252-335582698516791.jsonl": "a7aa181a4efbc207ff97984614dda9c2ca8fb9afa21508ba28d4f1e142efd512"
+  },
+  "result": "one first-frame window zero-end failure; no ocean or prior-slot failure observed; 1280 frame-delivery drops; collector read_errors=1; not healthy or reconstructable exact replay"
+}

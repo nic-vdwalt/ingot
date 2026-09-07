@@ -226,6 +226,48 @@ five Python evaluator tests pass. The full repository check currently stops at p
 six already-tracked isolated build artifacts. The root style scan also traverses
 archived source trees; those archives must not be reformatted as production code.
 
+## v5 game diagnostic attempt and external capture blocker
+
+Schema 4 adds bounded first-four draw descriptors (counts, instances, shader ID,
+pipeline kind/style and scissor), explicit draw overflow, and owned prior mapped
+query-pair values with epoch/frame/generation. Prior values are retained for all
+successful mappings, including ordered frames, and identify the same physical
+slot/query pair; they are not independent CPU-resolved native counter evidence.
+Unknown draw paths remain explicitly unknown. Window batch and GPU3D indexed
+paths are wired. Exact geometry, uniforms, texture contents and pipeline source
+identity are still required for exact replay; these descriptors alone are not it.
+
+Isolated host/client built in `artifacts/timing-game-v5` using the isolated Odin
+compiler and pinned source-built backend archive, without shared replacements.
+`prebuild-inputs.json` covers copied game/shared/host and gfx sources only; other
+Ingot packages and linked assets remain live. `identity-audit.json` records
+post-capture binary/sidecar identities, not exhaustive pre-build provenance.
+
+The initial relative command failed to launch. An absolute command launched but
+lacked `AESIR_TELEMETRY`; its recording retains 22 read errors. The explicit-env
+attempt produced `artifacts/aesir-profile-1788722622-85252-335582698516791.jsonl`
+and `artifacts/timestamp-game-v5-evidence.tel{,.timing.json}`. Target exit was 0;
+Aesir retained 21 samples, rejected health with one read error, and raw telemetry
+reported 1280 delivery drops. Only frame 1 encoded rendering: the window failure
+has begin `218858941214750`, end 0, three indexed draws of 1080/66/318 indices,
+one instance each, built-in Solid/Alpha pipeline, full 2560×1440 scissor. No ocean
+or prior-slot failure was observed. Later retained frames have no encoding or
+submission, so a lower failure count is not a repair.
+
+A direct `CGSessionCopyCurrentDictionary` check reports
+`CGSSessionScreenIsLocked = 1`. Pinned Metal `surface.rs:123–151` explicitly returns
+Occluded when the window is not visible. The locked desktop prevents the required
+sustained visible-window capture; no unlocking, visibility bypass or rendering
+workaround was attempted. Unlocking the local desktop is required before retrying
+this game gate. The diagnostic debugger attempt was stopped and is not Aesir
+qualification evidence. Step 2 stays in progress; step 3 has not begun.
+
+Latest verification: 348 gfx tests passed enabled and disabled, the assembled
+ForgeCore identity-decode test passed, and five Python evaluator tests passed.
+Direct ForgeCore-only compilation is invalid because its union package requires
+PlanetForger types/assets; the isolated assembled test supplies them. Production
+callback ownership and telemetry transport remain unrepaired.
+
 ## Remaining gates
 
 - Finish first-frame trace metadata and classify all observed labels; gameplay was
