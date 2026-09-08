@@ -13,6 +13,7 @@ LINE_LIMIT = 100
 PROCEDURE_LIMIT = 100
 EXCLUDED_PREFIXES = (
     "accesskit/",
+    "artifacts/",
     "libvterm/",
     "gfx/rlgl",
     "gfx/platform_web.odin",

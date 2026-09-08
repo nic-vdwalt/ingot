@@ -491,7 +491,11 @@ context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool 
 // not free the Context or unload code until a retry returns true.
 context_close :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "context_close: nil context")
-	return _close_window_context(ctx)
+	closed := _close_window_context(ctx)
+	if !closed {
+		fmt.eprintln("gfx: context_close refused; backend callbacks outstanding, storage retained")
+	}
+	return closed
 }
 
 // context_quiesce_gpu drives every outstanding backend callback registration
@@ -771,11 +775,7 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 }
 
 CloseWindow :: proc() -> bool {
-	closed := context_close(default_context())
-	if !closed {
-		fmt.eprintln("gfx: CloseWindow refused; backend callbacks outstanding, storage retained")
-	}
-	return closed
+	return context_close(default_context())
 }
 
 // _abandon_window_context tears down a context that never finished

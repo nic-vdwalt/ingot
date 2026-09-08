@@ -5,6 +5,31 @@ attributable game failure" (2026-09-07). Every row cites the artifact that
 proves it; nothing here is a performance claim. Verification commands are in
 README.md; narrative in investigation.md.
 
+## Completion-gated candidate qualification
+
+The candidate removes same-command-buffer resolution and preserves collector
+ownership. `artifacts/timing-completion-gated-v1/game-candidate/trace-launch-completion-order.json`
+contains 256 FIFO-correlated sampled/resolve pairs with exact sampled Metal
+command-buffer completion IDs and zero resolve-before-completion violations.
+
+Automated Cocoa focus remained false, so ordinary measured segmentation did not
+admit the otherwise healthy records. The explicit unsegmented route does not
+change Aesir. It requires immutable scenario identity and zero producer,
+callback, delivery, sequence and transport failures. Ocean-run13 and
+ocean-run15 pass with the same fixed-quality identity and binary. They contain
+1797 and 1796 GPU frames with complete required groups. Their host p50/p95/p99
+values are 12.866/55.158/56.686 ms and 12.858/55.029/56.438 ms; completion
+occupancy high water is 3 and 4. The v11 control range is
+12.418–12.758/52.915–55.191/54.034–56.694 ms. Candidate p50 is 0.100–0.448 ms
+higher while tail values remain within or near control; no frame-thread wait is
+introduced.
+
+Both accepted captures use the 30-second library (`9b4772eb...97df`). The
+original 25-second library (`236d02d...5164e`) remains separate historical
+provenance. Darwin now publishes `reliable/completion_gated_metal_resolve` after
+all gates passed. Display cadence still misses 890/1792 and 903/1795 deadlines,
+so no 120 Hz claim is made.
+
 ## Qualification capture
 
 `artifacts/timing-game-v11/` is the fresh immutable capture: frozen union
@@ -35,7 +60,7 @@ diagnostic candidate; no 120 Hz claim.
 
 | Symptom | Owning layer | Evidence | Fix or limitation | Regression | Artifact |
 |---|---|---|---|---|---|
-| Reversed / zero GPU pass ends in the game's window pass | Metal stage-boundary publication on Apple M2 Max / macOS 15.6.1: same-command-buffer `resolveCounters` returns the previous fragment sample while vertex samples are current | Exact v10 replay plus M0–M7: publication median 29.1 us after the fragment-end timestamp; one measured 1.717 ms compute gap removes all reversals; tracked colour dependency does not; Instruments shows 690/690 same-command resolve blits start after fragment execution | H-A, late asynchronous fragment-stage counter publication in Metal's driver/firmware. Whether Apple calls the undocumented timing a defect is unknown. No production repair or admitted candidate: strict current-value checks reject every M6 pre-completion deferred resolve, target remains `unreliable`, and Aesir rejects attribution. wgpu#9414 is a separate macOS 26 all-zero symptom | `evaluate_replay.py` mechanism decision tests and strict `candidate_passes`; `evaluate_metal_trace.py`; Aesir reliability rejection | `artifacts/timing-mechanism-v1/mechanism-verdict.json`, `m6-enqueued-corrected-evaluation.json`, `m7-order.json`; original `artifacts/timing-replay-v10-f1/` |
+| Reversed / zero GPU pass ends in the game's window pass | Metal stage-boundary publication on Apple M2 Max / macOS 15.6.1: same-command-buffer `resolveCounters` returns the previous fragment sample while vertex samples are current | Exact v10 replay plus M0–M7: publication median 29.1 us after the fragment-end timestamp; one measured 1.717 ms compute gap removes all reversals; tracked colour dependency does not; Instruments shows 690/690 same-command resolve blits start after fragment execution | H-A, late asynchronous fragment-stage counter publication in Metal's driver/firmware. Every M6 pre-completion deferred resolve failed strict current-value checks. The qualified repair adds an externally observed queue-completion boundary before collector-owned resolve submission; historical same-command scopes remain `unreliable`. wgpu#9414 is a separate macOS 26 all-zero symptom | `evaluate_replay.py` mechanism decision tests and strict `candidate_passes`; `evaluate_metal_trace.py`; completion-gated replay and PlanetForger qualification | `artifacts/timing-mechanism-v1/mechanism-verdict.json`, `m6-enqueued-corrected-evaluation.json`, `m7-order.json`; `artifacts/timing-completion-gated-v1/` |
 | Timing map callbacks published into mutable slot state; shutdown destroyed readback buffers after a bounded poll regardless | Ingot `gfx/gpu_timing.odin` | Pinned dispatch audit: callbacks fire inline from MapAsync, QueueSubmit, DevicePoll, Unmap and Destroy | Owned immutable `Gpu_Timing_Map_Request` records, explicit slot phases, retire/quarantine, release refused while armed | `gpu_timing_stray_callbacks_are_counted_not_published`, `gpu_timing_retire_refuses_until_terminal_callback_observed`, `gpu_timing_inline_callback_completes_armed_record`, `gpu_timing_failed_callbacks_complete_out_of_order` | `artifacts/timing-game-v10/signature-comparison.json` (signature unchanged before/after) |
 | Screenshot map callback targeted a popped stack frame on timeout | Ingot `gfx/screenshot.odin` | Deferred `BufferDestroy` after `_screenshot_map` returned delivered `Aborted` into a dead frame | `Screenshot_Map` owned by the context; a stranded registration keeps its staging buffer and refuses later captures | `screenshot_stranded_registration_refuses_until_terminal_callback` | gfx tests |
 | Undrained submissions at close crashed via `ensure` | Ingot `gfx/context.odin`, `gfx/submission.odin` | `_close_window_context` destroyed resources before draining | Retire submissions, screenshot and timing first; `context_close`/`CloseWindow`/`app_destroy`/`fit.Destroy` return refusal; `context_quiesce_gpu` for hosts | `context_close_refuses_while_timing_registration_armed`, `context_quiesce_does_not_close`, `submission_stray_callbacks_are_counted` | gfx tests |
@@ -46,12 +71,12 @@ diagnostic candidate; no 120 Hz claim.
 | Aesir promoted ordered but stale GPU durations (e.g. 16,275,202 ms) to valid frames | Aesir `parse_telemetry` | v6 raw `gfd` marked valid with absurd durations | GPU timing accepted only when the target declares scope `gpu_pass` reliable; legacy absence is Unknown; deliveries stay valid; badge shows the reason code | `telemetry_parse_rejects_gpu_timing_without_reliable_scope` | v11 `qualification.json`: 231 rejected, 0 attributed |
 | Aesir measured presentation cadence on completion order and lost the refresh rate on raw lines | Aesir `recording_analysis.odin` | v11 first pass: 20 false gaps, 0 deadline samples | Deliveries sorted by (epoch, frame); refresh rate carried from the last summary | `recording_orders_deliveries_before_measuring_cadence` | v11 `qualification.json`: 1499 intervals, 1 gap |
 | Ocean pass timing | Ingot `gfx` / PlanetForger world renderer | v6–v10 had no ocean category; v11 records `world.ocean` in 2/1/5 raw frames per run and in gameplay summaries, but all GPU samples are rejected under the scope-wide reliability verdict | Observed but not attributed; requires its own replay bundle before an ocean-specific claim | none | `artifacts/timing-game-v11/timestamp-game-v11-evidence.tel` |
-| Sustained 120 Hz presentation | Unmeasured against a production candidate | Control: p50 8.33 ms, mean 16.4–16.9 ms, p95 50–58 ms; 37–40 % of all consecutive intervals miss the 9.17 ms deadline; host CPU p50 12.4–12.8 ms | No production candidate exists; performance work starts from this control with fixed 2560x1440 world targets and scale 1 | `control-three-runs.json`, `presentation-deadline-all-intervals.json` | `artifacts/timing-game-v11/` |
+| Sustained 120 Hz presentation | Presentation cadence, independent of timestamp correctness | Control: p50 8.33 ms, mean 16.4–16.9 ms, p95 50–58 ms; completion-gated fixed captures miss 890/1792 and 903/1795 deadlines | Completion gating is qualified for timestamp correctness, not 120 Hz cadence; CPU frame time remains above the 8.33 ms budget | `control-three-runs.json`, `presentation-deadline-all-intervals.json`, unsegmented qualification analyzers | `artifacts/timing-game-v11/`; `artifacts/timing-completion-gated-v1/game-candidate/ocean-run{13,15}/` |
 
 ## What is not claimed
 
-- No GPU pass duration from this backend is trustworthy on the inspected
-  device; every capture carries `unreliable` and Aesir attributes none.
+- Historical same-command-buffer captures remain untrustworthy and carry
+  `unreliable`; only the qualified completion-gated scope is attributed.
 - The render-completed resolve control and the replay programs are diagnostic
   only and are excluded from any performance number.
 - 120 Hz is not achieved: the control runs miss roughly half of their gameplay

@@ -171,9 +171,9 @@ execution in every exported pair, while one measured 1.717 ms GPU gap removes
 all reversals. The initial enqueued M6 result was a false positive: only the
 resolve buffer was enqueued, so Instruments shows it executed before rendering
 and copied a fully stale but numerically ordered pair. Correct render-then-resolve
-enqueue order remains stale. No nonblocking deferred-resolve candidate passed;
-production remains `unreliable`. See investigation.md, "Metal
-counter-publication mechanism".
+enqueue order remains stale. No pre-completion deferred-resolve candidate passed;
+the later queue-completion-gated repair is documented below. See
+investigation.md, "Metal counter-publication mechanism".
 
 Telemetry `gh` carries two ownership counters since the step 3 repair: `sc`
 (backend callbacks that reached a retired or unarmed record) and `cr` (frames
@@ -191,11 +191,55 @@ distributions and deadline counts used by the causal ledger:
 
 The per-symptom causal ledger (owning layer, evidence, fix or limitation,
 regression, artifact) and the three-run v11 control baseline are in
-investigation.md, "Aesir qualification and causal ledger". Summary: GPU pass
-timing on this device is published `unreliable`
-(`metal_same_command_buffer_resolve`) and rejected by Aesir; presentation
-cadence has p50 8.33 ms but a mean of two periods and 37–40 % deadline misses,
-so no 120 Hz claim is made. No production candidate is admitted.
+investigation.md, "Aesir qualification and causal ledger". The historical v11
+same-command-buffer scope is `unreliable/metal_same_command_buffer_resolve` and
+is rejected by Aesir. Its presentation cadence has p50 8.33 ms but a mean of
+two periods and 37–40 % deadline misses, so no 120 Hz claim is made. The
+completion-gated candidate below is qualified separately.
+
+## Completion-gated PlanetForger qualification
+
+The selected H-A repair submits the sampled window command without a query
+resolve, waits for its queue-work callback to publish terminal status, then has
+the frame-thread collector submit a separately labelled
+`gpu timing completion resolve` command. Spontaneous callbacks do not call
+WebGPU. Darwin is published `reliable/completion_gated_metal_resolve` after the
+replay, ownership, trace, capture, transport, and perturbation gates passed.
+
+`evaluate_planetforger_completion_trace.py` resolves Instruments XML `id` and
+`ref` cells, filters the PlanetForger process, pairs sampled windows and resolve
+commands in FIFO completion-registration order, and joins each sampled Metal
+command-buffer ID to its exact completion timestamp. FIFO is guaranteed by the
+pinned backend: `LifetimeTracker.active` stores older submissions first,
+`triage_submissions` drains completed submissions in that order and extends each
+submission's closure vector in push order (`vendor/wgpu-core/src/device/life.rs`),
+then `UserClosures::fire` iterates the resulting submission closures in order
+(`vendor/wgpu-core/src/device/mod.rs`). Unrelated internal submissions do not
+register timing completion callbacks and therefore do not enter this pairing.
+The launch-scoped trace contains 256 pairs, no missing completions and no
+resolve-before-completion violations. FIFO latency (1.043 ms minimum, 2.882 s
+median, 9.227 s maximum) is queue backlog, not per-frame delivery latency: only
+eight timing slots exist, while 718 window commands and 256 sampled resolves
+appear in the trace.
+
+`evaluate_planetforger_capture.py` provides a separate unsegmented qualification
+route when automation keeps Cocoa `isKeyWindow` false. It does not change
+Aesir's `recording_measured` rule. It requires immutable scenario name, seed,
+quality, dimensions and terrain hash, complete expected groups, zero timing,
+callback, delivery, sequence and transport failures, and a clean Aesir terminal
+record when `--recording` is supplied. The accepted equivalent fixed-quality
+captures are ocean-run13 and ocean-run15; both use the same 30-second candidate
+library hash. Aesir accepts raw GPU identities only when this qualified reliable
+scope is present and continues rejecting unknown and unreliable scopes. Run:
+
+```sh
+python3 tests/metal_timestamps/evaluate_planetforger_completion_trace.py \
+  artifacts/timing-completion-gated-v1/game-candidate/trace-launch-command-buffer-submissions.xml \
+  artifacts/timing-completion-gated-v1/game-candidate/trace-launch-command-buffer-completed.xml \
+  --output artifacts/timing-completion-gated-v1/game-candidate/trace-launch-completion-order.json
+python3 tests/metal_timestamps/evaluate_planetforger_capture.py \
+  <capture.tel> <capture.tel.scenario.jsonl> --output <qualification.json>
+```
 
 ```sh
 python3 tests/metal_timestamps/window_readiness.py \

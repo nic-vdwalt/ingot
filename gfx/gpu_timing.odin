@@ -711,7 +711,7 @@ _gpu_timing_resolve_submit :: proc(ctx: ^Context, slot_index: int) -> bool {
 }
 
 _gpu_timing_collect_map :: proc(ctx: ^Context, slot: ^Gpu_Timing_Slot, slot_index: int) {
-	assert(ctx != nil && slot != nil)
+	assert(ctx != nil && slot != nil && slot_index >= 0 && slot_index < GPU_TIMING_FRAME_SLOTS)
 	record := &ctx.gpu_timing.requests[slot_index]
 	assert(_gpu_timing_record_matches_slot(record^, slot, slot_index))
 	slot.map_status = record.status

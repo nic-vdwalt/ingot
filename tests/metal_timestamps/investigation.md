@@ -1,6 +1,57 @@
 # Metal timing investigation: partial evidence, 2026-09-06
 
-Status: subplan step 1 remains in progress. No timing repair or performance acceptance.
+Status: completion-gated repair and PlanetForger qualification passed. Darwin publishes the qualified reliable scope.
+
+## Completion-gated qualification, 2026-09-07
+
+The known trigger has been removed from the candidate: sampled commands contain
+no `ResolveQuerySet`; a queue-work callback publishes only terminal status; the
+frame-thread collector submits resolve/copy in a separate command buffer and
+owns map registration and mapped reads. This is the selected H-A mechanism,
+late asynchronous fragment-stage counter publication.
+
+A launch-scoped 25-second Metal System Trace targeted PlanetForger PID 63458.
+The reusable analyzer pairs sampled `window` and `gpu timing completion resolve`
+submissions in FIFO registration order, then joins sampled command-buffer IDs
+to the exact completion table. All 256 pairs have completions and all resolve
+submissions occur later; the minimum gap is 1.043 ms. The 2.882-second median
+and 9.227-second maximum are not callback latency: startup/loading generated
+718 window commands but only 256 sampled resolves, so FIFO pairing spans the
+bounded eight-slot sampling backlog. Telemetry queue-completion latency is the
+appropriate production delivery measure and is 13.078–13.101 ms p50 in the
+two equivalent final captures.
+
+Cocoa focus remained false under automated capture, despite activation attempts,
+so Aesir's measured segmentation correctly excluded these records. A separate
+unsegmented analyzer was added without weakening `recording_measured`. It fixes
+scenario identity to ocean / seed 542318199907 / 1280x720 / reference terrain
+SHA `4203d41edac0353a3c9c02158178a6dbb11876c7be8961f51c155a9a67735f13`
+and requires complete groups and every health/transport counter to be zero.
+
+The final equivalent fixed-quality captures are ocean-run13 and ocean-run15.
+They use the same 30-second game library and scenario identity. They contain
+1797 and 1796 GPU frames, respectively, complete window/opaque/scene-copy/ocean
+coverage, no missing callbacks, no sequence loss, no timing, ownership, reader,
+parser, or transport failures, and completion high-water 3 and 4. Host
+p50/p95/p99 is 12.866/55.158/56.686 ms and 12.858/55.029/56.438 ms. Against
+the v11 control range (12.418–12.758 / 52.915–55.191 / 54.034–56.694 ms), the
+candidate p50 increases by 0.100–0.448 ms while p95 and p99 remain within or
+near the observed range. This is bounded asynchronous collector overhead, not
+a frame-thread wait. Queue-completion p50/p95/p99 is
+13.078/55.186/56.906 ms and 13.101/55.107/56.498 ms. Display cadence remains
+independently poor, with 903/1795 and 890/1792 deadline misses; no 120 Hz claim
+is made.
+
+Both final captures use host SHA
+`c903dd3238f89a913af77084ffa5f1bd7f8841090f1b9daa212d8fa10b2a58ce`
+and 30-second game library SHA
+`9b4772eb7df59eff9e6fa0a3930efbec55f192415d9666c1484028ac393d97df`.
+The original 25-second library SHA
+`236d02d78f59168002c4a603a1ae49e1da5a876f80aaa976ea35e2213535164e`
+is retained only as earlier provenance and is not mixed into final acceptance.
+After all replay, ownership, trace, capture, transport, and perturbation gates
+passed, ForgeCore publishes `reliable/completion_gated_metal_resolve`; Aesir
+accepts that scope while retaining rejection for unknown and unreliable scopes.
 
 ## Actual game evidence
 
