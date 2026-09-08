@@ -15,11 +15,13 @@ when !INGOT_GFX_SDL3 {
 
 	context_is_window_minimized :: proc(ctx: ^Context) -> bool {
 		if ctx == nil || ctx.win == nil do return false
+		when ODIN_OS == .Darwin do return _platform_native_window_minimized(ctx)
 		return glfw.GetWindowAttrib(glfw.WindowHandle(ctx.win), glfw.ICONIFIED) != 0
 	}
 	IsWindowMinimized :: proc() -> bool {return context_is_window_minimized(default_context())}
 	context_is_window_hidden :: proc(ctx: ^Context) -> bool {
 		if ctx == nil || ctx.win == nil do return false
+		when ODIN_OS == .Darwin do return _platform_native_window_hidden(ctx)
 		return glfw.GetWindowAttrib(glfw.WindowHandle(ctx.win), glfw.VISIBLE) == 0
 	}
 	IsWindowHidden :: proc() -> bool {return context_is_window_hidden(default_context())}

@@ -9,6 +9,16 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+### Changed
+
+- `WINDOW_TOPMOST` now maps to `GLFW_FLOATING` on the native backend, and macOS
+  minimized/hidden queries use the underlying `NSWindow` state.
+
+### Added
+
+- `IsWindowOccluded` and `context_window_occluded` expose the current per-frame
+  surface-unavailable snapshot for visibility-sensitive automation.
+
 ## [0.2.0] - 2026-09-01
 
 This is a source-only release; no binaries, installers, or web bundles are attached.

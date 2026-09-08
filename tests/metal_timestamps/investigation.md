@@ -912,6 +912,29 @@ exports; `m7-order.json` and `m7-encoder-order.csv`. The long-running trace
 JSONLs are intentionally incomplete because each process was terminated after
 its trace; their trace artifacts, not those JSONLs, are evidence.
 
+## September 8 inactive automation runs
+
+Intermittent captures that emitted `mg:true`, `mp:true`, `st:0`, empty `gfd`,
+and no GPU timing after launch were window-occlusion failures, not timestamp or
+completion-ownership failures. `game-candidate/ocean-run2` and `ocean-run3`
+were occluded from frame 2; `ocean-run9` transitioned at frame 273 after the
+characteristic approximately one-second `nextDrawable` stall. The pinned Metal
+surface returns `Occluded` when `NSWindowOcclusionStateVisible` is clear, so
+Ingot correctly skips submission and presentation.
+
+The repair maps `WINDOW_TOPMOST` to GLFW floating windows and enables it only
+for ForgeCore profile scenarios. Aesir also makes bounded activation requests
+for owned spawned targets and records each result, while PlanetForger labels
+phases from minimized/hidden/occluded state rather than key focus. GLFW's macOS
+`VISIBLE` attribute proved stale after an initially hidden window was shown, so
+Ingot's Darwin hidden/minimized queries now read `NSWindow` directly.
+
+Six rebuilt Aesir captures in `game-candidate/topmost-run1` through
+`topmost-run6`, with another app frontmost, each had zero `mg:true` records,
+populated `gfd`, only `measured` scenario phases, and an accepted activation on
+the second bounded attempt. This closes the inactive-run caveat without
+rendering through genuine occlusion or changing interactive window behavior.
+
 ## Remaining gates
 
 - Ocean pass replay bundle and attribution (never replayed; see ledger).

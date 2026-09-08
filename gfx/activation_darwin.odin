@@ -48,3 +48,19 @@ _platform_native_window_focus :: proc(ctx: ^Context) -> (focused, known: bool) {
 	is_key := intrinsics.objc_send(NS.BOOL, window, "isKeyWindow")
 	return bool(is_key), true
 }
+
+@(private)
+_platform_native_window_minimized :: proc(ctx: ^Context) -> bool {
+	if ctx == nil || ctx.win == nil do return false
+	window := cast(^Focus_NS_Window)context_get_window_handle(ctx)
+	if window == nil do return false
+	return bool(intrinsics.objc_send(NS.BOOL, window, "isMiniaturized"))
+}
+
+@(private)
+_platform_native_window_hidden :: proc(ctx: ^Context) -> bool {
+	if ctx == nil || ctx.win == nil do return false
+	window := cast(^Focus_NS_Window)context_get_window_handle(ctx)
+	if window == nil do return false
+	return !bool(intrinsics.objc_send(NS.BOOL, window, "isVisible"))
+}
