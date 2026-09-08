@@ -2,6 +2,18 @@
 
 These are correctness regressions, not performance acceptance captures. Use Aesir for profiling.
 
+## Evidence location
+
+Every `artifacts/<name>` path cited in this directory (`README.md`,
+`investigation.md`, `ledger.md`, `window_contract.md`) and in
+`docs/provenance/third-party-artifacts.json` resolves to `<name>` at the root of
+the separate `ingot-artifacts` repository, checked out as a sibling of this one
+(`../ingot-artifacts`). The captures, Metal traces, pinned toolchain and frozen
+source snapshots were moved there on 2026-09-08; `artifacts/` in this repository
+is gitignored apart from `readme-example/main.odin`. Commands below that write to
+`artifacts/...` expect a symlink or copy at that path; they are reproduction
+recipes, not part of the strict gate.
+
 From the Ingot repository:
 
 ```sh

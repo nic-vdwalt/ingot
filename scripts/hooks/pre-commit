@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Reject commits that would reintroduce the bloat stripped from history on
+# 2026-09-08: anything under artifacts/ other than the README example source,
+# and any blob at or above 5 MiB that is not listed in the provenance manifest.
+# Enable with: git config core.hooksPath scripts/hooks
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+max_bytes=$((5 * 1024 * 1024))
+manifest="$root/docs/provenance/third-party-artifacts.json"
+status=0
+
+approved="$(python3 - "$manifest" <<'EOF'
+import json, sys
+data = json.load(open(sys.argv[1]))
+for component in data["components"]:
+    for artifact in component["artifacts"]:
+        print(artifact["path"])
+EOF
+)"
+
+while IFS=$'\t' read -r mode object stage path; do
+	[[ -z "$path" ]] && continue
+	case "$path" in
+	artifacts/readme-example/main.odin) ;;
+	artifacts/*)
+		echo "pre-commit: refusing to commit under artifacts/: $path" >&2
+		echo "pre-commit: evidence and snapshots belong in ../ingot-artifacts" >&2
+		status=1
+		continue
+		;;
+	esac
+	[[ "$mode" == "160000" ]] && {
+		echo "pre-commit: refusing to commit gitlink (nested repo) at $path" >&2
+		status=1
+		continue
+	}
+	size="$(git cat-file -s "$object")"
+	if [[ "$size" -ge "$max_bytes" ]] && ! grep -qxF "$path" <<<"$approved"; then
+		echo "pre-commit: $path is $size bytes and not in docs/provenance/third-party-artifacts.json" >&2
+		status=1
+	fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z | tr '\0' '\n' | while IFS= read -r p; do
+	git ls-files --stage -- "$p" | awk -v p="$p" '{ print $1 "\t" $2 "\t" $3 "\t" p }'
+done)
+
+exit "$status"

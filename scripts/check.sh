@@ -142,8 +142,9 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_wasm_bloat_test.py"
 
 # odinfmt has no list/check flag (only -w/-stdin), so compare each file
 # against its formatted output. Formatting is part of the strict gate.
-# Frozen investigation source trees under artifacts/ are retained evidence
-# and must never be reformatted, so they are excluded like the style scan.
+# artifacts/ is gitignored apart from readme-example/main.odin; frozen
+# investigation snapshots live in the sibling ingot-artifacts repository.
+# Anything that lands there locally is excluded like the style scan.
 if ! command -v odinfmt >/dev/null 2>&1; then
 	echo "odinfmt not found on PATH. Install the version bundled with the pinned Odin toolchain." >&2
 	exit 1

@@ -64,6 +64,13 @@ worked example applied to a subsystem before it is written.
   native compile, link, and test evidence, not GPU or accessibility validation.
 - **Rebuild libvterm** (rarely needed): `scripts/build-libvterm.sh` (macOS) /
   `scripts/build-libvterm.bat` (Windows).
+- **Never commit under `artifacts/`** except `artifacts/readme-example/main.odin`.
+  Captures, traces, frozen source snapshots, and built binaries go to the sibling
+  `../ingot-artifacts` repository (see `tests/metal_timestamps/README.md`,
+  "Evidence location"); history was rewritten on 2026-09-08 to remove them.
+  Enable the guard once per clone: `git config core.hooksPath scripts/hooks`.
+  Any tracked file >= 1 MiB must be listed in
+  `docs/provenance/third-party-artifacts.json` (`scripts/check-repository-hygiene.py`).
 
 ## Coding style - Tiger Style
 

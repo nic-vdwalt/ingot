@@ -1,5 +1,8 @@
 # Metal timing investigation: partial evidence, 2026-09-06
 
+> Cited `artifacts/...` paths resolve inside the sibling `ingot-artifacts`
+> repository; see README.md "Evidence location".
+
 Status: completion-gated repair and PlanetForger qualification passed. Darwin publishes the qualified reliable scope.
 
 ## Completion-gated qualification, 2026-09-07

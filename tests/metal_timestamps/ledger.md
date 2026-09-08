@@ -1,5 +1,8 @@
 # Causal ledger: Aesir GPU timing, transport and presentation cadence
 
+> Cited `artifacts/...` paths resolve inside the sibling `ingot-artifacts`
+> repository; see README.md "Evidence location".
+
 Local publication for the plan "From evidence instrumentation to an
 attributable game failure" (2026-09-07). Every row cites the artifact that
 proves it; nothing here is a performance claim. Verification commands are in

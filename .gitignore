@@ -23,10 +23,16 @@ libvterm/lib/linux_arm64/
 /box3d_benchmark
 /box3d_water
 /render_fixture
-/artifacts/box3d_advanced
-/artifacts/box3d_water
-/artifacts/ingot-gallery-native
-/artifacts/readme-example/readme-example
+/main
+/procgen-running.png
+/g.ll
+
+# Investigation evidence and frozen source snapshots live in the separate
+# ingot-artifacts repository. Only the README example source stays tracked.
+/artifacts/*
+!/artifacts/readme-example/
+/artifacts/readme-example/*
+!/artifacts/readme-example/main.odin
 fuzz/net/fuzz_net
 fuzz/ui/fuzz_ui
 fuzz/view/fuzz_view

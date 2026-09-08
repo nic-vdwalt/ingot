@@ -1,5 +1,8 @@
 # Selected window replay contract, schema 11
 
+> Cited `artifacts/...` paths resolve inside the sibling `ingot-artifacts`
+> repository; see README.md "Evidence location".
+
 This contract covers the complete built-in window pass, not arbitrary image/custom
 shader draws or ocean passes. A missing input rejects reconstruction rather than
 being replaced with a plausible default. The selected historical v5 failure has
