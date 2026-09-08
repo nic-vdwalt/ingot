@@ -259,9 +259,9 @@ _gpu_timing_unsettled_count :: proc(state: ^Gpu_Timing_State) -> u32 {
 	return pending
 }
 
-// _gpu_timing_quiesce drives every armed callback registration to its terminal
-// callback with bounded device polls, without closing the state. Returns false
-// when a registration is still unproved after the bound.
+// _gpu_timing_quiesce drives every timing slot through collector-owned work and
+// armed callbacks to Free with bounded device polls, without closing the state.
+// Returns false when any slot is still unsettled after the bound.
 _gpu_timing_quiesce :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_gpu_timing_quiesce: nil context")
 	when ODIN_OS != .JS {
