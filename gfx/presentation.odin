@@ -4,6 +4,8 @@ import "core:sync"
 
 FRAME_DELIVERY_MAX :: 128
 FRAME_DELIVERY_RETIRE_LAG :: 64
+FRAME_DELIVERY_QUIESCE_POLLS :: 200
+FRAME_DELIVERY_QUIESCE_SECONDS :: 0.005
 
 Host_Frame_Timing :: struct {
 	total_seconds:   f64,
