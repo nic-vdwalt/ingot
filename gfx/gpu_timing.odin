@@ -250,6 +250,15 @@ _gpu_timing_pending_count :: proc(state: ^Gpu_Timing_State) -> u32 {
 	return pending
 }
 
+_gpu_timing_unsettled_count :: proc(state: ^Gpu_Timing_State) -> u32 {
+	assert(state != nil)
+	pending := u32(0)
+	for &slot in state.slots {
+		if slot.phase != .Free do pending += 1
+	}
+	return pending
+}
+
 // _gpu_timing_quiesce drives every armed callback registration to its terminal
 // callback with bounded device polls, without closing the state. Returns false
 // when a registration is still unproved after the bound.
@@ -258,12 +267,12 @@ _gpu_timing_quiesce :: proc(ctx: ^Context) -> bool {
 	when ODIN_OS != .JS {
 		for _ in 0 ..< GPU_TIMING_SHUTDOWN_POLLS {
 			_gpu_timing_collect(ctx)
-			if _gpu_timing_pending_count(&ctx.gpu_timing) == 0 do return true
+			if _gpu_timing_unsettled_count(&ctx.gpu_timing) == 0 do return true
 			if ctx.device == nil do break
 			wg.DevicePoll(ctx.device, true, nil)
 		}
 	}
-	return _gpu_timing_pending_count(&ctx.gpu_timing) == 0
+	return _gpu_timing_unsettled_count(&ctx.gpu_timing) == 0
 }
 
 // _gpu_timing_retire rejects new frames, then makes bounded progress and a

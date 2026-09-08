@@ -150,6 +150,24 @@ gpu_timing_resolve_failure_retires_without_a_result :: proc(t: ^testing.T) {
 }
 
 @(test)
+gpu_timing_quiesce_waits_for_collector_owned_resolve :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.gpu_timing.available = true
+	ctx.gpu_timing.slots[4] = {
+		phase       = .Resolve_Submitted,
+		generation  = 12,
+		submission  = 8,
+		query_count = 4,
+	}
+	testing.expect_value(t, _gpu_timing_pending_count(&ctx.gpu_timing), u32(0))
+	testing.expect_value(t, _gpu_timing_unsettled_count(&ctx.gpu_timing), u32(1))
+	testing.expect(t, !_gpu_timing_quiesce(ctx))
+	_gpu_timing_resolve_fail(&ctx.gpu_timing, 4)
+	testing.expect(t, _gpu_timing_quiesce(ctx))
+}
+
+@(test)
 gpu_timing_sample_arm_requires_recording_ownership :: proc(t: ^testing.T) {
 	state := new(Gpu_Timing_State)
 	defer free(state)
