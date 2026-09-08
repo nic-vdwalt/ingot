@@ -28,7 +28,7 @@ when !INGOT_GFX_SDL3 {
 	// Monotonic clock epoch for platform_now(); the caller-side offset cancels, so
 	// this only needs to be a stable monotonic base.
 	@(private)
-	_mono_epoch := time.tick_now()
+	_mono_epoch: time.Tick
 
 	@(private)
 	_context_window :: proc(ctx: ^Context) -> glfw.WindowHandle {

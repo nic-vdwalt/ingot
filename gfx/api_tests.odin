@@ -2,8 +2,23 @@
 package gfx
 
 import "core:testing"
+import "core:time"
 
 frame_owner_test_context: Context
+
+@(test)
+context_clock_uses_process_independent_tick_origin :: proc(t: ^testing.T) {
+	when !INGOT_GFX_SDL3 {
+		ctx := new(Context)
+		defer free(ctx)
+		origin: time.Tick
+		ctx.start_time_s = time.duration_seconds(time.tick_since(origin))
+		elapsed := context_time(ctx)
+		upper := time.duration_seconds(time.tick_since(origin)) - ctx.start_time_s
+		testing.expect(t, elapsed >= 0)
+		testing.expect(t, elapsed <= upper)
+	}
+}
 
 @(test)
 context_queries_are_isolated :: proc(t: ^testing.T) {
