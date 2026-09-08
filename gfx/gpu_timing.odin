@@ -267,11 +267,15 @@ _gpu_timing_quiesce :: proc(ctx: ^Context) -> bool {
 	when ODIN_OS != .JS {
 		for _ in 0 ..< GPU_TIMING_SHUTDOWN_POLLS {
 			_gpu_timing_collect(ctx)
-			if _gpu_timing_unsettled_count(&ctx.gpu_timing) == 0 do return true
+			if _gpu_timing_unsettled_count(&ctx.gpu_timing) == 0 {
+				_gpu_timing_collect(ctx)
+				return _gpu_timing_unsettled_count(&ctx.gpu_timing) == 0
+			}
 			if ctx.device == nil do break
 			wg.DevicePoll(ctx.device, true, nil)
 		}
 	}
+	_gpu_timing_collect(ctx)
 	return _gpu_timing_unsettled_count(&ctx.gpu_timing) == 0
 }
 
