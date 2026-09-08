@@ -87,6 +87,23 @@ _submission_shutdown :: proc(tracker: ^Submission_Tracker) -> bool {
 }
 
 @(private)
+_submission_oldest_frame_age :: proc(tracker: ^Submission_Tracker, frame_index: u64) -> u64 {
+	assert(tracker != nil, "_submission_oldest_frame_age: nil tracker")
+	if frame_index == 0 do return 0
+	oldest := frame_index
+	found := false
+	for index in 0 ..< int(tracker.count) {
+		ticket_index := (int(tracker.head) + index) % MAX_IN_FLIGHT_SUBMISSIONS
+		ticket := &tracker.tickets[ticket_index]
+		if !ticket.active || ticket.frame_index == 0 || ticket.frame_index > frame_index do continue
+		oldest = min(oldest, ticket.frame_index)
+		found = true
+	}
+	if !found do return 0
+	return frame_index - oldest
+}
+
+@(private)
 _submission_reserve :: proc(tracker: ^Submission_Tracker) -> u64 {
 	assert(tracker != nil)
 	if tracker.closing do return 0
@@ -125,6 +142,13 @@ _submission_commit :: proc(
 	if ticket == nil do return false
 	ticket.frame_index = frame_index
 	if frame_index > 0 {
+		_stats_submission_pressure(
+			tracker.owner,
+			tracker.count,
+			tracker.count,
+			tracker.count,
+			_submission_oldest_frame_age(tracker, frame_index),
+		)
 		_frame_delivery_submitted(tracker.owner, frame_index, platform_now())
 	}
 	wg.QueueOnSubmittedWorkDone(

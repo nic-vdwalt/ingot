@@ -34,9 +34,17 @@ def telemetry(groups=None, health=None, missing=False):
             "e": 1,
             "i": 1,
             "v": 7,
+            "rc": 7,
             "hc": 8,
+            "aq": 1,
+            "en": 2,
+            "sb": 3,
+            "ps": 4,
+            "pw": 5,
+            "st": 10,
+            "gt": 10.009,
             "gc": 9,
-            "pt": 10,
+            "pt": 10.01,
             "mg": missing,
             "mp": False,
         }],
@@ -108,6 +116,42 @@ class PlanetForgerCaptureTests(unittest.TestCase):
     def test_rejects_incomplete_recording(self):
         with self.assertRaisesRegex(ValueError, "exactly one"):
             self.evaluate([telemetry()], recording=[{"k": "telemetry_health"}])
+
+    def test_reports_existing_exact_frame_metrics(self):
+        result = self.evaluate([telemetry()])
+        self.assertEqual(result["host_ms"]["p50"], 8)
+        self.assertEqual(result["renderer_ms"]["p50"], 7)
+        self.assertEqual(result["acquire_ms"]["p50"], 1)
+        self.assertEqual(result["encode_ms"]["p50"], 2)
+        self.assertEqual(result["submit_ms"]["p50"], 3)
+        self.assertEqual(result["present_call_ms"]["p50"], 4)
+        self.assertEqual(result["pacer_wait_ms"]["p50"], 5)
+        self.assertEqual(result["queue_completion_ms"]["p50"], 9)
+        self.assertEqual(result["exact_gpu_ms"]["p50"], None)
+        self.assertEqual(result["gpu_groups_ms"]["window"]["p50"], 1)
+
+    def test_absent_cpu_metrics_are_not_measured_zeroes(self):
+        record = telemetry()
+        for field in ("rc", "aq", "en", "sb", "ps", "pw"):
+            del record["fd"][0][field]
+        result = self.evaluate([record])
+        self.assertEqual(result["renderer_ms"]["count"], 0)
+        self.assertEqual(result["acquire_ms"]["count"], 0)
+        self.assertTrue(result["accepted"])
+
+    def test_rejects_negative_cpu_duration(self):
+        record = telemetry()
+        record["fd"][0]["aq"] = -1
+        result = self.evaluate([record])
+        self.assertEqual(result["failures"]["invalid_cpu_durations"], 1)
+        self.assertFalse(result["accepted"])
+
+    def test_rejects_reversed_async_timestamps(self):
+        record = telemetry()
+        record["fd"][0]["gt"] = 9
+        result = self.evaluate([record])
+        self.assertEqual(result["failures"]["reversed_gpu_timestamps"], 1)
+        self.assertFalse(result["accepted"])
 
 
 if __name__ == "__main__":

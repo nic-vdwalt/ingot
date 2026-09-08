@@ -69,10 +69,19 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     pump_exhausted = 0
     completion_high_water = 0
     sequences = []
-    host_ms = []
+    cpu_metrics = {
+        name: []
+        for name in ("host", "renderer", "acquire", "encode", "submit", "present_call", "pacer_wait")
+    }
     displayed_ms = []
     presented = {}
     queue_completion_ms = []
+    raw_frames = {}
+    delivery_frames_by_identity = {}
+    gpu_groups = {}
+    invalid_cpu_durations = 0
+    reversed_gpu_timestamps = 0
+    reversed_present_timestamps = 0
     refresh_hz = scenario_records[0].get("refresh_hz", 0)
     reliability = None
     reliability_reason = None
@@ -97,26 +106,55 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             if frame_identity in raw_identities:
                 duplicate_raw_identities += 1
             raw_identities.add(frame_identity)
+            raw_frames[frame_identity] = frame
             if not frame.get("v", False):
                 health["invalid_gpu_frame"] = health.get("invalid_gpu_frame", 0) + 1
             for group in frame.get("g", []):
-                if group.get("n") in group_counts:
-                    group_counts[group["n"]] += 1
+                name = group.get("n")
+                milliseconds = group.get("ms")
+                if name in group_counts:
+                    group_counts[name] += 1
+                if isinstance(name, str) and isinstance(milliseconds, (int, float)) and milliseconds >= 0:
+                    gpu_groups.setdefault(name, []).append(milliseconds)
         for delivery in record.get("fd", []):
             delivery_frames += 1
             delivery_identity = (delivery.get("e", 0), delivery.get("i", 0))
             if delivery_identity in delivery_identities:
                 duplicate_delivery_identities += 1
             delivery_identities.add(delivery_identity)
+            delivery_frames_by_identity[delivery_identity] = delivery
             missing_gpu_callbacks += int(delivery.get("mg", False))
             missing_present_callbacks += int(delivery.get("mp", False))
-            host = delivery.get("hc")
-            if isinstance(host, (int, float)) and host >= 0:
-                host_ms.append(host)
-            if delivery.get("v", 0) & 2 and delivery.get("gc", 0) >= 0:
-                queue_completion_ms.append(delivery["gc"])
-            if delivery.get("v", 0) & 4 and delivery.get("pt", 0) > 0:
-                presented[(delivery.get("e", 0), delivery.get("i", 0))] = delivery["pt"]
+            fields = {
+                "host": "hc",
+                "renderer": "rc",
+                "acquire": "aq",
+                "encode": "en",
+                "submit": "sb",
+                "present_call": "ps",
+                "pacer_wait": "pw",
+            }
+            for name, field in fields.items():
+                value = delivery.get(field)
+                if value is None:
+                    continue
+                if not isinstance(value, (int, float)) or value < 0:
+                    invalid_cpu_durations += 1
+                    continue
+                cpu_metrics[name].append(value)
+            submit_timestamp = delivery.get("st", 0)
+            gpu_timestamp = delivery.get("gt", 0)
+            present_timestamp = delivery.get("pt", 0)
+            if delivery.get("v", 0) & 2:
+                if submit_timestamp <= 0 or gpu_timestamp < submit_timestamp:
+                    reversed_gpu_timestamps += 1
+                elif delivery.get("gc", 0) >= 0:
+                    queue_completion_ms.append(delivery["gc"])
+            if delivery.get("v", 0) & 4:
+                if present_timestamp <= 0 or (submit_timestamp > 0 and present_timestamp < submit_timestamp):
+                    reversed_present_timestamps += 1
+                else:
+                    presented[delivery_identity] = present_timestamp
     unique_sequences = set(sequences)
     sequence_duplicates = len(sequences) - len(unique_sequences)
     sequence_gaps = 0
@@ -148,6 +186,9 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "duplicate_raw_identities": duplicate_raw_identities,
         "duplicate_delivery_identities": duplicate_delivery_identities,
         "raw_without_delivery": raw_without_delivery,
+        "invalid_cpu_durations": invalid_cpu_durations,
+        "reversed_gpu_timestamps": reversed_gpu_timestamps,
+        "reversed_present_timestamps": reversed_present_timestamps,
     }
     healthy = all(value == 0 for value in failures.values())
     complete_groups = all(group_counts[name] > 0 for name in REQUIRED_GROUPS)
@@ -187,6 +228,9 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             "healthy": recording_healthy,
         }
     accepted = healthy and complete_groups and recording_healthy
+    exact_joined = raw_identities & delivery_identities
+    exact_gpu_ms = [raw_frames[identity].get("ms") for identity in exact_joined]
+    exact_gpu_ms = [value for value in exact_gpu_ms if isinstance(value, (int, float)) and value >= 0]
     return {
         "telemetry": str(telemetry_path),
         "telemetry_sha256": sha256(telemetry_path),
@@ -206,9 +250,18 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "completion_high_water": completion_high_water,
         "reliability": reliability,
         "reliability_reason": reliability_reason,
-        "host_ms": distribution(host_ms),
+        "cpu_ms": {name: distribution(values) for name, values in cpu_metrics.items()},
+        "host_ms": distribution(cpu_metrics["host"]),
+        "renderer_ms": distribution(cpu_metrics["renderer"]),
+        "acquire_ms": distribution(cpu_metrics["acquire"]),
+        "encode_ms": distribution(cpu_metrics["encode"]),
+        "submit_ms": distribution(cpu_metrics["submit"]),
+        "present_call_ms": distribution(cpu_metrics["present_call"]),
+        "pacer_wait_ms": distribution(cpu_metrics["pacer_wait"]),
         "displayed_ms": distribution(displayed_ms),
         "queue_completion_ms": distribution(queue_completion_ms),
+        "exact_gpu_ms": distribution(exact_gpu_ms),
+        "gpu_groups_ms": {name: distribution(values) for name, values in sorted(gpu_groups.items())},
         "deadline_samples": deadline_samples,
         "deadline_misses": deadline_misses,
         "healthy": healthy,

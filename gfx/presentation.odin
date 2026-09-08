@@ -5,19 +5,47 @@ import "core:sync"
 FRAME_DELIVERY_MAX :: 128
 FRAME_DELIVERY_RETIRE_LAG :: 64
 
+Host_Frame_Timing :: struct {
+	total_seconds:   f64,
+	reload_seconds:  f64,
+	refresh_seconds: f64,
+	draw_seconds:    f64,
+	prepare_seconds: f64,
+	cursor_seconds:  f64,
+}
+
 Frame_Delivery_Timing :: struct {
-	epoch:                    u64,
-	presentation_supported:   bool,
-	missing_gpu_callback:     bool,
-	missing_present_callback: bool,
-	frame_index:              u64,
-	renderer_cpu_seconds:     f64,
-	acquire_cpu_seconds:      f64,
-	encode_cpu_seconds:       f64,
-	submit_cpu_seconds:       f64,
-	present_cpu_seconds:      f64,
-	host_cpu_seconds:         f64,
-	pacer_wait_seconds:       f64,
+	epoch:                       u64,
+	presentation_supported:      bool,
+	missing_gpu_callback:        bool,
+	missing_present_callback:    bool,
+	frame_index:                 u64,
+	renderer_cpu_seconds:        f64,
+	pre_acquire_cpu_seconds:     f64,
+	stream_acquire_cpu_seconds:  f64,
+	acquire_cpu_seconds:         f64,
+	post_acquire_cpu_seconds:    f64,
+	flush_cpu_seconds:           f64,
+	stream_upload_cpu_seconds:   f64,
+	encode_cpu_seconds:          f64,
+	submit_cpu_seconds:          f64,
+	present_cpu_seconds:         f64,
+	cleanup_cpu_seconds:         f64,
+	input_cpu_seconds:           f64,
+	frame_timing_cpu_seconds:    f64,
+	host_cpu_seconds:            f64,
+	host_reload_cpu_seconds:     f64,
+	host_refresh_cpu_seconds:    f64,
+	host_draw_cpu_seconds:       f64,
+	host_prepare_cpu_seconds:    f64,
+	host_cursor_cpu_seconds:     f64,
+	host_unaccounted_seconds:    f64,
+	pacer_wait_seconds:          f64,
+	submissions_before_poll:     u32,
+	submissions_after_poll:      u32,
+	submissions_at_submit:       u32,
+	submissions_high_water:      u32,
+	oldest_submission_frame_age: u64,
 	submit_timestamp:         f64,
 	gpu_complete_timestamp:   f64,
 	gpu_complete_seconds:     f64,
@@ -50,19 +78,41 @@ context_frame_delivery_supported :: proc(ctx: ^Context) -> bool {
 	return ctx.delivery.supported
 }
 
-context_frame_delivery_record_host :: proc(
+context_frame_delivery_record_host_detail :: proc(
 	ctx: ^Context,
-	host_cpu_seconds, pacer_wait_seconds: f64,
+	timing: Host_Frame_Timing,
+	pacer_wait_seconds: f64,
 ) {
-	if ctx == nil || host_cpu_seconds < 0 || pacer_wait_seconds < 0 do return
+	accounted := timing.reload_seconds + timing.refresh_seconds + timing.draw_seconds +
+		timing.prepare_seconds + timing.cursor_seconds
+	if ctx == nil || timing.total_seconds < 0 || pacer_wait_seconds < 0 || accounted < 0 do return
+	if timing.reload_seconds < 0 || timing.refresh_seconds < 0 || timing.draw_seconds < 0 do return
+	if timing.prepare_seconds < 0 || timing.cursor_seconds < 0 do return
 	sync.mutex_lock(&ctx.delivery.mutex)
 	defer sync.mutex_unlock(&ctx.delivery.mutex)
 	frame_index := ctx.stats_latest.frame_index
 	if frame_index == 0 do return
 	slot := _frame_delivery_slot(ctx, frame_index)
 	if slot == nil || slot.epoch != ctx.epoch do return
-	slot.timing.host_cpu_seconds = host_cpu_seconds
+	slot.timing.host_cpu_seconds = timing.total_seconds
+	slot.timing.host_reload_cpu_seconds = timing.reload_seconds
+	slot.timing.host_refresh_cpu_seconds = timing.refresh_seconds
+	slot.timing.host_draw_cpu_seconds = timing.draw_seconds
+	slot.timing.host_prepare_cpu_seconds = timing.prepare_seconds
+	slot.timing.host_cursor_cpu_seconds = timing.cursor_seconds
+	slot.timing.host_unaccounted_seconds = max(timing.total_seconds - accounted, f64(0))
 	slot.timing.pacer_wait_seconds = pacer_wait_seconds
+}
+
+context_frame_delivery_record_host :: proc(
+	ctx: ^Context,
+	host_cpu_seconds, pacer_wait_seconds: f64,
+) {
+	context_frame_delivery_record_host_detail(
+		ctx,
+		{total_seconds = host_cpu_seconds},
+		pacer_wait_seconds,
+	)
 }
 
 context_frame_delivery_drain :: proc(
@@ -164,10 +214,23 @@ _frame_delivery_cpu :: proc(ctx: ^Context, stats: Renderer_Stats) {
 	slot := _frame_delivery_slot(ctx, stats.frame_index)
 	if slot == nil || slot.epoch != ctx.epoch do return
 	slot.timing.renderer_cpu_seconds = stats.frame_cpu_seconds
+	slot.timing.pre_acquire_cpu_seconds = stats.pre_acquire_cpu_seconds
+	slot.timing.stream_acquire_cpu_seconds = stats.stream_acquire_cpu_seconds
 	slot.timing.acquire_cpu_seconds = stats.acquire_cpu_seconds
+	slot.timing.post_acquire_cpu_seconds = stats.post_acquire_cpu_seconds
+	slot.timing.flush_cpu_seconds = stats.flush_cpu_seconds
+	slot.timing.stream_upload_cpu_seconds = stats.stream_upload_cpu_seconds
 	slot.timing.encode_cpu_seconds = stats.encode_cpu_seconds
 	slot.timing.submit_cpu_seconds = stats.submit_cpu_seconds
 	slot.timing.present_cpu_seconds = stats.present_cpu_seconds
+	slot.timing.cleanup_cpu_seconds = stats.cleanup_cpu_seconds
+	slot.timing.input_cpu_seconds = stats.input_cpu_seconds
+	slot.timing.frame_timing_cpu_seconds = stats.frame_timing_cpu_seconds
+	slot.timing.submissions_before_poll = stats.submissions_before_poll
+	slot.timing.submissions_after_poll = stats.submissions_after_poll
+	slot.timing.submissions_at_submit = stats.submissions_at_submit
+	slot.timing.submissions_high_water = stats.submissions_high_water
+	slot.timing.oldest_submission_frame_age = stats.oldest_submission_frame_age
 	slot.timing.cpu_valid = true
 }
 

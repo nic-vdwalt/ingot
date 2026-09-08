@@ -32,10 +32,23 @@ Renderer_Stats :: struct {
 	render_passes:                 u32,
 	queue_submissions:             u32,
 	frame_cpu_seconds:             f64,
+	pre_acquire_cpu_seconds:       f64,
+	stream_acquire_cpu_seconds:    f64,
 	acquire_cpu_seconds:           f64,
+	post_acquire_cpu_seconds:      f64,
+	flush_cpu_seconds:             f64,
+	stream_upload_cpu_seconds:     f64,
 	encode_cpu_seconds:            f64,
 	submit_cpu_seconds:            f64,
 	present_cpu_seconds:           f64,
+	cleanup_cpu_seconds:           f64,
+	input_cpu_seconds:             f64,
+	frame_timing_cpu_seconds:      f64,
+	submissions_before_poll:       u32,
+	submissions_after_poll:        u32,
+	submissions_at_submit:         u32,
+	submissions_high_water:        u32,
+	oldest_submission_frame_age:  u64,
 	peak_geometry_arena_bytes:     u64,
 	peak_uniform_arena_bytes:      u64,
 	stream_geometry_write_calls:   u32,
@@ -314,6 +327,46 @@ _stats_context_cpu_times :: proc(ctx: ^Context, frame, acquire, encode, submit, 
 		ctx.stats_current.encode_cpu_seconds += encode
 		ctx.stats_current.submit_cpu_seconds += submit
 		ctx.stats_current.present_cpu_seconds += present
+	}
+}
+
+@(private)
+_stats_frame_boundary_cpu :: proc(
+	ctx: ^Context,
+	pre_acquire, stream_acquire, post_acquire, flush, upload, cleanup, input, frame_timing: f64,
+) {
+	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_frame_boundary_cpu: nil context")
+		assert(pre_acquire >= 0 && stream_acquire >= 0 && post_acquire >= 0)
+		assert(flush >= 0 && upload >= 0 && cleanup >= 0 && input >= 0 && frame_timing >= 0)
+		ctx.stats_current.pre_acquire_cpu_seconds += pre_acquire
+		ctx.stats_current.stream_acquire_cpu_seconds += stream_acquire
+		ctx.stats_current.post_acquire_cpu_seconds += post_acquire
+		ctx.stats_current.flush_cpu_seconds += flush
+		ctx.stats_current.stream_upload_cpu_seconds += upload
+		ctx.stats_current.cleanup_cpu_seconds += cleanup
+		ctx.stats_current.input_cpu_seconds += input
+		ctx.stats_current.frame_timing_cpu_seconds += frame_timing
+	}
+}
+
+@(private)
+_stats_submission_pressure :: proc(ctx: ^Context, before, after, at_submit: u32, oldest_age: u64) {
+	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_submission_pressure: nil context")
+		assert(before <= MAX_IN_FLIGHT_SUBMISSIONS && after <= MAX_IN_FLIGHT_SUBMISSIONS)
+		assert(at_submit <= MAX_IN_FLIGHT_SUBMISSIONS)
+		ctx.stats_current.submissions_before_poll = max(ctx.stats_current.submissions_before_poll, before)
+		ctx.stats_current.submissions_after_poll = max(ctx.stats_current.submissions_after_poll, after)
+		ctx.stats_current.submissions_at_submit = max(ctx.stats_current.submissions_at_submit, at_submit)
+		ctx.stats_current.submissions_high_water = max(
+			ctx.stats_current.submissions_high_water,
+			max(before, max(after, at_submit)),
+		)
+		ctx.stats_current.oldest_submission_frame_age = max(
+			ctx.stats_current.oldest_submission_frame_age,
+			oldest_age,
+		)
 	}
 }
 

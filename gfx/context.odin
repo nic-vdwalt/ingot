@@ -837,21 +837,29 @@ BeginDrawing :: proc() {
 
 context_begin_drawing :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_begin_drawing: nil context")
-	_maybe_reconfigure(ctx)
 	_stats_frame_begin(ctx)
+	pre_acquire_started := platform_now()
+	_maybe_reconfigure(ctx)
 	_frame_delivery_begin(ctx, ctx.stats_current.frame_index)
 	platform_web_input_frame_begin(ctx)
 	ctx.idle.surface_unavailable = ctx.fb_width <= 0 || ctx.fb_height <= 0
+	pre_acquire_elapsed := platform_now() - pre_acquire_started
+	_stats_frame_boundary_cpu(ctx, pre_acquire_elapsed, 0, 0, 0, 0, 0, 0, 0)
 	if ctx.idle.surface_unavailable {
 		_ = _submission_completed(&ctx.submissions)
 		ctx.frame.has_frame = false
 		return
 	}
 
+	stream_acquire_started := platform_now()
 	if !renderer_frame_begin(ctx, &ctx.rend) {
+		stream_acquire_elapsed := platform_now() - stream_acquire_started
+		_stats_frame_boundary_cpu(ctx, 0, stream_acquire_elapsed, 0, 0, 0, 0, 0, 0)
 		ctx.frame.has_frame = false
 		return
 	}
+	stream_acquire_elapsed := platform_now() - stream_acquire_started
+	_stats_frame_boundary_cpu(ctx, 0, stream_acquire_elapsed, 0, 0, 0, 0, 0, 0)
 	acquire_started := platform_now()
 	ctx.frame.surf_tex = wg.SurfaceGetCurrentTexture(ctx.surface)
 	ctx.idle.surface_unavailable = ctx.frame.surf_tex.status == .Occluded
@@ -876,6 +884,7 @@ context_begin_drawing :: proc(ctx: ^Context) {
 		ctx.frame.has_frame = false
 		return
 	}
+	post_acquire_started := platform_now()
 	_assert_window_frame_contract(ctx)
 	renderer_window_projection_refresh(&ctx.rend, ctx.queue, ctx.width, ctx.height)
 	ctx.frame.view = wg.TextureCreateView(ctx.frame.surf_tex.texture, nil)
@@ -886,6 +895,8 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	ctx.frame.has_frame = true
 	ctx.frame.scissor_on = false
 	ctx.frame.scissor_empty = false
+	post_acquire_elapsed := platform_now() - post_acquire_started
+	_stats_frame_boundary_cpu(ctx, 0, 0, post_acquire_elapsed, 0, 0, 0, 0, 0)
 }
 
 @(private)
@@ -986,6 +997,7 @@ EndDrawing :: proc() {
 context_end_drawing :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_end_drawing: nil context")
 	if ctx.frame.has_frame {
+		flush_started := platform_now()
 		context_ensure_pass(ctx) // guarantee a clear even on empty frames
 		if !ctx.frame.scissor_empty {
 			renderer_flush(ctx, &ctx.rend, ctx.frame.pass, .Frame_End)
@@ -995,9 +1007,14 @@ context_end_drawing :: proc(ctx: ^Context) {
 		}
 		wg.RenderPassEncoderEnd(ctx.frame.pass)
 		wg.RenderPassEncoderRelease(ctx.frame.pass)
+		flush_elapsed := platform_now() - flush_started
+		_stats_frame_boundary_cpu(ctx, 0, 0, 0, flush_elapsed, 0, 0, 0, 0)
 
 		retirement := _submission_reserve(&ctx.submissions)
+		upload_started := platform_now()
 		if retirement != 0 do assert(_stream_slot_upload(ctx, &ctx.rend))
+		upload_elapsed := platform_now() - upload_started
+		_stats_frame_boundary_cpu(ctx, 0, 0, 0, 0, upload_elapsed, 0, 0, 0)
 		_gpu_timing_encoder_end(ctx, ctx.frame.encoder, ctx.frame.timing)
 		_gpu_timing_frame_close(ctx, ctx.frame.encoder)
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
@@ -1022,11 +1039,14 @@ context_end_drawing :: proc(ctx: ^Context) {
 		wg.CommandEncoderRelease(ctx.frame.encoder)
 		present_elapsed := _stats_present(ctx)
 		_stats_context_cpu_times(ctx, 0, 0, encode_elapsed, submit_elapsed, present_elapsed)
+		cleanup_started := platform_now()
 		wg.TextureViewRelease(ctx.frame.view)
 		_release_surface_texture(ctx)
 		ctx.frame.has_frame = false
 		_flush_retired(ctx)
 		_renderer_report_overflow(&ctx.rend)
+		cleanup_elapsed := platform_now() - cleanup_started
+		_stats_frame_boundary_cpu(ctx, 0, 0, 0, 0, 0, cleanup_elapsed, 0, 0)
 	} else {
 		_gpu_timing_frame_abandon(ctx)
 		clear(&ctx.rend.verts)
@@ -1034,12 +1054,18 @@ context_end_drawing :: proc(ctx: ^Context) {
 	}
 
 	platform_web_input_frame_end(ctx)
-	_stats_frame_end(ctx)
-	_frame_delivery_cpu(ctx, ctx.stats_latest)
+	input_started := platform_now()
 	when ODIN_OS != .JS {
 		input_poll(ctx)
 	}
+	input_elapsed := platform_now() - input_started
+	_stats_frame_boundary_cpu(ctx, 0, 0, 0, 0, 0, 0, input_elapsed, 0)
+	frame_timing_started := platform_now()
 	_frame_timing(ctx, platform_should_close(ctx))
+	frame_timing_elapsed := platform_now() - frame_timing_started
+	_stats_frame_boundary_cpu(ctx, 0, 0, 0, 0, 0, 0, 0, frame_timing_elapsed)
+	_stats_frame_end(ctx)
+	_frame_delivery_cpu(ctx, ctx.stats_latest)
 }
 
 // _release_surface_texture drops the owned reference returned by
