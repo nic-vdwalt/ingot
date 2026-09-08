@@ -157,6 +157,7 @@ Frame_State :: struct {
 	clear_color:            Color,
 	pass_begun:             bool,
 	has_frame:              bool,
+	draw_started:           f64,
 
 	// Active window-pass scissor (framebuffer pixels). Re-applied whenever the
 	// window pass begins, since a fresh WebGPU pass resets scissor to full.
@@ -847,6 +848,7 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	_stats_frame_boundary_cpu(ctx, pre_acquire_elapsed, 0, 0, 0, 0, 0, 0, 0)
 	if ctx.idle.surface_unavailable {
 		_ = _submission_completed(&ctx.submissions)
+		_frame_delivery_abandon(ctx, ctx.stats_current.frame_index)
 		ctx.frame.has_frame = false
 		return
 	}
@@ -855,6 +857,7 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	if !renderer_frame_begin(ctx, &ctx.rend) {
 		stream_acquire_elapsed := platform_now() - stream_acquire_started
 		_stats_frame_boundary_cpu(ctx, 0, stream_acquire_elapsed, 0, 0, 0, 0, 0, 0)
+		_frame_delivery_abandon(ctx, ctx.stats_current.frame_index)
 		ctx.frame.has_frame = false
 		return
 	}
@@ -876,11 +879,13 @@ context_begin_drawing :: proc(ctx: ^Context) {
 		if ctx.fb_width > 0 && ctx.fb_height > 0 {
 			wg.SurfaceConfigure(ctx.surface, &ctx.config)
 		}
+		_frame_delivery_abandon(ctx, ctx.stats_current.frame_index)
 		ctx.frame.has_frame = false
 		return
 	case:
 		_release_surface_texture(ctx)
 		_stream_slot_abandon(&ctx.rend)
+		_frame_delivery_abandon(ctx, ctx.stats_current.frame_index)
 		ctx.frame.has_frame = false
 		return
 	}
@@ -897,6 +902,7 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	ctx.frame.scissor_empty = false
 	post_acquire_elapsed := platform_now() - post_acquire_started
 	_stats_frame_boundary_cpu(ctx, 0, 0, post_acquire_elapsed, 0, 0, 0, 0, 0)
+	ctx.frame.draw_started = platform_now()
 }
 
 @(private)
@@ -997,6 +1003,8 @@ EndDrawing :: proc() {
 context_end_drawing :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_end_drawing: nil context")
 	if ctx.frame.has_frame {
+		assert(ctx.frame.draw_started > 0, "context_end_drawing: missing draw start")
+		_stats_draw_cpu(ctx, platform_now() - ctx.frame.draw_started)
 		flush_started := platform_now()
 		context_ensure_pass(ctx) // guarantee a clear even on empty frames
 		if !ctx.frame.scissor_empty {

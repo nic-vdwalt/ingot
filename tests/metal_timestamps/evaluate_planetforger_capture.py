@@ -29,6 +29,8 @@ PRESSURE_FIELDS = {
     "submissions_at_submit": "qas",
     "submissions_high_water": "qhw",
     "oldest_submission_frame_age": "qoa",
+}
+SUBMISSION_CALL_FIELDS = {
     "intermediate_upload_count": "iuc",
     "intermediate_finish_count": "ifc",
     "intermediate_submit_count": "isc",
@@ -44,10 +46,22 @@ PRESSURE_FIELDS = {
 }
 
 
+def correlation(left, right):
+    if len(left) != len(right) or len(left) < 2:
+        return None
+    left_mean = sum(left) / len(left)
+    right_mean = sum(right) / len(right)
+    numerator = sum((a - left_mean) * (b - right_mean) for a, b in zip(left, right))
+    left_square = sum((value - left_mean) ** 2 for value in left)
+    right_square = sum((value - right_mean) ** 2 for value in right)
+    denominator = math.sqrt(left_square * right_square)
+    return numerator / denominator if denominator else None
+
+
 def classify_boundary_frame(delivery, renderer_unaccounted):
     if delivery["hun"] > 0.25:
         return "unaccounted"
-    if delivery["qap"] >= 3 or delivery["qoa"] >= 2:
+    if delivery["qap"] >= 3 or delivery["qoa"] >= 3:
         return "submission_pressure"
     if delivery["aq"] > 1:
         return "drawable_acquisition"
@@ -93,6 +107,20 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         raise ValueError("scenario identity is missing")
     identity_fields = ("scenario", "seed", "quality", "width", "height", "terrain_sha256")
     scenario_identity = {field: scenario_records[0].get(field) for field in identity_fields}
+    measured_ranges = []
+    measured_started = None
+    for record in scenario_records:
+        native_seconds = record.get("native_seconds")
+        phase = record.get("phase")
+        if not isinstance(native_seconds, (int, float)):
+            continue
+        if phase == "measured" and measured_started is None:
+            measured_started = native_seconds
+        elif phase != "measured" and measured_started is not None:
+            measured_ranges.append((measured_started, native_seconds))
+            measured_started = None
+    if measured_started is not None:
+        measured_ranges.append((measured_started, math.inf))
     if any(value is None or value == "" for value in scenario_identity.values()):
         raise ValueError("scenario identity is incomplete")
     if scenario_identity["scenario"] != "ocean":
@@ -110,6 +138,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     delivery_frames = 0
     gpu_frames = 0
     raw_identities = set()
+    all_delivery_identities = set()
     delivery_identities = set()
     duplicate_raw_identities = 0
     duplicate_delivery_identities = 0
@@ -125,12 +154,15 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         for name in ("host", "renderer", "acquire", "encode", "submit", "present_call", "pacer_wait")
     }
     boundary_metrics = {name: [] for name in (*BOUNDARY_CPU_FIELDS, *PRESSURE_FIELDS)}
+    boundary_metrics["renderer_draw"] = []
+    submission_call_metrics = {name: [] for name in SUBMISSION_CALL_FIELDS}
     boundary_metrics.update({
         "host_closure_error": [],
         "renderer_closure_error": [],
         "renderer_unaccounted": [],
     })
     classifications = []
+    correlation_rows = []
     boundary_versions = set()
     incomplete_boundary_frames = 0
     unknown_boundary_frames = 0
@@ -162,7 +194,6 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         reliability = scope.get("g", reliability)
         reliability_reason = scope.get("r", reliability_reason)
         for frame in record.get("gfd", []):
-            gpu_frames += 1
             frame_identity = (frame.get("e", 0), frame.get("i", 0))
             if frame_identity in raw_identities:
                 duplicate_raw_identities += 1
@@ -170,22 +201,27 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             raw_frames[frame_identity] = frame
             if not frame.get("v", False):
                 health["invalid_gpu_frame"] = health.get("invalid_gpu_frame", 0) + 1
-            for group in frame.get("g", []):
-                name = group.get("n")
-                milliseconds = group.get("ms")
-                if name in group_counts:
-                    group_counts[name] += 1
-                if isinstance(name, str) and isinstance(milliseconds, (int, float)) and milliseconds >= 0:
-                    gpu_groups.setdefault(name, []).append(milliseconds)
         for delivery in record.get("fd", []):
-            delivery_frames += 1
+            submit_timestamp = delivery.get("st", 0)
             delivery_identity = (delivery.get("e", 0), delivery.get("i", 0))
-            if delivery_identity in delivery_identities:
+            if delivery_identity in all_delivery_identities:
                 duplicate_delivery_identities += 1
-            delivery_identities.add(delivery_identity)
-            delivery_frames_by_identity[delivery_identity] = delivery
+            all_delivery_identities.add(delivery_identity)
             missing_gpu_callbacks += int(delivery.get("mg", False))
             missing_present_callbacks += int(delivery.get("mp", False))
+            gpu_timestamp = delivery.get("gt", 0)
+            present_timestamp = delivery.get("pt", 0)
+            if delivery.get("v", 0) & 2 and (submit_timestamp <= 0 or gpu_timestamp < submit_timestamp):
+                reversed_gpu_timestamps += 1
+            if delivery.get("v", 0) & 4 and (
+                present_timestamp <= 0 or (submit_timestamp > 0 and present_timestamp < submit_timestamp)
+            ):
+                reversed_present_timestamps += 1
+            if measured_ranges and not any(start <= submit_timestamp < end for start, end in measured_ranges):
+                continue
+            delivery_frames += 1
+            delivery_identities.add(delivery_identity)
+            delivery_frames_by_identity[delivery_identity] = delivery
             fields = {
                 "host": "hc",
                 "renderer": "rc",
@@ -205,27 +241,41 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                 cpu_metrics[name].append(value)
             boundary_version = delivery.get("bv", 0)
             boundary_versions.add(boundary_version)
-            if boundary_version == 2:
+            if boundary_version in (2, 3):
                 required = {
                     "hc", "rc", "aq", "en", "sb", "ps",
                     *BOUNDARY_CPU_FIELDS.values(), *PRESSURE_FIELDS.values(),
+                    *SUBMISSION_CALL_FIELDS.values(),
                 }
+                if boundary_version == 3:
+                    required.add("rdw")
                 if not required.issubset(delivery):
                     incomplete_boundary_frames += 1
                 else:
                     valid_detail = True
-                    for name, field in {**BOUNDARY_CPU_FIELDS, **PRESSURE_FIELDS}.items():
+                    detail_fields = {**BOUNDARY_CPU_FIELDS, **PRESSURE_FIELDS, **SUBMISSION_CALL_FIELDS}
+                    if boundary_version == 3:
+                        detail_fields["renderer_draw"] = "rdw"
+                    for name, field in detail_fields.items():
                         value = delivery[field]
                         if not isinstance(value, (int, float)) or value < 0:
                             invalid_cpu_durations += 1
                             valid_detail = False
+                        elif name in submission_call_metrics:
+                            submission_call_metrics[name].append(value)
                         else:
                             boundary_metrics[name].append(value)
                     if valid_detail:
                         host_children = sum(delivery[field] for field in ("hrl", "hrf", "hdr", "hpr", "hcu", "hun"))
-                        renderer_children = sum(delivery[field] for field in (
-                            "pre", "sta", "aq", "post", "flu", "upl", "en", "sb", "ps", "cln", "inp", "fti",
-                        ))
+                        if boundary_version == 3:
+                            renderer_fields = (
+                                "rdw", "pre", "sta", "aq", "post", "flu", "fum", "ffm", "fsm", "ps", "cln", "inp", "fti",
+                            )
+                        else:
+                            renderer_fields = (
+                                "pre", "sta", "aq", "post", "flu", "upl", "en", "sb", "ps", "cln", "inp", "fti",
+                            )
+                        renderer_children = sum(delivery[field] for field in renderer_fields)
                         renderer_unaccounted = max(delivery["rc"] - renderer_children, 0)
                         boundary_metrics["host_closure_error"].append(abs(delivery["hc"] - host_children))
                         boundary_metrics["renderer_closure_error"].append(max(renderer_children - delivery["rc"], 0))
@@ -238,21 +288,21 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                             "acquire_ms": delivery["aq"],
                             "classification": classification,
                         })
+                        correlation_rows.append({
+                            "host": delivery["hc"],
+                            "acquire": delivery["aq"],
+                            "after_poll": delivery["qap"],
+                            "oldest_age": delivery["qoa"],
+                        })
             elif boundary_version != 0:
                 unknown_boundary_frames += 1
-            submit_timestamp = delivery.get("st", 0)
-            gpu_timestamp = delivery.get("gt", 0)
-            present_timestamp = delivery.get("pt", 0)
-            if delivery.get("v", 0) & 2:
-                if submit_timestamp <= 0 or gpu_timestamp < submit_timestamp:
-                    reversed_gpu_timestamps += 1
-                elif delivery.get("gc", 0) >= 0:
+            if delivery.get("v", 0) & 2 and submit_timestamp > 0 and gpu_timestamp >= submit_timestamp:
+                if delivery.get("gc", 0) >= 0:
                     queue_completion_ms.append(delivery["gc"])
-            if delivery.get("v", 0) & 4:
-                if present_timestamp <= 0 or (submit_timestamp > 0 and present_timestamp < submit_timestamp):
-                    reversed_present_timestamps += 1
-                else:
-                    presented[delivery_identity] = present_timestamp
+            if delivery.get("v", 0) & 4 and present_timestamp > 0 and (
+                submit_timestamp <= 0 or present_timestamp >= submit_timestamp
+            ):
+                presented[delivery_identity] = present_timestamp
     unique_sequences = set(sequences)
     sequence_duplicates = len(sequences) - len(unique_sequences)
     sequence_gaps = 0
@@ -270,8 +320,19 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                 if interval > 1000 / refresh_hz * 1.10:
                     deadline_misses += 1
         previous = (frame_identity, timestamp)
-    raw_without_delivery = len(raw_identities - delivery_identities)
-    delivery_without_raw = len(delivery_identities - raw_identities)
+    raw_without_delivery = len(raw_identities - all_delivery_identities)
+    delivery_without_raw = len(all_delivery_identities - raw_identities)
+    exact_joined = raw_identities & delivery_identities
+    for identity in exact_joined:
+        frame = raw_frames[identity]
+        gpu_frames += 1
+        for group in frame.get("g", []):
+            name = group.get("n")
+            milliseconds = group.get("ms")
+            if name in group_counts:
+                group_counts[name] += 1
+            if isinstance(name, str) and isinstance(milliseconds, (int, float)) and milliseconds >= 0:
+                gpu_groups.setdefault(name, []).append(milliseconds)
     failures = {
         **health,
         "missing_gpu_callbacks": missing_gpu_callbacks,
@@ -284,6 +345,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "duplicate_raw_identities": duplicate_raw_identities,
         "duplicate_delivery_identities": duplicate_delivery_identities,
         "raw_without_delivery": raw_without_delivery,
+        "delivery_without_raw": delivery_without_raw,
         "invalid_cpu_durations": invalid_cpu_durations,
         "reversed_gpu_timestamps": reversed_gpu_timestamps,
         "reversed_present_timestamps": reversed_present_timestamps,
@@ -328,13 +390,26 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             "healthy": recording_healthy,
         }
     accepted = healthy and complete_groups and recording_healthy
-    exact_joined = raw_identities & delivery_identities
     exact_gpu_ms = [raw_frames[identity].get("ms") for identity in exact_joined]
     exact_gpu_ms = [value for value in exact_gpu_ms if isinstance(value, (int, float)) and value >= 0]
     long_frames = [item for item in classifications if item["host_ms"] > 9.167]
     acquire_frames = [item for item in classifications if item["acquire_ms"] > 1]
+    host_p95 = percentile([item["host_ms"] for item in classifications], 0.95)
+    p95_host_frames = [item for item in classifications if host_p95 is not None and item["host_ms"] >= host_p95]
     detailed_cpu_frames = boundary_metrics["host_closure_error"]
     classification_coverage = len(classifications) / delivery_frames if delivery_frames else 0
+    pressure_correlations = {}
+    for pressure_name in ("after_poll", "oldest_age"):
+        pressure_correlations[pressure_name] = {
+            "host": correlation(
+                [row[pressure_name] for row in correlation_rows],
+                [row["host"] for row in correlation_rows],
+            ),
+            "acquire": correlation(
+                [row[pressure_name] for row in correlation_rows],
+                [row["acquire"] for row in correlation_rows],
+            ),
+        }
     return {
         "telemetry": str(telemetry_path),
         "telemetry_sha256": sha256(telemetry_path),
@@ -344,10 +419,10 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "recording": recording,
         "identity": scenario_identity,
         "observed_phases": sorted({record.get("phase") for record in scenario_records}),
-        "qualification_route": "unsegmented_immutable_scenario_identity",
+        "qualification_route": "measured_phase" if measured_ranges else "unsegmented_immutable_scenario_identity",
         "delivery_frames": delivery_frames,
         "gpu_frames": gpu_frames,
-        "joined_frames": len(raw_identities & delivery_identities),
+        "joined_frames": len(exact_joined),
         "delivery_without_raw": delivery_without_raw,
         "group_counts": group_counts,
         "failures": failures,
@@ -374,8 +449,16 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             "long_frames_classified": len(long_frames),
             "acquire_frames": len(acquire_frames),
             "acquire_frames_classified": len(acquire_frames),
+            "p95_host_threshold_ms": host_p95,
+            "p95_host_frames": len(p95_host_frames),
+            "p95_host_frames_classified": len(p95_host_frames),
         },
         "boundary_ms": {name: distribution(values) for name, values in boundary_metrics.items()},
+        "submission_calls": {
+            name: distribution(values) for name, values in submission_call_metrics.items()
+        },
+        "pressure_correlations": pressure_correlations,
+        "p95_host_classifications": p95_host_frames,
         "classifications": classifications,
         "classification_counts": {
             name: sum(item["classification"] == name for item in classifications)

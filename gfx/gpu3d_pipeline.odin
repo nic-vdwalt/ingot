@@ -770,7 +770,9 @@ context_copy_gpu_3d_target_named :: proc(
 	wg.CommandEncoderCopyTextureToTexture(encoder, &color_source, &color_destination, &extent)
 	wg.CommandEncoderCopyTextureToTexture(encoder, &depth_source, &depth_destination, &extent)
 	_gpu_timing_encoder_end(ctx, encoder, timing)
+	finish_started := platform_now()
 	command := wg.CommandEncoderFinish(encoder, nil)
+	finish_elapsed := platform_now() - finish_started
 	if command == nil {
 		when GPU_TIMING_DIAGNOSTICS {
 			_gpu_timing_diagnostic_encoder_retire(&ctx.gpu_timing.diagnostics[0], encoder)
@@ -781,10 +783,20 @@ context_copy_gpu_3d_target_named :: proc(
 	when GPU_TIMING_DIAGNOSTICS {
 		_gpu_timing_diagnostic_submit(&ctx.gpu_timing.diagnostics[0], encoder)
 	}
+	submit_started := platform_now()
 	wg.QueueSubmit(ctx.queue, {command})
+	submit_elapsed := platform_now() - submit_started
+	_stats_gpu_3d_target_copy_submission(ctx, finish_elapsed, submit_elapsed)
 	wg.CommandBufferRelease(command)
 	wg.CommandEncoderRelease(encoder)
 	return true
+}
+
+@(private)
+_stats_gpu_3d_target_copy_submission :: proc(ctx: ^Context, finish, submit: f64) {
+	_stats_submission_call(ctx, .Intermediate, 0, finish, submit, false, true, true)
+	_stats_context_cpu_times(ctx, 0, 0, finish, submit, 0)
+	_stats_queue_submission(ctx)
 }
 
 context_copy_gpu_3d_target :: proc(ctx: ^Context, source, destination: ^Gpu_3D_Target) -> bool {

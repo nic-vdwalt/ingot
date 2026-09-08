@@ -37,6 +37,7 @@ Renderer_Stats :: struct {
 	render_passes:                   u32,
 	queue_submissions:               u32,
 	frame_cpu_seconds:               f64,
+	draw_cpu_seconds:                f64,
 	pre_acquire_cpu_seconds:         f64,
 	stream_acquire_cpu_seconds:      f64,
 	acquire_cpu_seconds:             f64,
@@ -344,6 +345,15 @@ _stats_context_cpu_times :: proc(ctx: ^Context, frame, acquire, encode, submit, 
 		ctx.stats_current.encode_cpu_seconds += encode
 		ctx.stats_current.submit_cpu_seconds += submit
 		ctx.stats_current.present_cpu_seconds += present
+	}
+}
+
+@(private)
+_stats_draw_cpu :: proc(ctx: ^Context, seconds: f64) {
+	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_draw_cpu: nil context")
+		assert(seconds >= 0, "_stats_draw_cpu: negative time")
+		ctx.stats_current.draw_cpu_seconds += seconds
 	}
 }
 

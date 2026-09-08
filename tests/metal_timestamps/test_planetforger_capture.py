@@ -20,8 +20,9 @@ IDENTITY = {
 
 def boundary_fields():
     return {
-        "bv": 2,
+        "bv": 3,
         "rc": 5.8,
+        "rdw": 0.1,
         "hc": 7.1,
         "aq": 1.5,
         "en": 0.2,
@@ -173,6 +174,50 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         self.assertEqual(result["exact_gpu_ms"]["p50"], None)
         self.assertEqual(result["gpu_groups_ms"]["window"]["p50"], 1)
 
+    def test_measured_phase_filters_gpu_frames_and_groups_by_delivery_identity(self):
+        warmup = telemetry()
+        warmup["gfd"][0]["ms"] = 20
+        warmup["gfd"][0]["g"][0]["ms"] = 10
+        warmup["fd"][0]["st"] = 10
+        measured = telemetry()
+        measured["sq"] = 2
+        measured["gfd"][0]["i"] = 2
+        measured["gfd"][0]["ms"] = 4
+        measured["gfd"][0]["g"][0]["ms"] = 2
+        measured["fd"][0]["i"] = 2
+        measured["fd"][0]["st"] = 25
+        measured["fd"][0]["gt"] = 25.009
+        measured["fd"][0]["pt"] = 25.01
+        scenarios = [
+            {**IDENTITY, "phase": "warmup", "native_seconds": 0},
+            {**IDENTITY, "phase": "measured", "native_seconds": 20},
+            {**IDENTITY, "phase": "complete", "native_seconds": 30},
+        ]
+        result = self.evaluate([warmup, measured], scenarios)
+        self.assertEqual(result["qualification_route"], "measured_phase")
+        self.assertEqual(result["delivery_frames"], 1)
+        self.assertEqual(result["gpu_frames"], 1)
+        self.assertEqual(result["joined_frames"], 1)
+        self.assertEqual(result["exact_gpu_ms"]["p50"], 4)
+        self.assertEqual(result["gpu_groups_ms"]["window"]["p50"], 2)
+        self.assertEqual(result["group_counts"]["window"], 1)
+        self.assertTrue(result["accepted"])
+
+    def test_missing_measured_raw_frame_remains_a_join_failure(self):
+        record = telemetry()
+        record["gfd"] = []
+        record["fd"][0]["st"] = 25
+        record["fd"][0]["gt"] = 25.009
+        record["fd"][0]["pt"] = 25.01
+        scenarios = [
+            {**IDENTITY, "phase": "measured", "native_seconds": 20},
+            {**IDENTITY, "phase": "complete", "native_seconds": 30},
+        ]
+        result = self.evaluate([record], scenarios)
+        self.assertEqual(result["failures"]["delivery_without_raw"], 1)
+        self.assertEqual(result["joined_frames"], 0)
+        self.assertFalse(result["accepted"])
+
     def test_absent_cpu_metrics_are_not_measured_zeroes(self):
         record = telemetry()
         for field in ("rc", "aq", "en", "sb", "ps", "pw"):
@@ -193,10 +238,10 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         record = telemetry()
         record["fd"][0].update(boundary_fields())
         result = self.evaluate([record])
-        self.assertEqual(result["boundary_schema"]["versions"], [2])
+        self.assertEqual(result["boundary_schema"]["versions"], [3])
         self.assertEqual(result["boundary_schema"]["detailed_frames"], 1)
         self.assertEqual(result["boundary_ms"]["host_closure_error"]["p50"], 0)
-        self.assertAlmostEqual(result["boundary_ms"]["renderer_unaccounted"]["p50"], 0.1)
+        self.assertEqual(result["boundary_ms"]["renderer_unaccounted"]["p50"], 0)
         self.assertEqual(result["classification_counts"]["drawable_acquisition"], 1)
 
     def test_rejects_incomplete_or_unknown_boundary_schema(self):
@@ -207,10 +252,34 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         self.assertEqual(result["failures"]["incomplete_boundary_frames"], 1)
         self.assertFalse(result["accepted"])
         unknown = telemetry()
-        unknown["fd"][0]["bv"] = 3
+        unknown["fd"][0]["bv"] = 4
         result = self.evaluate([unknown])
         self.assertEqual(result["failures"]["unknown_boundary_frames"], 1)
         self.assertFalse(result["accepted"])
+
+    def test_boundary_v3_requires_valid_renderer_draw(self):
+        for renderer_draw in (None, -0.1, "invalid"):
+            with self.subTest(renderer_draw=renderer_draw):
+                record = telemetry()
+                fields = boundary_fields()
+                if renderer_draw is None:
+                    del fields["rdw"]
+                else:
+                    fields["rdw"] = renderer_draw
+                record["fd"][0].update(fields)
+                result = self.evaluate([record])
+                self.assertFalse(result["accepted"])
+
+    def test_boundary_v2_does_not_require_renderer_draw(self):
+        record = telemetry()
+        fields = boundary_fields()
+        fields["bv"] = 2
+        del fields["rdw"]
+        record["fd"][0].update(fields)
+        result = self.evaluate([record])
+        self.assertEqual(result["boundary_schema"]["versions"], [2])
+        self.assertEqual(result["boundary_schema"]["detailed_frames"], 1)
+        self.assertTrue(result["accepted"])
 
     def test_classifies_submission_pressure_before_acquire(self):
         record = telemetry()
@@ -222,6 +291,89 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         self.assertEqual(result["classification_counts"]["submission_pressure"], 1)
         self.assertEqual(result["boundary_schema"]["long_frames"], 0)
         self.assertEqual(result["boundary_schema"]["acquire_frames_classified"], 1)
+
+    def test_stable_triple_buffer_occupancy_is_not_pressure(self):
+        record = telemetry()
+        fields = boundary_fields()
+        fields["qap"] = 2
+        fields["qoa"] = 2
+        record["fd"][0].update(fields)
+        result = self.evaluate([record])
+        self.assertEqual(result["classification_counts"]["submission_pressure"], 0)
+        self.assertEqual(result["classification_counts"]["drawable_acquisition"], 1)
+
+    def test_oldest_submission_age_three_is_pressure(self):
+        record = telemetry()
+        fields = boundary_fields()
+        fields["qap"] = 2
+        fields["qoa"] = 3
+        record["fd"][0].update(fields)
+        result = self.evaluate([record])
+        self.assertEqual(result["classification_counts"]["submission_pressure"], 1)
+
+    def test_classifies_intermediate_submit_maximum(self):
+        record = telemetry()
+        fields = boundary_fields()
+        fields["aq"] = 0.1
+        fields["ism"] = 1.5
+        record["fd"][0].update(fields)
+        result = self.evaluate([record])
+        self.assertEqual(result["classification_counts"]["finish_or_submit"], 1)
+        self.assertEqual(result["submission_calls"]["intermediate_submit_max"]["p50"], 1.5)
+
+    def test_reports_pressure_correlations_and_p95_host_frames(self):
+        record = telemetry()
+        deliveries = []
+        for index, host in enumerate((5, 6, 7, 20), start=1):
+            delivery = dict(record["fd"][0])
+            delivery.update(boundary_fields())
+            delivery["i"] = index
+            delivery["hc"] = host
+            delivery["qap"] = index
+            delivery["qoa"] = index
+            delivery["aq"] = float(index)
+            deliveries.append(delivery)
+        record["fd"] = deliveries
+        result = self.evaluate([record])
+        self.assertEqual(result["boundary_schema"]["p95_host_threshold_ms"], 20)
+        self.assertEqual(result["boundary_schema"]["p95_host_frames"], 1)
+        self.assertEqual(result["boundary_schema"]["p95_host_frames_classified"], 1)
+        self.assertGreater(result["pressure_correlations"]["after_poll"]["host"], 0)
+        self.assertEqual(result["pressure_correlations"]["oldest_age"]["acquire"], 1)
+
+    def test_distinguishes_renderer_unaccounted_from_over_accounting(self):
+        parent_larger = telemetry()
+        fields = boundary_fields()
+        fields["rc"] = 6.9
+        parent_larger["fd"][0].update(fields)
+        result = self.evaluate([parent_larger])
+        self.assertAlmostEqual(result["boundary_ms"]["renderer_unaccounted"]["p50"], 0.5)
+        self.assertEqual(result["boundary_ms"]["renderer_closure_error"]["p50"], 0)
+        children_larger = telemetry()
+        fields = boundary_fields()
+        fields["rc"] = 5.1
+        children_larger["fd"][0].update(fields)
+        result = self.evaluate([children_larger])
+        self.assertEqual(result["boundary_ms"]["renderer_unaccounted"]["p50"], 0)
+        self.assertAlmostEqual(result["boundary_ms"]["renderer_closure_error"]["p50"], 1.3)
+
+    def test_v3_renderer_closure_nests_intermediate_work_in_draw(self):
+        record = telemetry()
+        fields = boundary_fields()
+        fields.update({"rc": 6.4, "rdw": 0.1, "upl": 10, "en": 11, "sb": 12, "ium": 13, "ifm": 14, "ism": 15})
+        record["fd"][0].update(fields)
+        result = self.evaluate([record])
+        self.assertEqual(result["boundary_ms"]["renderer_closure_error"]["p50"], 0)
+        self.assertEqual(result["boundary_ms"]["renderer_unaccounted"]["p50"], 0)
+
+    def test_v2_renderer_closure_uses_aggregate_submission_work(self):
+        record = telemetry()
+        fields = boundary_fields()
+        fields.update({"bv": 2, "rc": 5.7, "rdw": 20, "upl": 0.5, "en": 0.2, "sb": 0.2})
+        record["fd"][0].update(fields)
+        result = self.evaluate([record])
+        self.assertEqual(result["boundary_ms"]["renderer_closure_error"]["p50"], 0)
+        self.assertEqual(result["boundary_ms"]["renderer_unaccounted"]["p50"], 0)
 
     def test_legacy_boundary_fields_remain_unavailable(self):
         result = self.evaluate([telemetry()])

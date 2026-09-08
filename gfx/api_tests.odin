@@ -166,6 +166,7 @@ frame_delivery_correlates_cpu_gpu_and_presentation :: proc(t: ^testing.T) {
 		{
 			frame_index = 7,
 			frame_cpu_seconds = 0.004,
+			draw_cpu_seconds = 0.0005,
 			pre_acquire_cpu_seconds = 0.001,
 			stream_acquire_cpu_seconds = 0.002,
 			submissions_before_poll = 3,
@@ -188,6 +189,7 @@ frame_delivery_correlates_cpu_gpu_and_presentation :: proc(t: ^testing.T) {
 	testing.expect_value(t, out[0].frame_index, u64(7))
 	testing.expect(t, abs(out[0].gpu_complete_seconds - 0.006) < 0.000001)
 	testing.expect_value(t, out[0].renderer_cpu_seconds, f64(0.004))
+	testing.expect_value(t, out[0].draw_cpu_seconds, f64(0.0005))
 	testing.expect_value(t, out[0].pre_acquire_cpu_seconds, f64(0.001))
 	testing.expect_value(t, out[0].stream_acquire_cpu_seconds, f64(0.002))
 	testing.expect_value(t, out[0].submissions_before_poll, u32(3))
@@ -210,6 +212,23 @@ frame_delivery_is_bounded_and_counts_overflow :: proc(t: ^testing.T) {
 	out: [FRAME_DELIVERY_MAX]Frame_Delivery_Timing
 	_, dropped := context_frame_delivery_drain(ctx, out[:])
 	testing.expect_value(t, dropped, u64(1))
+}
+
+@(test)
+gpu_3d_target_copy_records_intermediate_submission_accounting :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	_stats_gpu_3d_target_copy_submission(ctx, 0.003, 0.004)
+	when RENDER_STATS_ENABLED {
+		testing.expect_value(t, ctx.stats_current.intermediate_finish_count, u32(1))
+		testing.expect_value(t, ctx.stats_current.intermediate_submit_count, u32(1))
+		testing.expect_value(t, ctx.stats_current.intermediate_upload_count, u32(0))
+		testing.expect_value(t, ctx.stats_current.intermediate_finish_max_seconds, f64(0.003))
+		testing.expect_value(t, ctx.stats_current.intermediate_submit_max_seconds, f64(0.004))
+		testing.expect_value(t, ctx.stats_current.encode_cpu_seconds, f64(0.003))
+		testing.expect_value(t, ctx.stats_current.submit_cpu_seconds, f64(0.004))
+		testing.expect_value(t, ctx.stats_current.queue_submissions, u32(1))
+	}
 }
 
 @(test)
@@ -262,6 +281,17 @@ frame_delivery_emits_cpu_gpu_without_presentation_support :: proc(t: ^testing.T)
 	testing.expect_value(t, count, 1)
 	testing.expect(t, out[0].gpu_complete_valid)
 	testing.expect(t, !out[0].presented_valid)
+}
+
+@(test)
+frame_delivery_abandon_releases_unsubmitted_slot :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 1
+	_frame_delivery_begin(ctx, 1)
+	testing.expect(t, _frame_delivery_slot(ctx, 1) != nil)
+	_frame_delivery_abandon(ctx, 1)
+	testing.expect(t, _frame_delivery_slot(ctx, 1) == nil)
 }
 
 @(test)

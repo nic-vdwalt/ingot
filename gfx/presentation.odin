@@ -21,6 +21,7 @@ Frame_Delivery_Timing :: struct {
 	missing_present_callback:        bool,
 	frame_index:                     u64,
 	renderer_cpu_seconds:            f64,
+	draw_cpu_seconds:                f64,
 	pre_acquire_cpu_seconds:         f64,
 	stream_acquire_cpu_seconds:      f64,
 	acquire_cpu_seconds:             f64,
@@ -213,6 +214,16 @@ _frame_delivery_begin :: proc(ctx: ^Context, frame_index: u64) {
 }
 
 @(private)
+_frame_delivery_abandon :: proc(ctx: ^Context, frame_index: u64) {
+	if ctx == nil || frame_index == 0 do return
+	sync.mutex_lock(&ctx.delivery.mutex)
+	defer sync.mutex_unlock(&ctx.delivery.mutex)
+	slot := _frame_delivery_slot(ctx, frame_index)
+	if slot == nil || slot.epoch != ctx.epoch do return
+	slot^ = {}
+}
+
+@(private)
 _frame_delivery_submitted :: proc(ctx: ^Context, frame_index: u64, timestamp: f64) {
 	if ctx == nil || frame_index == 0 || timestamp <= 0 do return
 	sync.mutex_lock(&ctx.delivery.mutex)
@@ -230,6 +241,7 @@ _frame_delivery_cpu :: proc(ctx: ^Context, stats: Renderer_Stats) {
 	slot := _frame_delivery_slot(ctx, stats.frame_index)
 	if slot == nil || slot.epoch != ctx.epoch do return
 	slot.timing.renderer_cpu_seconds = stats.frame_cpu_seconds
+	slot.timing.draw_cpu_seconds = stats.draw_cpu_seconds
 	slot.timing.pre_acquire_cpu_seconds = stats.pre_acquire_cpu_seconds
 	slot.timing.stream_acquire_cpu_seconds = stats.stream_acquire_cpu_seconds
 	slot.timing.acquire_cpu_seconds = stats.acquire_cpu_seconds
