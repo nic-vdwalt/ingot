@@ -2144,17 +2144,21 @@ _gpu_3d_draw_indexed :: proc(
 	wg.RenderPassEncoderSetIndexBuffer(pass.pass, entry.index_buffer, .Uint32, 0, index_bytes)
 	wg.RenderPassEncoderDrawIndexed(pass.pass, entry.index_count, instance_count, 0, 0, 0)
 	when GPU_TIMING_DIAGNOSTICS {
-		_gpu_timing_diagnostic_draw(&pass.owner.gpu_timing.diagnostics[0], pass.pass, {
-			path = .Gpu_3D,
-			known = true,
-			indexed = true,
-			count = entry.index_count,
-			instances = instance_count,
-			shader_id = shader_id,
-			pipeline_kind = u32(entry.primitive),
-			pipeline_style = u32(material.style),
-			scissor = {0, 0, u32(target_slot.entry.width), u32(target_slot.entry.height)},
-		})
+		_gpu_timing_diagnostic_draw(
+			&pass.owner.gpu_timing.diagnostics[0],
+			pass.pass,
+			{
+				path = .Gpu_3D,
+				known = true,
+				indexed = true,
+				count = entry.index_count,
+				instances = instance_count,
+				shader_id = shader_id,
+				pipeline_kind = u32(entry.primitive),
+				pipeline_style = u32(material.style),
+				scissor = {0, 0, u32(target_slot.entry.width), u32(target_slot.entry.height)},
+			},
+		)
 	}
 	_stats_gpu3d_draw(
 		pass.owner,

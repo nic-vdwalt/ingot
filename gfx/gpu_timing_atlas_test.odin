@@ -84,7 +84,10 @@ gpu_timing_atlas_failure_keeps_submitted_inputs :: proc(t: ^testing.T) {
 			atlas.bind = cast(type_of(atlas.bind))uintptr(3)
 			atlas.diagnostic_id[0] = 1
 			atlas.filter = .POINT
-			ctx.resources.atlases.slots[0] = {occupied = true, entry = &atlas}
+			ctx.resources.atlases.slots[0] = {
+				occupied = true,
+				entry    = &atlas,
+			}
 			ctx.rend.cur_bind = atlas.bind
 			state.atlas.atlas_count = 1
 			pixels := [1]u8{127}

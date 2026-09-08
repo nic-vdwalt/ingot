@@ -4,6 +4,36 @@ package gfx
 import "core:testing"
 import wg "vendor:wgpu"
 
+when GPU_TIMING_DIAGNOSTICS {
+	gpu_timing_pipeline_test_record :: proc(
+		renderer: ^Renderer,
+		slot: Blend_Slot,
+		fragment: string,
+		format: wg.TextureFormat,
+		vertex: wg.VertexBufferLayout,
+		primitive: wg.PrimitiveState,
+		multisample: wg.MultisampleState,
+	) {
+		blend := _blend_for(renderer, slot)
+		target := wg.ColorTargetState {
+			format    = format,
+			writeMask = wg.ColorWriteMaskFlags_All,
+		}
+		if _format_blendable(format) do target.blend = &blend
+		_gpu_timing_batch_pipeline(
+			renderer,
+			slot,
+			fragment,
+			format,
+			vertex,
+			primitive,
+			multisample,
+			blend,
+			target,
+		)
+	}
+}
+
 @(test)
 gpu_timing_pipeline_retains_swapchain_descriptor :: proc(t: ^testing.T) {
 	// The swapchain format is named outside the diagnostics block so the
@@ -29,32 +59,16 @@ gpu_timing_pipeline_retains_swapchain_descriptor :: proc(t: ^testing.T) {
 			attributeCount = 4,
 			attributes     = raw_data(attrs[:]),
 		}
-		primitive := wg.PrimitiveState{topology = .TriangleList, frontFace = .CCW, cullMode = .None}
-		multisample := wg.MultisampleState{count = 1, mask = ~u32(0)}
-		record :: proc(
-			renderer: ^Renderer,
-			slot: Blend_Slot,
-			fragment: string,
-			format: wg.TextureFormat,
-			vertex: wg.VertexBufferLayout,
-			primitive: wg.PrimitiveState,
-			multisample: wg.MultisampleState,
-		) {
-			blend := _blend_for(renderer, slot)
-			target := wg.ColorTargetState{format = format, writeMask = wg.ColorWriteMaskFlags_All}
-			if _format_blendable(format) do target.blend = &blend
-			_gpu_timing_batch_pipeline(
-				renderer,
-				slot,
-				fragment,
-				format,
-				vertex,
-				primitive,
-				multisample,
-				blend,
-				target,
-			)
+		primitive := wg.PrimitiveState {
+			topology  = .TriangleList,
+			frontFace = .CCW,
+			cullMode  = .None,
 		}
+		multisample := wg.MultisampleState {
+			count = 1,
+			mask  = ~u32(0),
+		}
+		record := gpu_timing_pipeline_test_record
 		for slot in Blend_Slot {
 			record(renderer, slot, "fs_ui", swapchain_format, vertex, primitive, multisample)
 			record(renderer, slot, "fs_image", swapchain_format, vertex, primitive, multisample)

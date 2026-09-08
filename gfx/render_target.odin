@@ -191,7 +191,12 @@ context_ensure_rt_pass :: proc(ctx: ^Context) {
 				load_op,
 				.Store,
 			)
-			_gpu_timing_diagnostic_attachment(ctx, writes.beginningOfPassWriteIndex, ctx.frame.rt, 0)
+			_gpu_timing_diagnostic_attachment(
+				ctx,
+				writes.beginningOfPassWriteIndex,
+				ctx.frame.rt,
+				0,
+			)
 		}
 	}
 	_stats_render_pass(ctx)

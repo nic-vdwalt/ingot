@@ -142,6 +142,8 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_wasm_bloat_test.py"
 
 # odinfmt has no list/check flag (only -w/-stdin), so compare each file
 # against its formatted output. Formatting is part of the strict gate.
+# Frozen investigation source trees under artifacts/ are retained evidence
+# and must never be reformatted, so they are excluded like the style scan.
 if ! command -v odinfmt >/dev/null 2>&1; then
 	echo "odinfmt not found on PATH. Install the version bundled with the pinned Odin toolchain." >&2
 	exit 1
@@ -154,7 +156,7 @@ while IFS= read -r f; do
 		echo "needs formatting: $f" >&2
 		unformatted=1
 	fi
-done < <(cd "$root" && git ls-files '*.odin')
+done < <(cd "$root" && git ls-files '*.odin' ':!artifacts/')
 if [[ $unformatted -ne 0 ]]; then
 	echo "Some files are not formatted. Run: odinfmt -w $root" >&2
 	exit 1

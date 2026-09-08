@@ -764,6 +764,22 @@
           "sha256": "60e8192cfc4dc0eee8aee7ed014e42356fb265f97957620cdd8e603ca76d87f2"
         },
         {
+          "path": "artifacts/timing-completion-gated-v1/game-candidate/ocean-run13/candidate-ocean-run13.tel.timing.json",
+          "sha256": "bfac04fe9a5fdb0feaa1a25e84a105a891ad885797cffaf8b8a374a44e853863"
+        },
+        {
+          "path": "artifacts/timing-completion-gated-v1/game-candidate/ocean-run13/recording/aesir-profile-1788810192-78244-70874697253583.jsonl",
+          "sha256": "975d233cd4474843fb688e500d5c5ea1ad4150d2acb5c45f16b43bb8c5ee3199"
+        },
+        {
+          "path": "artifacts/timing-completion-gated-v1/game-candidate/ocean-run15/candidate-ocean-run15.tel.timing.json",
+          "sha256": "a80dad381b36d1328cb3b5118f05526e2ffcc77c7bf5cbed0575e06f32d2848f"
+        },
+        {
+          "path": "artifacts/timing-completion-gated-v1/game-candidate/ocean-run15/recording/aesir-profile-1788810423-78782-71105317150125.jsonl",
+          "sha256": "ae556df04e5f3b1f3b68052cdf9f7eb4dea1e9d556d03d232732f8d947fd8ecf"
+        },
+        {
           "path": "artifacts/timing-completion-gated-v1/game-candidate/ocean-run2/candidate-ocean-run2.tel.timing.json",
           "sha256": "3159fd055cc09bccde3e0fbca6a30b29820e7f56b5abac321906d40014c560ec"
         },

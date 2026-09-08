@@ -275,8 +275,15 @@ _make_pipe :: proc(
 		writeMask = wg.ColorWriteMaskFlags_All,
 	}
 	if _format_blendable(format) do target.blend = &blend
-	primitive := wg.PrimitiveState{topology = .TriangleList, frontFace = .CCW, cullMode = .None}
-	multisample := wg.MultisampleState{count = 1, mask = ~u32(0)}
+	primitive := wg.PrimitiveState {
+		topology  = .TriangleList,
+		frontFace = .CCW,
+		cullMode  = .None,
+	}
+	multisample := wg.MultisampleState {
+		count = 1,
+		mask  = ~u32(0),
+	}
 	when GPU_TIMING_DIAGNOSTICS {
 		_gpu_timing_batch_pipeline(r, slot, fs, format, vbl, primitive, multisample, blend, target)
 	}
