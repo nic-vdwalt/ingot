@@ -295,6 +295,23 @@ frame_delivery_abandon_releases_unsubmitted_slot :: proc(t: ^testing.T) {
 }
 
 @(test)
+frame_delivery_quiesce_requires_terminal_callbacks :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 1
+	ctx.delivery.supported = true
+	_frame_delivery_begin(ctx, 1)
+	_frame_delivery_submitted(ctx, 1, 10)
+	_frame_delivery_cpu(ctx, {frame_index = 1, frame_cpu_seconds = 0.001})
+	testing.expect_value(t, _frame_delivery_pending_count(ctx), u32(1))
+	_frame_delivery_gpu_complete(ctx, 1, 11, true)
+	testing.expect_value(t, _frame_delivery_pending_count(ctx), u32(1))
+	_frame_delivery_presented(ctx, 1, 12)
+	testing.expect_value(t, _frame_delivery_pending_count(ctx), u32(0))
+	testing.expect(t, context_frame_delivery_quiesce(ctx))
+}
+
+@(test)
 frame_delivery_retires_stale_missing_callback :: proc(t: ^testing.T) {
 	ctx := new(Context)
 	defer free(ctx)
