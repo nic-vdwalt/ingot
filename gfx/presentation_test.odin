@@ -59,12 +59,12 @@ presentation_host_detail_closes_to_total :: proc(t: ^testing.T) {
 	context_frame_delivery_record_host_detail(
 		ctx,
 		{
-			total_seconds   = 0.010,
-			reload_seconds  = 0.001,
+			total_seconds = 0.010,
+			reload_seconds = 0.001,
 			refresh_seconds = 0.001,
-			draw_seconds    = 0.004,
+			draw_seconds = 0.004,
 			prepare_seconds = 0.002,
-			cursor_seconds  = 0.001,
+			cursor_seconds = 0.001,
 		},
 		0.003,
 	)

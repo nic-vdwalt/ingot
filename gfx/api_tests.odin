@@ -164,15 +164,19 @@ frame_delivery_correlates_cpu_gpu_and_presentation :: proc(t: ^testing.T) {
 	_frame_delivery_cpu(
 		ctx,
 		{
-			frame_index                   = 7,
-			frame_cpu_seconds             = 0.004,
-			pre_acquire_cpu_seconds       = 0.001,
-			stream_acquire_cpu_seconds    = 0.002,
-			submissions_before_poll       = 3,
-			submissions_after_poll        = 2,
-			submissions_at_submit         = 3,
-			submissions_high_water        = 3,
-			oldest_submission_frame_age  = 2,
+			frame_index = 7,
+			frame_cpu_seconds = 0.004,
+			pre_acquire_cpu_seconds = 0.001,
+			stream_acquire_cpu_seconds = 0.002,
+			submissions_before_poll = 3,
+			submissions_after_poll = 2,
+			submissions_at_submit = 3,
+			submissions_high_water = 3,
+			oldest_submission_frame_age = 2,
+			intermediate_finish_count = 2,
+			intermediate_finish_max_seconds = 0.003,
+			final_submit_count = 1,
+			final_submit_max_seconds = 0.004,
 		},
 	)
 	_frame_delivery_gpu_complete(ctx, 7, 10.006, true)
@@ -189,6 +193,10 @@ frame_delivery_correlates_cpu_gpu_and_presentation :: proc(t: ^testing.T) {
 	testing.expect_value(t, out[0].submissions_before_poll, u32(3))
 	testing.expect_value(t, out[0].submissions_after_poll, u32(2))
 	testing.expect_value(t, out[0].oldest_submission_frame_age, u64(2))
+	testing.expect_value(t, out[0].intermediate_finish_count, u32(2))
+	testing.expect_value(t, out[0].intermediate_finish_max_seconds, f64(0.003))
+	testing.expect_value(t, out[0].final_submit_count, u32(1))
+	testing.expect_value(t, out[0].final_submit_max_seconds, f64(0.004))
 	testing.expect(t, out[0].presented_valid)
 }
 

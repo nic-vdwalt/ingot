@@ -1022,6 +1022,16 @@ context_end_drawing :: proc(ctx: ^Context) {
 			ctx.frame.encoder,
 			retirement != 0,
 		)
+		_stats_submission_call(
+			ctx,
+			.Final,
+			upload_elapsed,
+			encode_elapsed,
+			submit_elapsed,
+			retirement != 0,
+			cmd != nil,
+			retirement != 0 && cmd != nil,
+		)
 		if retirement != 0 && cmd != nil {
 			_gpu_timing_frame_submitted(ctx)
 			_stats_queue_submission(ctx)

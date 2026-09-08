@@ -217,11 +217,23 @@ context_end_texture_mode :: proc(ctx: ^Context) {
 		wg.RenderPassEncoderEnd(ctx.frame.rt_pass)
 		wg.RenderPassEncoderRelease(ctx.frame.rt_pass)
 		_gpu_timing_encoder_end(ctx, ctx.frame.rt_encoder, ctx.frame.rt_timing)
+		upload_started := platform_now()
 		assert(_stream_slot_upload(ctx, &ctx.rend))
+		upload_elapsed := platform_now() - upload_started
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
 			ctx,
 			ctx.frame.rt_encoder,
 			true,
+		)
+		_stats_submission_call(
+			ctx,
+			.Intermediate,
+			upload_elapsed,
+			encode_elapsed,
+			submit_elapsed,
+			true,
+			cmd != nil,
+			cmd != nil,
 		)
 		_stats_context_cpu_times(ctx, 0, 0, encode_elapsed, submit_elapsed, 0)
 		_stats_queue_submission(ctx)

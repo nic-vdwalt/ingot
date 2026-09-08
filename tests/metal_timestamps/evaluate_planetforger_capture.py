@@ -7,6 +7,57 @@ from pathlib import Path
 
 REQUIRED_GROUPS = ("window", "world.opaque", "world.scene-copy", "world.ocean")
 HEALTH_FIELDS = ("o", "s", "q", "m", "sf", "rf", "g", "t", "sc", "cr")
+BOUNDARY_CPU_FIELDS = {
+    "pre_acquire": "pre",
+    "stream_acquire": "sta",
+    "post_acquire": "post",
+    "flush": "flu",
+    "stream_upload": "upl",
+    "cleanup": "cln",
+    "input": "inp",
+    "frame_timing": "fti",
+    "host_reload": "hrl",
+    "host_refresh": "hrf",
+    "host_draw": "hdr",
+    "host_prepare": "hpr",
+    "host_cursor": "hcu",
+    "host_unaccounted": "hun",
+}
+PRESSURE_FIELDS = {
+    "submissions_before_poll": "qbp",
+    "submissions_after_poll": "qap",
+    "submissions_at_submit": "qas",
+    "submissions_high_water": "qhw",
+    "oldest_submission_frame_age": "qoa",
+    "intermediate_upload_count": "iuc",
+    "intermediate_finish_count": "ifc",
+    "intermediate_submit_count": "isc",
+    "final_upload_count": "fuc",
+    "final_finish_count": "ffc",
+    "final_submit_count": "fsc",
+    "intermediate_upload_max": "ium",
+    "intermediate_finish_max": "ifm",
+    "intermediate_submit_max": "ism",
+    "final_upload_max": "fum",
+    "final_finish_max": "ffm",
+    "final_submit_max": "fsm",
+}
+
+
+def classify_boundary_frame(delivery, renderer_unaccounted):
+    if delivery["hun"] > 0.25:
+        return "unaccounted"
+    if delivery["qap"] >= 3 or delivery["qoa"] >= 2:
+        return "submission_pressure"
+    if delivery["aq"] > 1:
+        return "drawable_acquisition"
+    if max(delivery["en"], delivery["sb"], delivery["ifm"], delivery["ism"], delivery["ffm"], delivery["fsm"]) > 1:
+        return "finish_or_submit"
+    if delivery["ps"] > 1 or delivery["fti"] > 1:
+        return "presentation_pacing"
+    if renderer_unaccounted >= max(delivery["hc"] - delivery["rc"], 0):
+        return "renderer_work"
+    return "host_work"
 
 
 def sha256(path):
@@ -73,6 +124,16 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         name: []
         for name in ("host", "renderer", "acquire", "encode", "submit", "present_call", "pacer_wait")
     }
+    boundary_metrics = {name: [] for name in (*BOUNDARY_CPU_FIELDS, *PRESSURE_FIELDS)}
+    boundary_metrics.update({
+        "host_closure_error": [],
+        "renderer_closure_error": [],
+        "renderer_unaccounted": [],
+    })
+    classifications = []
+    boundary_versions = set()
+    incomplete_boundary_frames = 0
+    unknown_boundary_frames = 0
     displayed_ms = []
     presented = {}
     queue_completion_ms = []
@@ -142,6 +203,43 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                     invalid_cpu_durations += 1
                     continue
                 cpu_metrics[name].append(value)
+            boundary_version = delivery.get("bv", 0)
+            boundary_versions.add(boundary_version)
+            if boundary_version == 2:
+                required = {
+                    "hc", "rc", "aq", "en", "sb", "ps",
+                    *BOUNDARY_CPU_FIELDS.values(), *PRESSURE_FIELDS.values(),
+                }
+                if not required.issubset(delivery):
+                    incomplete_boundary_frames += 1
+                else:
+                    valid_detail = True
+                    for name, field in {**BOUNDARY_CPU_FIELDS, **PRESSURE_FIELDS}.items():
+                        value = delivery[field]
+                        if not isinstance(value, (int, float)) or value < 0:
+                            invalid_cpu_durations += 1
+                            valid_detail = False
+                        else:
+                            boundary_metrics[name].append(value)
+                    if valid_detail:
+                        host_children = sum(delivery[field] for field in ("hrl", "hrf", "hdr", "hpr", "hcu", "hun"))
+                        renderer_children = sum(delivery[field] for field in (
+                            "pre", "sta", "aq", "post", "flu", "upl", "en", "sb", "ps", "cln", "inp", "fti",
+                        ))
+                        renderer_unaccounted = max(delivery["rc"] - renderer_children, 0)
+                        boundary_metrics["host_closure_error"].append(abs(delivery["hc"] - host_children))
+                        boundary_metrics["renderer_closure_error"].append(max(renderer_children - delivery["rc"], 0))
+                        boundary_metrics["renderer_unaccounted"].append(renderer_unaccounted)
+                        classification = classify_boundary_frame(delivery, renderer_unaccounted)
+                        classifications.append({
+                            "epoch": delivery_identity[0],
+                            "frame": delivery_identity[1],
+                            "host_ms": delivery["hc"],
+                            "acquire_ms": delivery["aq"],
+                            "classification": classification,
+                        })
+            elif boundary_version != 0:
+                unknown_boundary_frames += 1
             submit_timestamp = delivery.get("st", 0)
             gpu_timestamp = delivery.get("gt", 0)
             present_timestamp = delivery.get("pt", 0)
@@ -189,6 +287,8 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "invalid_cpu_durations": invalid_cpu_durations,
         "reversed_gpu_timestamps": reversed_gpu_timestamps,
         "reversed_present_timestamps": reversed_present_timestamps,
+        "incomplete_boundary_frames": incomplete_boundary_frames,
+        "unknown_boundary_frames": unknown_boundary_frames,
     }
     healthy = all(value == 0 for value in failures.values())
     complete_groups = all(group_counts[name] > 0 for name in REQUIRED_GROUPS)
@@ -231,6 +331,10 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     exact_joined = raw_identities & delivery_identities
     exact_gpu_ms = [raw_frames[identity].get("ms") for identity in exact_joined]
     exact_gpu_ms = [value for value in exact_gpu_ms if isinstance(value, (int, float)) and value >= 0]
+    long_frames = [item for item in classifications if item["host_ms"] > 9.167]
+    acquire_frames = [item for item in classifications if item["acquire_ms"] > 1]
+    detailed_cpu_frames = boundary_metrics["host_closure_error"]
+    classification_coverage = len(classifications) / delivery_frames if delivery_frames else 0
     return {
         "telemetry": str(telemetry_path),
         "telemetry_sha256": sha256(telemetry_path),
@@ -262,6 +366,24 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "queue_completion_ms": distribution(queue_completion_ms),
         "exact_gpu_ms": distribution(exact_gpu_ms),
         "gpu_groups_ms": {name: distribution(values) for name, values in sorted(gpu_groups.items())},
+        "boundary_schema": {
+            "versions": sorted(boundary_versions),
+            "detailed_frames": len(detailed_cpu_frames),
+            "classification_coverage": classification_coverage,
+            "long_frames": len(long_frames),
+            "long_frames_classified": len(long_frames),
+            "acquire_frames": len(acquire_frames),
+            "acquire_frames_classified": len(acquire_frames),
+        },
+        "boundary_ms": {name: distribution(values) for name, values in boundary_metrics.items()},
+        "classifications": classifications,
+        "classification_counts": {
+            name: sum(item["classification"] == name for item in classifications)
+            for name in (
+                "host_work", "renderer_work", "submission_pressure", "drawable_acquisition",
+                "finish_or_submit", "presentation_pacing", "unaccounted",
+            )
+        },
         "deadline_samples": deadline_samples,
         "deadline_misses": deadline_misses,
         "healthy": healthy,

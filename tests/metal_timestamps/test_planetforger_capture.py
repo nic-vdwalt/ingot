@@ -18,6 +18,49 @@ IDENTITY = {
 }
 
 
+def boundary_fields():
+    return {
+        "bv": 2,
+        "rc": 5.8,
+        "hc": 7.1,
+        "aq": 1.5,
+        "en": 0.2,
+        "sb": 0.2,
+        "ps": 0.2,
+        "pre": 0.1,
+        "sta": 0.2,
+        "post": 0.3,
+        "flu": 0.4,
+        "upl": 0.5,
+        "cln": 0.6,
+        "inp": 0.7,
+        "fti": 0.8,
+        "hrl": 0.5,
+        "hrf": 0.5,
+        "hdr": 5,
+        "hpr": 0.5,
+        "hcu": 0.5,
+        "hun": 0.1,
+        "qbp": 1,
+        "qap": 1,
+        "qas": 2,
+        "qhw": 2,
+        "qoa": 1,
+        "iuc": 1,
+        "ifc": 1,
+        "isc": 1,
+        "fuc": 1,
+        "ffc": 1,
+        "fsc": 1,
+        "ium": 0.1,
+        "ifm": 0.2,
+        "ism": 0.3,
+        "fum": 0.4,
+        "ffm": 0.5,
+        "fsm": 0.6,
+    }
+
+
 def telemetry(groups=None, health=None, missing=False):
     groups = groups or ["window", "world.opaque", "world.scene-copy", "world.ocean"]
     return {
@@ -145,6 +188,46 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         result = self.evaluate([record])
         self.assertEqual(result["failures"]["invalid_cpu_durations"], 1)
         self.assertFalse(result["accepted"])
+
+    def test_reports_complete_boundary_accounting(self):
+        record = telemetry()
+        record["fd"][0].update(boundary_fields())
+        result = self.evaluate([record])
+        self.assertEqual(result["boundary_schema"]["versions"], [2])
+        self.assertEqual(result["boundary_schema"]["detailed_frames"], 1)
+        self.assertEqual(result["boundary_ms"]["host_closure_error"]["p50"], 0)
+        self.assertAlmostEqual(result["boundary_ms"]["renderer_unaccounted"]["p50"], 0.1)
+        self.assertEqual(result["classification_counts"]["drawable_acquisition"], 1)
+
+    def test_rejects_incomplete_or_unknown_boundary_schema(self):
+        incomplete = telemetry()
+        incomplete["fd"][0].update(boundary_fields())
+        del incomplete["fd"][0]["pre"]
+        result = self.evaluate([incomplete])
+        self.assertEqual(result["failures"]["incomplete_boundary_frames"], 1)
+        self.assertFalse(result["accepted"])
+        unknown = telemetry()
+        unknown["fd"][0]["bv"] = 3
+        result = self.evaluate([unknown])
+        self.assertEqual(result["failures"]["unknown_boundary_frames"], 1)
+        self.assertFalse(result["accepted"])
+
+    def test_classifies_submission_pressure_before_acquire(self):
+        record = telemetry()
+        fields = boundary_fields()
+        fields["qap"] = 3
+        fields["qoa"] = 2
+        record["fd"][0].update(fields)
+        result = self.evaluate([record])
+        self.assertEqual(result["classification_counts"]["submission_pressure"], 1)
+        self.assertEqual(result["boundary_schema"]["long_frames"], 0)
+        self.assertEqual(result["boundary_schema"]["acquire_frames_classified"], 1)
+
+    def test_legacy_boundary_fields_remain_unavailable(self):
+        result = self.evaluate([telemetry()])
+        self.assertEqual(result["boundary_schema"]["versions"], [0])
+        self.assertEqual(result["boundary_ms"]["host_closure_error"]["count"], 0)
+        self.assertTrue(result["accepted"])
 
     def test_rejects_reversed_async_timestamps(self):
         record = telemetry()

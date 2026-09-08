@@ -4,6 +4,11 @@ import wg "vendor:wgpu"
 
 RENDER_STATS_ENABLED :: #config(INGOT_RENDER_STATS, false)
 
+Submission_Class :: enum u8 {
+	Intermediate,
+	Final,
+}
+
 // Flush_Cause tags why a batch flush (== one draw call) happened, so hosts
 // can see which state changes fragment their batches.
 Flush_Cause :: enum u8 {
@@ -19,59 +24,71 @@ Flush_Cause :: enum u8 {
 }
 
 Renderer_Stats :: struct {
-	frame_index:                   u64,
-	flush_count:                   u32,
-	vertices_uploaded:             u64,
-	indices_uploaded:              u64,
-	bytes_uploaded:                u64,
-	buffer_creations:              u32,
-	buffer_growths:                u32,
-	pipeline_switches:             u32,
-	bind_group_switches:           u32,
-	gpu3d_scene_bind_creations:    u32,
-	render_passes:                 u32,
-	queue_submissions:             u32,
-	frame_cpu_seconds:             f64,
-	pre_acquire_cpu_seconds:       f64,
-	stream_acquire_cpu_seconds:    f64,
-	acquire_cpu_seconds:           f64,
-	post_acquire_cpu_seconds:      f64,
-	flush_cpu_seconds:             f64,
-	stream_upload_cpu_seconds:     f64,
-	encode_cpu_seconds:            f64,
-	submit_cpu_seconds:            f64,
-	present_cpu_seconds:           f64,
-	cleanup_cpu_seconds:           f64,
-	input_cpu_seconds:             f64,
-	frame_timing_cpu_seconds:      f64,
-	submissions_before_poll:       u32,
-	submissions_after_poll:        u32,
-	submissions_at_submit:         u32,
-	submissions_high_water:        u32,
-	oldest_submission_frame_age:  u64,
-	peak_geometry_arena_bytes:     u64,
-	peak_uniform_arena_bytes:      u64,
-	stream_geometry_write_calls:   u32,
-	stream_uniform_write_calls:    u32,
-	stream_geometry_write_bytes:   u64,
-	stream_uniform_write_bytes:    u64,
-	stream_copy_cpu_seconds:       f64,
-	stream_write_cpu_seconds:      f64,
-	geometry_reservation_failures: u32,
-	uniform_reservation_failures:  u32,
-	stream_slot_exhaustions:       u32,
-	submission_tracking_failures:  u32,
-	stream_retirement_failures:    u32,
-	gpu3d_pool_exhaustions:        u32,
-	gpu3d_mesh_uploads:            u32,
-	gpu3d_mesh_upload_bytes:       u64,
-	gpu3d_draws:                   u32,
-	gpu3d_instanced_draws:         u32,
-	gpu3d_vertices_resident:       u64,
-	gpu3d_vertices_drawn:          u64,
-	gpu3d_indices_drawn:           u64,
-	composite_alpha_mode:          wg.CompositeAlphaMode,
-	flush_causes:                  [Flush_Cause]u32,
+	frame_index:                     u64,
+	flush_count:                     u32,
+	vertices_uploaded:               u64,
+	indices_uploaded:                u64,
+	bytes_uploaded:                  u64,
+	buffer_creations:                u32,
+	buffer_growths:                  u32,
+	pipeline_switches:               u32,
+	bind_group_switches:             u32,
+	gpu3d_scene_bind_creations:      u32,
+	render_passes:                   u32,
+	queue_submissions:               u32,
+	frame_cpu_seconds:               f64,
+	pre_acquire_cpu_seconds:         f64,
+	stream_acquire_cpu_seconds:      f64,
+	acquire_cpu_seconds:             f64,
+	post_acquire_cpu_seconds:        f64,
+	flush_cpu_seconds:               f64,
+	stream_upload_cpu_seconds:       f64,
+	encode_cpu_seconds:              f64,
+	submit_cpu_seconds:              f64,
+	present_cpu_seconds:             f64,
+	cleanup_cpu_seconds:             f64,
+	input_cpu_seconds:               f64,
+	frame_timing_cpu_seconds:        f64,
+	submissions_before_poll:         u32,
+	submissions_after_poll:          u32,
+	submissions_at_submit:           u32,
+	submissions_high_water:          u32,
+	oldest_submission_frame_age:     u64,
+	intermediate_upload_count:       u32,
+	intermediate_finish_count:       u32,
+	intermediate_submit_count:       u32,
+	final_upload_count:              u32,
+	final_finish_count:              u32,
+	final_submit_count:              u32,
+	intermediate_upload_max_seconds: f64,
+	intermediate_finish_max_seconds: f64,
+	intermediate_submit_max_seconds: f64,
+	final_upload_max_seconds:        f64,
+	final_finish_max_seconds:        f64,
+	final_submit_max_seconds:        f64,
+	peak_geometry_arena_bytes:       u64,
+	peak_uniform_arena_bytes:        u64,
+	stream_geometry_write_calls:     u32,
+	stream_uniform_write_calls:      u32,
+	stream_geometry_write_bytes:     u64,
+	stream_uniform_write_bytes:      u64,
+	stream_copy_cpu_seconds:         f64,
+	stream_write_cpu_seconds:        f64,
+	geometry_reservation_failures:   u32,
+	uniform_reservation_failures:    u32,
+	stream_slot_exhaustions:         u32,
+	submission_tracking_failures:    u32,
+	stream_retirement_failures:      u32,
+	gpu3d_pool_exhaustions:          u32,
+	gpu3d_mesh_uploads:              u32,
+	gpu3d_mesh_upload_bytes:         u64,
+	gpu3d_draws:                     u32,
+	gpu3d_instanced_draws:           u32,
+	gpu3d_vertices_resident:         u64,
+	gpu3d_vertices_drawn:            u64,
+	gpu3d_indices_drawn:             u64,
+	composite_alpha_mode:            wg.CompositeAlphaMode,
+	flush_causes:                    [Flush_Cause]u32,
 }
 
 renderer_stats :: proc() -> Renderer_Stats {
@@ -356,9 +373,18 @@ _stats_submission_pressure :: proc(ctx: ^Context, before, after, at_submit: u32,
 		assert(ctx != nil, "_stats_submission_pressure: nil context")
 		assert(before <= MAX_IN_FLIGHT_SUBMISSIONS && after <= MAX_IN_FLIGHT_SUBMISSIONS)
 		assert(at_submit <= MAX_IN_FLIGHT_SUBMISSIONS)
-		ctx.stats_current.submissions_before_poll = max(ctx.stats_current.submissions_before_poll, before)
-		ctx.stats_current.submissions_after_poll = max(ctx.stats_current.submissions_after_poll, after)
-		ctx.stats_current.submissions_at_submit = max(ctx.stats_current.submissions_at_submit, at_submit)
+		ctx.stats_current.submissions_before_poll = max(
+			ctx.stats_current.submissions_before_poll,
+			before,
+		)
+		ctx.stats_current.submissions_after_poll = max(
+			ctx.stats_current.submissions_after_poll,
+			after,
+		)
+		ctx.stats_current.submissions_at_submit = max(
+			ctx.stats_current.submissions_at_submit,
+			at_submit,
+		)
 		ctx.stats_current.submissions_high_water = max(
 			ctx.stats_current.submissions_high_water,
 			max(before, max(after, at_submit)),
@@ -367,6 +393,65 @@ _stats_submission_pressure :: proc(ctx: ^Context, before, after, at_submit: u32,
 			ctx.stats_current.oldest_submission_frame_age,
 			oldest_age,
 		)
+	}
+}
+
+@(private)
+_stats_submission_call :: proc(
+	ctx: ^Context,
+	class: Submission_Class,
+	upload, finish, submit: f64,
+	uploaded, finished, submitted: bool,
+) {
+	when RENDER_STATS_ENABLED {
+		assert(ctx != nil, "_stats_submission_call: nil context")
+		assert(upload >= 0 && finish >= 0 && submit >= 0)
+		switch class {
+		case .Intermediate:
+			if uploaded {
+				ctx.stats_current.intermediate_upload_count += 1
+				ctx.stats_current.intermediate_upload_max_seconds = max(
+					ctx.stats_current.intermediate_upload_max_seconds,
+					upload,
+				)
+			}
+			if finished {
+				ctx.stats_current.intermediate_finish_count += 1
+				ctx.stats_current.intermediate_finish_max_seconds = max(
+					ctx.stats_current.intermediate_finish_max_seconds,
+					finish,
+				)
+			}
+			if submitted {
+				ctx.stats_current.intermediate_submit_count += 1
+				ctx.stats_current.intermediate_submit_max_seconds = max(
+					ctx.stats_current.intermediate_submit_max_seconds,
+					submit,
+				)
+			}
+		case .Final:
+			if uploaded {
+				ctx.stats_current.final_upload_count += 1
+				ctx.stats_current.final_upload_max_seconds = max(
+					ctx.stats_current.final_upload_max_seconds,
+					upload,
+				)
+			}
+			if finished {
+				ctx.stats_current.final_finish_count += 1
+				ctx.stats_current.final_finish_max_seconds = max(
+					ctx.stats_current.final_finish_max_seconds,
+					finish,
+				)
+			}
+			if submitted {
+				ctx.stats_current.final_submit_count += 1
+				ctx.stats_current.final_submit_max_seconds = max(
+					ctx.stats_current.final_submit_max_seconds,
+					submit,
+				)
+			}
+		}
 	}
 }
 

@@ -185,9 +185,10 @@ _idle_timeout :: proc(ctx: ^Context) -> (should_wait: bool, timeout: f64) {
 		if ctx.idle.surface_unavailable {
 			return true, SURFACE_RETRY_WAIT
 		}
+		if ctx.idle.strategy == .Continuous do return false, 0
 		// Minimized: nothing is visible, so render nothing - just wait in
 		// bounded slices (events still wake us; restore marks activity).
-		if ctx.idle.strategy == .Event_Driven && platform_window_iconified(ctx) {
+		if platform_window_iconified(ctx) {
 			return true, IDLE_MAX_WAIT
 		}
 		now := _now(ctx)

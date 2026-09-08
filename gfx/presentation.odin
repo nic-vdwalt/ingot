@@ -15,45 +15,57 @@ Host_Frame_Timing :: struct {
 }
 
 Frame_Delivery_Timing :: struct {
-	epoch:                       u64,
-	presentation_supported:      bool,
-	missing_gpu_callback:        bool,
-	missing_present_callback:    bool,
-	frame_index:                 u64,
-	renderer_cpu_seconds:        f64,
-	pre_acquire_cpu_seconds:     f64,
-	stream_acquire_cpu_seconds:  f64,
-	acquire_cpu_seconds:         f64,
-	post_acquire_cpu_seconds:    f64,
-	flush_cpu_seconds:           f64,
-	stream_upload_cpu_seconds:   f64,
-	encode_cpu_seconds:          f64,
-	submit_cpu_seconds:          f64,
-	present_cpu_seconds:         f64,
-	cleanup_cpu_seconds:         f64,
-	input_cpu_seconds:           f64,
-	frame_timing_cpu_seconds:    f64,
-	host_cpu_seconds:            f64,
-	host_reload_cpu_seconds:     f64,
-	host_refresh_cpu_seconds:    f64,
-	host_draw_cpu_seconds:       f64,
-	host_prepare_cpu_seconds:    f64,
-	host_cursor_cpu_seconds:     f64,
-	host_unaccounted_seconds:    f64,
-	pacer_wait_seconds:          f64,
-	submissions_before_poll:     u32,
-	submissions_after_poll:      u32,
-	submissions_at_submit:       u32,
-	submissions_high_water:      u32,
-	oldest_submission_frame_age: u64,
-	submit_timestamp:         f64,
-	gpu_complete_timestamp:   f64,
-	gpu_complete_seconds:     f64,
-	presented_timestamp:      f64,
-	presentation_seconds:     f64,
-	cpu_valid:                bool,
-	gpu_complete_valid:       bool,
-	presented_valid:          bool,
+	epoch:                           u64,
+	presentation_supported:          bool,
+	missing_gpu_callback:            bool,
+	missing_present_callback:        bool,
+	frame_index:                     u64,
+	renderer_cpu_seconds:            f64,
+	pre_acquire_cpu_seconds:         f64,
+	stream_acquire_cpu_seconds:      f64,
+	acquire_cpu_seconds:             f64,
+	post_acquire_cpu_seconds:        f64,
+	flush_cpu_seconds:               f64,
+	stream_upload_cpu_seconds:       f64,
+	encode_cpu_seconds:              f64,
+	submit_cpu_seconds:              f64,
+	present_cpu_seconds:             f64,
+	cleanup_cpu_seconds:             f64,
+	input_cpu_seconds:               f64,
+	frame_timing_cpu_seconds:        f64,
+	host_cpu_seconds:                f64,
+	host_reload_cpu_seconds:         f64,
+	host_refresh_cpu_seconds:        f64,
+	host_draw_cpu_seconds:           f64,
+	host_prepare_cpu_seconds:        f64,
+	host_cursor_cpu_seconds:         f64,
+	host_unaccounted_seconds:        f64,
+	pacer_wait_seconds:              f64,
+	submissions_before_poll:         u32,
+	submissions_after_poll:          u32,
+	submissions_at_submit:           u32,
+	submissions_high_water:          u32,
+	oldest_submission_frame_age:     u64,
+	intermediate_upload_count:       u32,
+	intermediate_finish_count:       u32,
+	intermediate_submit_count:       u32,
+	final_upload_count:              u32,
+	final_finish_count:              u32,
+	final_submit_count:              u32,
+	intermediate_upload_max_seconds: f64,
+	intermediate_finish_max_seconds: f64,
+	intermediate_submit_max_seconds: f64,
+	final_upload_max_seconds:        f64,
+	final_finish_max_seconds:        f64,
+	final_submit_max_seconds:        f64,
+	submit_timestamp:                f64,
+	gpu_complete_timestamp:          f64,
+	gpu_complete_seconds:            f64,
+	presented_timestamp:             f64,
+	presentation_seconds:            f64,
+	cpu_valid:                       bool,
+	gpu_complete_valid:              bool,
+	presented_valid:                 bool,
 }
 
 Frame_Delivery_Slot :: struct {
@@ -83,8 +95,12 @@ context_frame_delivery_record_host_detail :: proc(
 	timing: Host_Frame_Timing,
 	pacer_wait_seconds: f64,
 ) {
-	accounted := timing.reload_seconds + timing.refresh_seconds + timing.draw_seconds +
-		timing.prepare_seconds + timing.cursor_seconds
+	accounted :=
+		timing.reload_seconds +
+		timing.refresh_seconds +
+		timing.draw_seconds +
+		timing.prepare_seconds +
+		timing.cursor_seconds
 	if ctx == nil || timing.total_seconds < 0 || pacer_wait_seconds < 0 || accounted < 0 do return
 	if timing.reload_seconds < 0 || timing.refresh_seconds < 0 || timing.draw_seconds < 0 do return
 	if timing.prepare_seconds < 0 || timing.cursor_seconds < 0 do return
@@ -231,6 +247,18 @@ _frame_delivery_cpu :: proc(ctx: ^Context, stats: Renderer_Stats) {
 	slot.timing.submissions_at_submit = stats.submissions_at_submit
 	slot.timing.submissions_high_water = stats.submissions_high_water
 	slot.timing.oldest_submission_frame_age = stats.oldest_submission_frame_age
+	slot.timing.intermediate_upload_count = stats.intermediate_upload_count
+	slot.timing.intermediate_finish_count = stats.intermediate_finish_count
+	slot.timing.intermediate_submit_count = stats.intermediate_submit_count
+	slot.timing.final_upload_count = stats.final_upload_count
+	slot.timing.final_finish_count = stats.final_finish_count
+	slot.timing.final_submit_count = stats.final_submit_count
+	slot.timing.intermediate_upload_max_seconds = stats.intermediate_upload_max_seconds
+	slot.timing.intermediate_finish_max_seconds = stats.intermediate_finish_max_seconds
+	slot.timing.intermediate_submit_max_seconds = stats.intermediate_submit_max_seconds
+	slot.timing.final_upload_max_seconds = stats.final_upload_max_seconds
+	slot.timing.final_finish_max_seconds = stats.final_finish_max_seconds
+	slot.timing.final_submit_max_seconds = stats.final_submit_max_seconds
 	slot.timing.cpu_valid = true
 }
 

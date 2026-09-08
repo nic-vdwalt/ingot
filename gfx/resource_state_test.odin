@@ -200,6 +200,31 @@ submission_completed_preserves_pending_head_without_device :: proc(t: ^testing.T
 }
 
 @(test)
+submission_oldest_frame_age_tracks_live_frame_owned_tickets :: proc(t: ^testing.T) {
+	tracker: Submission_Tracker
+	tracker.count = 3
+	tracker.tickets[0] = {
+		id          = 1,
+		frame_index = 7,
+		active      = true,
+	}
+	tracker.tickets[1] = {
+		id     = 2,
+		active = true,
+	}
+	tracker.tickets[2] = {
+		id          = 3,
+		frame_index = 9,
+		active      = true,
+	}
+	testing.expect_value(t, _submission_oldest_frame_age(&tracker, 10), u64(3))
+	tracker.tickets[0].complete = true
+	_submission_poll(&tracker)
+	testing.expect_value(t, _submission_oldest_frame_age(&tracker, 10), u64(1))
+	testing.expect_value(t, _submission_oldest_frame_age(&tracker, 0), u64(0))
+}
+
+@(test)
 submission_shutdown_blocks_new_reservations :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()

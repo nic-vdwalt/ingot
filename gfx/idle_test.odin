@@ -36,6 +36,18 @@ idle_surface_retry_is_bounded_and_context_local :: proc(t: ^testing.T) {
 }
 
 @(test)
+idle_continuous_timeout_never_waits_for_events :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.idle.strategy = .Continuous
+	ctx.idle.settle_frames = 0
+	ctx.idle.redraw_deadline = 0
+	wait, timeout := _idle_timeout(ctx)
+	testing.expect(t, !wait)
+	testing.expect_value(t, timeout, f64(0))
+}
+
+@(test)
 window_occluded_query_reports_surface_unavailability :: proc(t: ^testing.T) {
 	testing.expect(t, !context_window_occluded(nil), "nil context is never occluded")
 	ctx := new(Context)
