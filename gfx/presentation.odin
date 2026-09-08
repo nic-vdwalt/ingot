@@ -148,6 +148,7 @@ context_frame_delivery_record_host :: proc(
 	ctx: ^Context,
 	host_cpu_seconds, pacer_wait_seconds: f64,
 ) {
+	if ctx == nil do return
 	context_frame_delivery_record_host_detail(
 		ctx,
 		{total_seconds = host_cpu_seconds},
