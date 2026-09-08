@@ -201,6 +201,14 @@ context_window_focused :: proc(ctx: ^Context) -> bool {
 	return platform_window_focused(ctx)
 }
 
+// context_window_occluded reports whether the last context_begin_drawing found
+// the surface unavailable (macOS occlusion, or a zero-sized framebuffer). It is
+// a per-frame snapshot: valid between BeginDrawing and the next BeginDrawing.
+context_window_occluded :: proc(ctx: ^Context) -> bool {
+	if ctx == nil || !context_ready(ctx) do return false
+	return ctx.idle.surface_unavailable
+}
+
 context_window_fullscreen :: proc(ctx: ^Context) -> bool {
 	return context_is_window_fullscreen(ctx)
 }

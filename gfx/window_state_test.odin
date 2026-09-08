@@ -53,6 +53,17 @@ test_window_initial_focus_policy :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_window_topmost_policy :: proc(t: ^testing.T) {
+	testing.expect(t, !_window_wants_topmost({}), "default window is not floating")
+	testing.expect(t, _window_wants_topmost({.WINDOW_TOPMOST}), "topmost window floats")
+	testing.expect(
+		t,
+		_window_wants_topmost({.WINDOW_TOPMOST, .WINDOW_UNFOCUSED}),
+		"topmost is independent of focus",
+	)
+}
+
+@(test)
 test_window_focus_resolution :: proc(t: ^testing.T) {
 	testing.expect(t, _window_focus_resolve(true, false, false), "GLFW focus is the fallback")
 	testing.expect(t, !_window_focus_resolve(false, true, false), "GLFW blur is the fallback")

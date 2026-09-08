@@ -1236,6 +1236,10 @@ IsWindowFocused :: proc() -> bool {
 	return context_window_focused(default_context())
 }
 
+IsWindowOccluded :: proc() -> bool {
+	return context_window_occluded(default_context())
+}
+
 // FlushBatch forces pending 2D geometry to record into the current render pass
 // (raylib rlDrawRenderBatchActive parity - used to order custom draws).
 context_flush_batch :: proc(ctx: ^Context) {

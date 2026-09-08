@@ -39,6 +39,11 @@ _window_should_focus_on_show :: proc(flags: ConfigFlags) -> bool {
 }
 
 @(private)
+_window_wants_topmost :: proc(flags: ConfigFlags) -> bool {
+	return .WINDOW_TOPMOST in flags
+}
+
+@(private)
 _window_focus_resolve :: proc(backend_focused, native_focused, native_known: bool) -> bool {
 	if native_known do return native_focused
 	return backend_focused

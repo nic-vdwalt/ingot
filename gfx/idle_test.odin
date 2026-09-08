@@ -36,6 +36,21 @@ idle_surface_retry_is_bounded_and_context_local :: proc(t: ^testing.T) {
 }
 
 @(test)
+window_occluded_query_reports_surface_unavailability :: proc(t: ^testing.T) {
+	testing.expect(t, !context_window_occluded(nil), "nil context is never occluded")
+	ctx := new(Context)
+	defer free(ctx)
+	testing.expect(t, !context_window_occluded(ctx), "unready context is never occluded")
+	ctx.idle.surface_unavailable = true
+	testing.expect(t, !context_window_occluded(ctx), "unready context ignores the idle flag")
+	ctx.initialized = true
+	ctx.lifecycle = .Ready
+	testing.expect(t, context_window_occluded(ctx), "ready context reports the idle flag")
+	ctx.idle.surface_unavailable = false
+	testing.expect(t, !context_window_occluded(ctx), "ready context recovers with the surface")
+}
+
+@(test)
 idle_continuous_always_runs :: proc(t: ^testing.T) {
 	s := Idle_State{}
 	for _ in 0 ..< 10 {

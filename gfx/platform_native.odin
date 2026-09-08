@@ -54,6 +54,9 @@ when !INGOT_GFX_SDL3 {
 		focused := _window_wants_initial_focus(flags)
 		glfw.WindowHint(glfw.FOCUSED, focused ? 1 : 0)
 		glfw.WindowHint(glfw.FOCUS_ON_SHOW, focused ? 1 : 0)
+		// WINDOW_TOPMOST -> GLFW_FLOATING (NSFloatingWindowLevel on macOS): the
+		// window stays above other apps' normal windows even when not active.
+		glfw.WindowHint(glfw.FLOATING, _window_wants_topmost(flags) ? 1 : 0)
 		// WINDOW_HIDDEN defers the first show so a caller can attach platform state
 		// that must exist before the window is visible. Windows' AccessKit
 		// subclassing adapter is the motivating case: it must be installed before
