@@ -57,6 +57,23 @@ test_ws_invalid_url_fails_synchronously :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_ws_disconnect_info_retains_latest_cause :: proc(t: ^testing.T) {
+	ws := ws_init()
+	defer ws_close(&ws)
+	count, cause := ws_disconnect_info(&ws)
+	testing.expect_value(t, count, u64(0))
+	testing.expect_value(t, cause, WS_Error.None)
+	ws_mark_disconnected(&ws, .Receive_Timeout)
+	count, cause = ws_disconnect_info(&ws)
+	testing.expect_value(t, count, u64(1))
+	testing.expect_value(t, cause, WS_Error.Receive_Timeout)
+	ws_mark_disconnected(&ws, .Peer_Closed)
+	count, cause = ws_disconnect_info(&ws)
+	testing.expect_value(t, count, u64(2))
+	testing.expect_value(t, cause, WS_Error.Peer_Closed)
+}
+
+@(test)
 test_ws_headers_reject_injection_and_are_owned :: proc(t: ^testing.T) {
 	ws := ws_init()
 	bad := ws_start_connect_url(

@@ -52,12 +52,13 @@ WS_MAX_QUEUED_BYTES :: 64 * 1024 * 1024
 // Liveness/reconnect tuning. A half-open drop (Wi-Fi/VPN/sleep - no FIN/RST)
 // is detected instead of blocking the worker forever: TCP sockets carry a recv
 // read deadline (WS_RECV_TIMEOUT) while the TLS path polls curl's non-blocking
-// recv; in both cases idle windows send a PING at most every WS_RECV_TIMEOUT
+// recv; in both cases idle windows send a PING at most every WS_PING_INTERVAL
 // (the server auto-replies PONG), and the connection is declared dead once no
 // bytes arrive for WS_DEAD_AFTER. WS_RECONNECT_WAIT backs off between dial
 // cycles.
 WS_RECV_TIMEOUT :: 100 * time.Millisecond
-WS_DEAD_AFTER :: 15 * time.Second
+WS_PING_INTERVAL :: 5 * time.Second
+WS_DEAD_AFTER :: 45 * time.Second
 WS_RECONNECT_WAIT :: 1 * time.Second
 WS_CONNECT_TIMEOUT :: 10 * time.Second
 WS_HANDSHAKE_TIMEOUT :: 5 * time.Second
@@ -78,6 +79,10 @@ WS_Error :: enum u8 {
 	TLS,
 	Handshake,
 	Cancelled,
+	Receive_Timeout,
+	Receive,
+	Peer_Closed,
+	Protocol,
 }
 
 // Thread-safe message queue entry for received WebSocket messages.
@@ -328,6 +333,8 @@ Web_Socket :: struct {
 	// one-shot behaviour (worker exits after the first drop).
 	conn_gen:          int,
 	auto_reconnect:    bool,
+	disconnect_count:  u64,
+	disconnect_error:  WS_Error,
 
 	// Thread-safe receive queue, bounded by message count and aggregate bytes.
 	recv_queue:        [dynamic]WS_Message,
@@ -463,6 +470,15 @@ ws_set_state :: proc(ws: ^Web_Socket, s: WS_State) {
 	assert(s >= .Disconnected && s <= .Error)
 	sync.atomic_store(&ws.state, s)
 	ws_notify(ws)
+}
+
+@(private)
+ws_mark_disconnected :: proc(ws: ^Web_Socket, cause: WS_Error) {
+	assert(ws != nil, "ws_mark_disconnected: nil ws")
+	assert(cause >= .Receive_Timeout && cause <= .Protocol, "invalid disconnect cause")
+	sync.atomic_store(&ws.disconnect_error, cause)
+	sync.atomic_add(&ws.disconnect_count, 1)
+	ws_set_state(ws, .Disconnected)
 }
 
 // ws_enqueue appends one received message under recv_mutex, keeping the queue
@@ -781,22 +797,22 @@ ws_recv_loop :: proc(ws: ^Web_Socket) {
 				if ws.secure do time.sleep(10 * time.Millisecond)
 				// Rate-limit the probe: TCP's read deadline already paces the
 				// loop at WS_RECV_TIMEOUT, but TLS polls every ~10 ms.
-				if time.since(last_ping) >= ws_scaled(WS_RECV_TIMEOUT) {
+				if time.since(last_ping) >= ws_scaled(WS_PING_INTERVAL) {
 					ws_send_frame(ws, WS_OP_PING, nil)
 					last_ping = time.now()
 				}
 				if time.since(last_activity) > ws_scaled(WS_DEAD_AFTER) {
-					ws_set_state(ws, .Disconnected)
+					ws_mark_disconnected(ws, .Receive_Timeout)
 					return
 				}
 				continue
 			}
-			ws_set_state(ws, .Disconnected)
+			ws_mark_disconnected(ws, .Receive)
 			return
 		}
 		if n == 0 {
 			// Graceful close (per core:net: 0 bytes + nil err == peer closed).
-			ws_set_state(ws, .Disconnected)
+			ws_mark_disconnected(ws, .Peer_Closed)
 			return
 		}
 		ensure(n > 0 && n <= len(scratch))
@@ -813,20 +829,20 @@ ws_recv_loop :: proc(ws: ^Web_Socket) {
 			if status == .Too_Big {
 				// Oversized frame: protocol violation - drop the connection
 				// rather than buffering unbounded data (worker will re-dial).
-				ws_set_state(ws, .Disconnected)
+				ws_mark_disconnected(ws, .Protocol)
 				return
 			}
 
 			// Control frames must not be fragmented (RFC 6455 §5.5).
 			if frame.opcode >= WS_OP_CLOSE && !frame.fin {
-				ws_set_state(ws, .Disconnected)
+				ws_mark_disconnected(ws, .Protocol)
 				return
 			}
 
 			switch frame.opcode {
 			case WS_OP_TEXT, WS_OP_BINARY, WS_OP_CONTINUATION:
 				if !ws_handle_data_frame(ws, &frag, frame) {
-					ws_set_state(ws, .Disconnected)
+					ws_mark_disconnected(ws, .Protocol)
 					return
 				}
 
@@ -834,7 +850,7 @@ ws_recv_loop :: proc(ws: ^Web_Socket) {
 				ws_send_frame(ws, WS_OP_PONG, frame.payload)
 
 			case WS_OP_CLOSE:
-				ws_set_state(ws, .Disconnected)
+				ws_mark_disconnected(ws, .Peer_Closed)
 				return
 			}
 
@@ -948,6 +964,11 @@ ws_recv_dropped :: proc(ws: ^Web_Socket) -> u64 {
 // subscription (bound to the old socket) is gone.
 ws_conn_gen :: proc(ws: ^Web_Socket) -> int {
 	return sync.atomic_load(&ws.conn_gen)
+}
+
+ws_disconnect_info :: proc(ws: ^Web_Socket) -> (u64, WS_Error) {
+	assert(ws != nil, "ws_disconnect_info: nil ws")
+	return sync.atomic_load(&ws.disconnect_count), sync.atomic_load(&ws.disconnect_error)
 }
 
 // ws_state returns the connection state with an atomic read - the worker
