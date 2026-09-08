@@ -33,6 +33,15 @@ libvterm/lib/linux_arm64/
 !/artifacts/readme-example/
 /artifacts/readme-example/*
 !/artifacts/readme-example/main.odin
+
+# Telemetry captures, Instruments traces, and hot-reload build products are
+# evidence, never source; archive them in ingot-artifacts instead.
+*.tel
+*.tel.*
+*.trace/
+*.dylib
+*.so
+*.dll
 fuzz/net/fuzz_net
 fuzz/ui/fuzz_ui
 fuzz/view/fuzz_view
