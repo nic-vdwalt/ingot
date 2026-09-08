@@ -657,7 +657,12 @@ renderer_state_reset :: proc(r: ^Renderer) {
 renderer_frame_begin :: proc(ctx: ^Context, r: ^Renderer) -> bool {
 	assert(ctx != nil, "renderer_frame_begin: nil context")
 	assert(r == &ctx.rend, "renderer_frame_begin: foreign renderer")
-	if !_stream_slot_acquire(r, _submission_completed(&ctx.submissions)) {
+	before := ctx.submissions.count
+	oldest_age := _submission_oldest_frame_age(&ctx.submissions, ctx.stats_current.frame_index)
+	completed := _submission_completed(&ctx.submissions)
+	after := ctx.submissions.count
+	_stats_submission_pressure(ctx, before, after, 0, oldest_age)
+	if !_stream_slot_acquire(r, completed) {
 		_stats_stream_slot_exhaustion(ctx)
 		return false
 	}

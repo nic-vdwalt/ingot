@@ -161,7 +161,20 @@ frame_delivery_correlates_cpu_gpu_and_presentation :: proc(t: ^testing.T) {
 	ctx.delivery.supported = true
 	_frame_delivery_begin(ctx, 7)
 	_frame_delivery_submitted(ctx, 7, 10)
-	_frame_delivery_cpu(ctx, {frame_index = 7, frame_cpu_seconds = 0.004})
+	_frame_delivery_cpu(
+		ctx,
+		{
+			frame_index                   = 7,
+			frame_cpu_seconds             = 0.004,
+			pre_acquire_cpu_seconds       = 0.001,
+			stream_acquire_cpu_seconds    = 0.002,
+			submissions_before_poll       = 3,
+			submissions_after_poll        = 2,
+			submissions_at_submit         = 3,
+			submissions_high_water        = 3,
+			oldest_submission_frame_age  = 2,
+		},
+	)
 	_frame_delivery_gpu_complete(ctx, 7, 10.006, true)
 	_frame_delivery_presented(ctx, 7, 10.008)
 	out: [1]Frame_Delivery_Timing
@@ -171,6 +184,11 @@ frame_delivery_correlates_cpu_gpu_and_presentation :: proc(t: ^testing.T) {
 	testing.expect_value(t, out[0].frame_index, u64(7))
 	testing.expect(t, abs(out[0].gpu_complete_seconds - 0.006) < 0.000001)
 	testing.expect_value(t, out[0].renderer_cpu_seconds, f64(0.004))
+	testing.expect_value(t, out[0].pre_acquire_cpu_seconds, f64(0.001))
+	testing.expect_value(t, out[0].stream_acquire_cpu_seconds, f64(0.002))
+	testing.expect_value(t, out[0].submissions_before_poll, u32(3))
+	testing.expect_value(t, out[0].submissions_after_poll, u32(2))
+	testing.expect_value(t, out[0].oldest_submission_frame_age, u64(2))
 	testing.expect(t, out[0].presented_valid)
 }
 

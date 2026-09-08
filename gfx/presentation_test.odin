@@ -48,3 +48,30 @@ presentation_records_valid_frame_and_rejects_stale_epoch :: proc(t: ^testing.T) 
 	testing.expect_value(t, slot.timing.host_cpu_seconds, f64(0.01))
 	testing.expect_value(t, slot.timing.pacer_wait_seconds, f64(0.002))
 }
+
+@(test)
+presentation_host_detail_closes_to_total :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 1
+	ctx.stats_latest.frame_index = 2
+	_frame_delivery_begin(ctx, 2)
+	context_frame_delivery_record_host_detail(
+		ctx,
+		{
+			total_seconds   = 0.010,
+			reload_seconds  = 0.001,
+			refresh_seconds = 0.001,
+			draw_seconds    = 0.004,
+			prepare_seconds = 0.002,
+			cursor_seconds  = 0.001,
+		},
+		0.003,
+	)
+	slot := _frame_delivery_slot(ctx, 2)
+	testing.expect(t, slot != nil)
+	if slot == nil do return
+	testing.expect_value(t, slot.timing.host_draw_cpu_seconds, f64(0.004))
+	testing.expect(t, abs(slot.timing.host_unaccounted_seconds - 0.001) < 0.000000001)
+	testing.expect_value(t, slot.timing.pacer_wait_seconds, f64(0.003))
+}
