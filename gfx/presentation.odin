@@ -93,6 +93,27 @@ context_frame_delivery_supported :: proc(ctx: ^Context) -> bool {
 	return ctx.delivery.supported
 }
 
+@(private)
+_frame_delivery_pending_count :: proc(ctx: ^Context) -> u32 {
+	assert(ctx != nil, "_frame_delivery_pending_count: nil context")
+	sync.mutex_lock(&ctx.delivery.mutex)
+	defer sync.mutex_unlock(&ctx.delivery.mutex)
+	pending := u32(0)
+	for &slot in ctx.delivery.slots {
+		if slot.active && slot.timing.cpu_valid && !(slot.gpu_done && slot.present_done) do pending += 1
+	}
+	return pending
+}
+
+context_frame_delivery_quiesce :: proc(ctx: ^Context) -> bool {
+	if ctx == nil do return true
+	for _ in 0 ..< FRAME_DELIVERY_QUIESCE_POLLS {
+		if _frame_delivery_pending_count(ctx) == 0 do return true
+		platform_sleep(FRAME_DELIVERY_QUIESCE_SECONDS)
+	}
+	return _frame_delivery_pending_count(ctx) == 0
+}
+
 context_frame_delivery_record_host_detail :: proc(
 	ctx: ^Context,
 	timing: Host_Frame_Timing,
