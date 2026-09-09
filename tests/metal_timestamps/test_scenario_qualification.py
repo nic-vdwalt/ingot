@@ -13,12 +13,15 @@ def history():
         frame_epoch=1, frame_mapping_valid=True, frame_boundary="before_game_draw",
         minimized=False, hidden=False, occluded=False, visibility_interrupted=False,
         publication_failed=False, terminal=False, terminal_outcome="",
+        measurement_started=False, measured_started=0,
     )
     return [
         dict(base, phase="warmup", native_seconds=10, actual_elapsed=0, frame_index=1),
-        dict(base, phase="measured", native_seconds=15, actual_elapsed=5, frame_index=300),
+        dict(base, phase="measured", native_seconds=15, actual_elapsed=5, frame_index=300,
+             measurement_started=True, measured_started=15),
         dict(base, phase="cooldown", native_seconds=35, actual_elapsed=25, frame_index=1500,
-             terminal=True, terminal_outcome="completed"),
+             terminal=True, terminal_outcome="completed",
+             measurement_started=True, measured_started=15),
     ]
 
 
@@ -26,6 +29,14 @@ class ScenarioQualificationTests(unittest.TestCase):
     def test_valid_history_has_exclusive_frame_end(self):
         result = validate_scenario(history())
         self.assertEqual(result, {"reasons": [], "ranges": [(1, 300, 1500)]})
+
+    def test_late_first_measured_frame_requires_full_actual_duration(self):
+        records = history()
+        records[1].update(native_seconds=15.1, actual_elapsed=5.1, measured_started=15.1)
+        records[-1]["measured_started"] = 15.1
+        self.assertIn("measured_duration_incomplete", validate_scenario(records)["reasons"])
+        records[-1].update(native_seconds=35.2, actual_elapsed=25.2)
+        self.assertEqual(validate_scenario(records)["reasons"], [])
 
     def test_bad_protocol_never_selects_frames(self):
         for field, value in (

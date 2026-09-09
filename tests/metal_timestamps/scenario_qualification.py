@@ -24,7 +24,14 @@ def validate_scenario(records):
         reasons.add("scenario_identity_changed")
     if first.get("scenario") not in ("ocean", "terrain-edit", "streaming"):
         reasons.add("unsupported_scenario")
-    if first.get("quality") != "fixed" or first.get("render_scale") != 1:
+    seed = first.get("seed")
+    if not isinstance(seed, str) or not seed.isascii() or not seed.isdecimal() or len(seed) > 20:
+        reasons.add("invalid_scenario_seed")
+    elif int(seed) > 2**64 - 1:
+        reasons.add("invalid_scenario_seed")
+    if first.get("opaque_method") != "intact pass":
+        reasons.add("scenario_topology_not_frozen")
+    if first.get("quality") != "fixed" or not finite_number(first.get("render_scale")) or first.get("render_scale") != 1:
         reasons.add("scenario_quality_not_frozen")
     for field in ("width", "height"):
         if type(first.get(field)) is not int or first[field] <= 0:
@@ -42,9 +49,10 @@ def validate_scenario(records):
     previous_frame = None
     measured_start = None
     measured_seconds = None
+    measurement_origin = None
     terminal_count = 0
     for index, record in enumerate(records):
-        if record.get("v") != 2 or record.get("clock_domain") != "context_monotonic_seconds" or record.get("clock_revision") != 1:
+        if type(record.get("v")) is not int or record.get("v") != 2 or record.get("clock_domain") != "context_monotonic_seconds" or type(record.get("clock_revision")) is not int or record.get("clock_revision") != 1:
             reasons.add("scenario_frame_clock_mapping_unverified")
         frame = (record.get("frame_epoch"), record.get("frame_index"))
         mapping_valid = all(type(value) is int and value > 0 for value in frame)
@@ -68,11 +76,22 @@ def validate_scenario(records):
                 if abs(seconds - elapsed - origin) > 0.000001:
                     reasons.add("scenario_clock_origin_changed")
             if bounds_valid:
-                phase_expected = (
-                    "warmup" if elapsed < warmup else
-                    "measured" if elapsed < warmup + duration else "cooldown"
-                )
-                if record.get("phase") != phase_expected:
+                started = record.get("measurement_started")
+                start_time = record.get("measured_started")
+                if started is True:
+                    if not finite_number(start_time) or start_time > seconds or elapsed < warmup:
+                        reasons.add("invalid_measured_start")
+                    elif measurement_origin is None:
+                        measurement_origin = start_time
+                        if record.get("phase") != "measured" or start_time != seconds:
+                            reasons.add("measured_start_boundary_missing")
+                    elif start_time != measurement_origin:
+                        reasons.add("measured_start_changed")
+                    if record.get("phase") not in ("measured", "cooldown"):
+                        reasons.add("scenario_phase_time_mismatch")
+                elif started is not False or start_time != 0 or measurement_origin is not None:
+                    reasons.add("invalid_measured_start")
+                elif record.get("phase") != "warmup" or elapsed >= warmup:
                     reasons.add("scenario_phase_time_mismatch")
         if any(record.get(field) is not False for field in (
             "minimized", "hidden", "occluded", "visibility_interrupted", "publication_failed",
@@ -118,6 +137,9 @@ def verify_delivery_mapping(records, deliveries):
             continue
         boundary = origin + seconds
         frame = (record.get("frame_epoch"), record.get("frame_index"))
+        if not all(type(value) is int and value > 0 for value in frame):
+            reasons.add("invalid_scenario_frame_mapping")
+            continue
         delivery = deliveries.get(frame)
         if delivery is None:
             reasons.add("scenario_boundary_delivery_missing")

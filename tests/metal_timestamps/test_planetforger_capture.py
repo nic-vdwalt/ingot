@@ -112,6 +112,31 @@ class PlanetForgerCaptureTests(unittest.TestCase):
                 recording_path=recording_path if recording is not None else None,
             )
 
+    def test_strict_frame_owned_success_and_full_capture_failures(self):
+        from test_scenario_qualification import history
+        scenarios = history()
+        for record in scenarios:
+            record["clock_origin_seconds"] = 1000
+        records = []
+        for frame in range(1, 1501):
+            seconds = 10 + (frame - 1) * 5 / 299 if frame < 300 else 15 + (frame - 300) / 60
+            record = telemetry()
+            record["sq"] = frame
+            record["rl"] = {"g": "reliable", "r": "completion_gated_metal_resolve"}
+            record["gfd"][0]["i"] = frame
+            record["fd"][0].update(i=frame, st=1000 + seconds + 0.001,
+                                   gt=1000 + seconds + 0.009, pt=1000 + seconds + 0.01)
+            records.append(record)
+        recording = [{"k": "telemetry_health"}, {"k": "end", "e": True, "c": 0, "z": False}]
+        result = self.evaluate(records, scenarios, recording)
+        self.assertTrue(result["qualified"], result["qualification_reasons"])
+        self.assertEqual(result["joined_frames"], 1200)
+        for index in (0, 300, 1499):
+            records[index]["fd"][0]["mg"] = True
+            result = self.evaluate(records, scenarios, recording)
+            self.assertFalse(result["qualified"])
+            records[index]["fd"][0]["mg"] = False
+
     def test_accepts_healthy_unsegmented_capture(self):
         result = self.evaluate([telemetry()])
         self.assertTrue(result["accepted"])
@@ -190,8 +215,11 @@ class PlanetForgerCaptureTests(unittest.TestCase):
     def test_rejects_changed_scenario_identity(self):
         changed = dict(IDENTITY)
         changed["seed"] = "8"
-        with self.assertRaisesRegex(ValueError, "identity changes"):
-            self.evaluate([telemetry()], [IDENTITY, changed])
+        result = self.evaluate([telemetry()], [IDENTITY, changed])
+        self.assertFalse(result["accepted"])
+        self.assertFalse(result["qualified"])
+        self.assertIn("scenario_identity_changed", result["qualification_reasons"])
+        self.assertIn("failures", result)
 
     def test_counts_sequence_gaps_and_duplicates(self):
         records = [telemetry(), telemetry(), telemetry()]
@@ -217,8 +245,11 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         self.assertFalse(self.evaluate([telemetry()], recording=unhealthy)["accepted"])
 
     def test_rejects_incomplete_recording(self):
-        with self.assertRaisesRegex(ValueError, "exactly one"):
-            self.evaluate([telemetry()], recording=[{"k": "telemetry_health"}])
+        for recording in ([], [{}], [None], [{"k": "telemetry_health"}]):
+            result = self.evaluate([telemetry()], recording=recording)
+            self.assertFalse(result["accepted"])
+            self.assertFalse(result["qualified"])
+            self.assertIn("failures", result)
 
     def test_reports_existing_exact_frame_metrics(self):
         result = self.evaluate([telemetry()])
@@ -253,7 +284,7 @@ class PlanetForgerCaptureTests(unittest.TestCase):
             {**IDENTITY, "phase": "complete", "native_seconds": 30},
         ]
         result = self.evaluate([warmup, measured], scenarios)
-        self.assertEqual(result["qualification_route"], "measured_phase")
+        self.assertEqual(result["qualification_route"], "legacy_unqualified")
         self.assertEqual(result["delivery_frames"], 1)
         self.assertEqual(result["gpu_frames"], 1)
         self.assertEqual(result["joined_frames"], 1)

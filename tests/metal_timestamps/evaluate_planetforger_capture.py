@@ -4,7 +4,7 @@ import json
 import math
 from pathlib import Path
 
-from scenario_qualification import validate_scenario, verify_delivery_mapping
+from scenario_qualification import finite_number, validate_scenario, verify_delivery_mapping
 
 
 REQUIRED_GROUPS = ("window", "world.opaque", "world.scene-copy", "world.ocean")
@@ -144,18 +144,21 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             measured_started = None
     if timestamp_errors:
         measured_ranges = []
-    if scenario_error is None and any(value is None or value == "" for value in scenario_identity.values()):
-        raise ValueError("scenario identity is incomplete")
-    if scenario_error is None and scenario_identity["scenario"] != "ocean":
-        raise ValueError("scenario identity is not ocean")
-    if scenario_error is None and scenario_identity["quality"] not in ("fixed", "adaptive"):
-        raise ValueError("scenario quality is invalid")
-    if scenario_error is None and (scenario_identity["width"] <= 0 or scenario_identity["height"] <= 0):
-        raise ValueError("scenario dimensions are invalid")
-    if scenario_error is None and len(scenario_identity["terrain_sha256"]) != 64:
-        raise ValueError("scenario terrain hash is invalid")
+    identity_errors = []
+    if any(value is None or value == "" for value in scenario_identity.values()):
+        identity_errors.append("scenario_identity_incomplete")
+    if scenario_identity["scenario"] not in ("ocean", "terrain-edit", "streaming"):
+        identity_errors.append("unsupported_scenario")
+    if scenario_identity["quality"] not in ("fixed", "adaptive"):
+        identity_errors.append("invalid_scenario_quality")
+    if any(type(scenario_identity[field]) is not int or scenario_identity[field] <= 0
+           for field in ("width", "height")):
+        identity_errors.append("invalid_scenario_dimensions")
+    digest = scenario_identity["terrain_sha256"]
+    if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+        identity_errors.append("invalid_terrain_hash")
     if any(record.get(field) != value for record in scenario_records for field, value in scenario_identity.items()):
-        raise ValueError("scenario identity changes within capture")
+        identity_errors.append("scenario_identity_changed")
     group_counts = {name: 0 for name in REQUIRED_GROUPS}
     health = {name: 0 for name in HEALTH_FIELDS}
     delivery_frames = 0
@@ -201,6 +204,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     refresh_hz = scenario_records[0].get("refresh_hz", 0)
     reliability = None
     reliability_reason = None
+    reliability_verified = True
     for record in records:
         if record.get("rt") != 1:
             continue
@@ -216,6 +220,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         scope = record.get("rl", {})
         reliability = scope.get("g", reliability)
         reliability_reason = scope.get("r", reliability_reason)
+        reliability_verified &= scope.get("g") == "reliable" and scope.get("r") == "completion_gated_metal_resolve"
         for frame in record.get("gfd", []):
             frame_identity = (frame.get("e", 0), frame.get("i", 0))
             if frame_identity in raw_identities:
@@ -266,7 +271,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                 value = delivery.get(field)
                 if value is None:
                     continue
-                if not isinstance(value, (int, float)) or value < 0:
+                if not finite_number(value) or value < 0:
                     invalid_cpu_durations += 1
                     continue
                 cpu_metrics[name].append(value)
@@ -289,7 +294,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                         detail_fields["renderer_draw"] = "rdw"
                     for name, field in detail_fields.items():
                         value = delivery[field]
-                        if not isinstance(value, (int, float)) or value < 0:
+                        if not finite_number(value) or value < 0:
                             invalid_cpu_durations += 1
                             valid_detail = False
                         elif name in submission_call_metrics:
@@ -392,13 +397,17 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     recording_healthy = True
     if recording_path:
         recording_path = Path(recording_path)
-        recording_records = [json.loads(line) for line in recording_path.read_text().splitlines() if line.strip()]
+        try:
+            recording_records = [json.loads(line) for line in recording_path.read_text().splitlines() if line.strip()]
+            if any(not isinstance(record, dict) for record in recording_records):
+                recording_records = []
+        except (OSError, UnicodeError, ValueError):
+            recording_records = []
         health_records = [record for record in recording_records if record.get("k") == "telemetry_health"]
         end_records = [record for record in recording_records if record.get("k") == "end"]
-        if len(health_records) != 1 or len(end_records) != 1:
-            raise ValueError("recording must contain exactly one telemetry health and terminal record")
-        recording_health = health_records[0]
-        terminal = end_records[0]
+        recording_complete = len(health_records) == 1 and len(end_records) == 1
+        recording_health = health_records[0] if health_records else {}
+        terminal = end_records[0] if end_records else {}
         recording_failures = {
             field: recording_health.get(field, 0)
             for field in ("invalid_lines", "parse_errors", "resets", "read_errors", "pending_bytes")
@@ -407,24 +416,41 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         recording_failures["unfinished_tail"] = int(recording_health.get("unfinished_tail", False))
         recording_failures["drain_exhausted"] = int(recording_health.get("drain_exhausted", False))
         recording_healthy = (
-            all(value == 0 for value in recording_failures.values())
+            recording_complete
+            and recording_records[-1] == terminal
+            and all(value == 0 for value in recording_failures.values())
             and terminal.get("e") is True
             and terminal.get("c") == 0
             and terminal.get("z") is False
         )
         recording = {
             "path": str(recording_path),
-            "sha256": sha256(recording_path),
+            "sha256": sha256(recording_path) if recording_path.is_file() else None,
             "telemetry_health": recording_health,
             "terminal": terminal,
             "failures": recording_failures,
             "healthy": recording_healthy,
         }
-    accepted = healthy and complete_groups and recording_healthy and scenario_error is None
-    qualification_reasons = ["scenario_frame_clock_mapping_unverified"]
+    accepted = healthy and complete_groups and recording_healthy and scenario_error is None and not identity_errors
+    qualification_reasons = [] if frame_owned else ["scenario_frame_clock_mapping_unverified"]
+    if not reliability_verified or not sequences:
+        qualification_reasons.append("full_capture_reliability_unverified")
+    if recording is None:
+        qualification_reasons.append("recording_completion_unverified")
+    if not delivery_frames:
+        qualification_reasons.append("no_measured_deliveries")
+    for identity in exact_joined:
+        groups = raw_frames[identity].get("g", [])
+        names = [group.get("n") for group in groups]
+        if any(names.count(name) != 1 for name in REQUIRED_GROUPS) or any(
+            not finite_number(group.get("ms")) or group["ms"] < 0 for group in groups
+        ):
+            qualification_reasons.append("measured_frame_groups_incomplete")
+            break
     if scenario_error is not None:
         qualification_reasons.append("scenario_history_unavailable_or_malformed")
     qualification_reasons.extend(sorted(set(timestamp_errors)))
+    qualification_reasons.extend(identity_errors)
     if frame_owned:
         qualification_reasons.extend(scenario_validation["reasons"])
         if not scenario_validation["reasons"]:
@@ -471,8 +497,8 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "binaries": binaries,
         "recording": recording,
         "identity": scenario_identity,
-        "observed_phases": sorted({record.get("phase") for record in scenario_records}),
-        "qualification_route": "measured_phase" if measured_ranges else "unsegmented_immutable_scenario_identity",
+        "observed_phases": sorted({record.get("phase") for record in scenario_records if isinstance(record.get("phase"), str)}),
+        "qualification_route": "frame_owned_v2" if frame_owned else "legacy_unqualified",
         "delivery_frames": delivery_frames,
         "gpu_frames": gpu_frames,
         "joined_frames": len(exact_joined),
@@ -525,7 +551,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "healthy": healthy,
         "complete_groups": complete_groups,
         "accepted": accepted,
-        "qualified": False,
+        "qualified": not qualification_reasons,
         "qualification_reasons": qualification_reasons,
     }
 
