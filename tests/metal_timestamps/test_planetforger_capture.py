@@ -241,6 +241,27 @@ class PlanetForgerCaptureTests(unittest.TestCase):
                 result = self.evaluate([telemetry()], recording=[health])
                 self.assertIn("recording_health_fields_invalid", result["qualification_reasons"])
 
+    def test_unreadable_input_hashes_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            capture = root / "capture"
+            scenario = root / "scenario"
+            capture.write_text(json.dumps(telemetry(missing=True)) + "\n")
+            scenario.write_text(json.dumps(IDENTITY) + "\n")
+            for label in ("telemetry", "scenario", "recording", "binary.host"):
+                with self.subTest(label=label):
+                    result = evaluate_capture(
+                        root if label == "telemetry" else capture,
+                        root if label == "scenario" else scenario,
+                        binary_paths={"host": root} if label == "binary.host" else None,
+                        recording_path=root if label == "recording" else None,
+                    )
+                    self.assertFalse(result["qualified"])
+                    self.assertIn("input_hash_unavailable:" + label,
+                                  result["qualification_reasons"])
+                    if label != "telemetry":
+                        self.assertEqual(result["failures"]["missing_gpu_callbacks"], 1)
+
     def test_recording_native_size_limits(self):
         for contents, reason in (
             (b" " * (64 * 1024 + 1) + b"\n", "recording_line_limit_exceeded"),

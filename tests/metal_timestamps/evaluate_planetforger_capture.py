@@ -287,6 +287,17 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     telemetry_path = Path(telemetry_path)
     scenario_path = Path(scenario_path)
     telemetry_errors = []
+    input_errors = []
+
+    def input_hash(path, label):
+        try:
+            return sha256(path)
+        except OSError:
+            input_errors.append("input_hash_unavailable:" + label)
+            return None
+
+    telemetry_hash = input_hash(telemetry_path, "telemetry")
+    scenario_hash = input_hash(scenario_path, "scenario")
     records = []
     try:
         for line in telemetry_path.read_text().splitlines():
@@ -588,7 +599,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     complete_groups = all(group_counts[name] > 0 for name in REQUIRED_GROUPS)
     binaries = {}
     for name, path in (binary_paths or {}).items():
-        binaries[name] = {"path": str(path), "sha256": sha256(path)}
+        binaries[name] = {"path": str(path), "sha256": input_hash(path, "binary." + name)}
     recording = None
     recording_healthy = True
     recording_protocol_reasons = []
@@ -656,7 +667,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         )
         recording = {
             "path": str(recording_path),
-            "sha256": sha256(recording_path) if recording_path.is_file() else None,
+            "sha256": input_hash(recording_path, "recording"),
             "telemetry_health": recording_health,
             "terminal": terminal,
             "failures": recording_failures,
@@ -665,6 +676,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     accepted = healthy and complete_groups and recording_healthy and scenario_error is None and not identity_errors
     qualification_reasons = [] if frame_owned else ["scenario_frame_clock_mapping_unverified"]
     qualification_reasons.extend(telemetry_errors)
+    qualification_reasons.extend(input_errors)
     qualification_reasons.extend(sorted(set(recording_protocol_reasons)))
     if not reliability_verified or not sequences:
         qualification_reasons.append("full_capture_reliability_unverified")
@@ -723,9 +735,9 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         }
     return {
         "telemetry": str(telemetry_path),
-        "telemetry_sha256": sha256(telemetry_path) if telemetry_path.is_file() else None,
+        "telemetry_sha256": telemetry_hash,
         "scenario": str(scenario_path),
-        "scenario_sha256": sha256(scenario_path) if scenario_path.is_file() else None,
+        "scenario_sha256": scenario_hash,
         "scenario_error": scenario_error,
         "binaries": binaries,
         "recording": recording,
