@@ -127,6 +127,21 @@ def verify_delivery_mapping(records, deliveries):
             reasons.add("scenario_delivery_clock_mismatch")
         if previous_boundary is not None:
             previous_frame, previous_time = previous_boundary
+            if all(type(value) is int for value in (*previous_frame, *frame)):
+                owned = sorted(
+                    (identity, item) for identity, item in deliveries.items()
+                    if identity[0] == frame[0] and previous_frame[1] <= identity[1] < frame[1]
+                )
+                if frame[0] != previous_frame[0] or len(owned) != frame[1] - previous_frame[1]:
+                    reasons.add("scenario_frame_ownership_gap")
+                last_submit = None
+                for _, item in owned:
+                    timestamp = item.get("st")
+                    if not finite_number(timestamp) or not previous_time <= timestamp < boundary:
+                        reasons.add("scenario_delivery_clock_mismatch")
+                    elif last_submit is not None and timestamp < last_submit:
+                        reasons.add("scenario_delivery_boundary_order_invalid")
+                    last_submit = timestamp if finite_number(timestamp) else None
             previous_delivery = deliveries.get(previous_frame, {})
             previous_submit = previous_delivery.get("st")
             if not finite_number(previous_submit) or previous_submit >= boundary or boundary <= previous_time:

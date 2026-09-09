@@ -4,7 +4,7 @@ import json
 import math
 from pathlib import Path
 
-from scenario_qualification import validate_scenario
+from scenario_qualification import validate_scenario, verify_delivery_mapping
 
 
 REQUIRED_GROUPS = ("window", "world.opaque", "world.scene-copy", "world.ocean")
@@ -427,6 +427,13 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     qualification_reasons.extend(sorted(set(timestamp_errors)))
     if frame_owned:
         qualification_reasons.extend(scenario_validation["reasons"])
+        if not scenario_validation["reasons"]:
+            full_deliveries = {
+                (delivery.get("e"), delivery.get("i")): delivery
+                for record in records if record.get("rt") == 1
+                for delivery in record.get("fd", [])
+            }
+            qualification_reasons.extend(verify_delivery_mapping(scenario_records, full_deliveries))
     if not measured_ranges:
         qualification_reasons.append("no_bounded_measured_phase")
     if measured_started is not None:

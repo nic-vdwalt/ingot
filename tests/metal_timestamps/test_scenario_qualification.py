@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from scenario_qualification import validate_scenario
+from scenario_qualification import validate_scenario, verify_delivery_mapping
 
 
 def history():
@@ -48,6 +48,29 @@ class ScenarioQualificationTests(unittest.TestCase):
         records = history()
         records[-1]["native_seconds"] -= 0.1
         self.assertIn("measured_duration_incomplete", validate_scenario(records)["reasons"])
+
+    def test_delivery_clock_requires_origin_and_exact_boundary(self):
+        records = history()
+        for record in records:
+            record["clock_origin_seconds"] = 1000
+        deliveries = {
+            (record["frame_epoch"], record["frame_index"]):
+                {"st": 1000 + record["native_seconds"] + 0.01}
+            for record in records
+        }
+        self.assertIn("scenario_frame_ownership_gap", verify_delivery_mapping(records, deliveries))
+        for start, end in zip(records, records[1:]):
+            for frame in range(start["frame_index"], end["frame_index"]):
+                fraction = (frame - start["frame_index"]) / (end["frame_index"] - start["frame_index"])
+                deliveries[(1, frame)] = {"st": 1000 + start["native_seconds"] +
+                    fraction * (end["native_seconds"] - start["native_seconds"]) + 0.001}
+        self.assertEqual(verify_delivery_mapping(records, deliveries), [])
+        deliveries[(1, 300)]["st"] = 15.01
+        self.assertIn("scenario_delivery_clock_mismatch", verify_delivery_mapping(records, deliveries))
+        del deliveries[(1, 1500)]
+        self.assertIn("scenario_boundary_delivery_missing", verify_delivery_mapping(records, deliveries))
+        records[0]["clock_origin_seconds"] = 0
+        self.assertIn("delivery_clock_origin_unverified", verify_delivery_mapping(records, deliveries))
 
     def test_reversed_and_cross_epoch_frames_fail(self):
         for field, value in (("frame_index", 299), ("frame_epoch", 2)):
