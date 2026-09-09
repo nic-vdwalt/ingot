@@ -65,6 +65,15 @@ class ScenarioQualificationTests(unittest.TestCase):
         records[0]["measured_started"] = False
         self.assertIn("invalid_measured_start", validate_scenario(records)["reasons"])
 
+    def test_nonterminal_cooldown_cannot_close_measured_range(self):
+        records = history()
+        cooldown = dict(records[-1], terminal=False, terminal_outcome="")
+        records.insert(-1, cooldown)
+        records[-1].update(native_seconds=36, actual_elapsed=26, frame_index=1560)
+        result = validate_scenario(records)
+        self.assertIn("nonterminal_cooldown_boundary", result["reasons"])
+        self.assertEqual(result["ranges"], [])
+
     def test_terminal_and_duration_are_required(self):
         for records in (history()[:-1], history() + [copy.deepcopy(history()[-1])]):
             self.assertEqual(validate_scenario(records)["ranges"], [])
@@ -94,6 +103,13 @@ class ScenarioQualificationTests(unittest.TestCase):
         self.assertIn("scenario_boundary_delivery_missing", verify_delivery_mapping(records, deliveries))
         records[0]["clock_origin_seconds"] = 0
         self.assertIn("delivery_clock_origin_unverified", verify_delivery_mapping(records, deliveries))
+
+    def test_absolute_clock_sum_overflow_fails_closed(self):
+        records = history()
+        for record in records:
+            record.update(clock_origin_seconds=1e308, native_seconds=1e308)
+        reasons = verify_delivery_mapping(records, {})
+        self.assertIn("delivery_clock_origin_unverified", reasons)
 
     def test_reversed_and_cross_epoch_frames_fail(self):
         for field, value in (("frame_index", 299), ("frame_epoch", 2)):

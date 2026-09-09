@@ -106,6 +106,8 @@ def validate_scenario(records):
         phase = record.get("phase")
         if phase not in ("warmup", "measured", "cooldown"):
             reasons.add("invalid_scenario_phase")
+        if phase == "cooldown" and record.get("terminal") is not True:
+            reasons.add("nonterminal_cooldown_boundary")
         if phase == "measured" and measured_start is None:
             measured_start, measured_seconds = frame, seconds
         elif phase != "measured" and measured_start is not None:
@@ -142,6 +144,9 @@ def verify_delivery_mapping(records, deliveries):
             reasons.add("delivery_clock_origin_unverified")
             continue
         boundary = origin + seconds
+        if not finite_number(boundary):
+            reasons.add("delivery_clock_origin_unverified")
+            continue
         frame = (record.get("frame_epoch"), record.get("frame_index"))
         if not all(type(value) is int and value > 0 for value in frame):
             reasons.add("invalid_scenario_frame_mapping")

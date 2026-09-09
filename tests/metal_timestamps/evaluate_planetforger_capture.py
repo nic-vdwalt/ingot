@@ -124,7 +124,15 @@ def normalize_telemetry(record, errors):
             invalid(name)
             record[name] = {}
     fields(record.get("gh", {}), (*HEALTH_FIELDS, "ch"), unsigned, "gh")
-    fields(record.get("rl", {}), ("g", "r"), lambda value: isinstance(value, str), "rl")
+    if record.get("rt") == 1:
+        for key in ("sq", "fdd", "wf", "px", "pd", "pfd", "pdd", "eo"):
+            if key not in record:
+                invalid("record.missing." + key)
+        for key in HEALTH_FIELDS:
+            if key not in record.get("gh", {}):
+                invalid("gh.missing." + key)
+    fields(record.get("rl", {}), ("v",), unsigned32, "rl")
+    fields(record.get("rl", {}), ("s", "g", "r"), lambda value: isinstance(value, str), "rl")
     for name in ("gfd", "fd"):
         entries = record.get(name, [])
         record[name] = []
@@ -152,13 +160,19 @@ def normalize_telemetry(record, errors):
                 for key in numeric:
                     if key in entry and entry[key] < 0:
                         invalid(name + "." + key)
-                for key in ("v", "st", "gt", "pt", "hc", "rc", "aq", "en", "sb", "ps", "pw"):
+                for key in ("v", "st", "gt", "pt", "hc", "rc", "aq", "en", "sb", "ps", "pw",
+                            "su", "mg", "mp"):
                     if key not in entry:
                         invalid(name + ".missing." + key)
                 continue
             fields(entry, ("v",), lambda value: type(value) is bool, name)
             fields(entry, ("tg",), unsigned32, name)
             fields(entry, ("ms",), finite_number, name)
+            for key in ("v", "ms", "tg", "g"):
+                if key not in entry:
+                    invalid("gfd.missing." + key)
+            if "ms" in entry and entry["ms"] < 0:
+                invalid("gfd.ms")
             groups = entry.get("g", [])
             entry["g"] = []
             if not isinstance(groups, list):
@@ -170,6 +184,8 @@ def normalize_telemetry(record, errors):
                     continue
                 entry["g"].append(group)
                 fields(group, ("c",), unsigned32, "gfd.g")
+                if "c" not in group or group["c"] == 0:
+                    invalid("gfd.g.c")
                 if not finite_number(group.get("ms")) or group["ms"] < 0:
                     invalid("gfd.g.ms")
                     group.pop("ms", None)
@@ -434,12 +450,16 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         completion_high_water = max(completion_high_water, current_health.get("ch", 0))
         if record.get("rt") != 1:
             continue
-        if record.get("sq"):
+        if "sq" in record:
             sequences.append(record["sq"])
         scope = record.get("rl", {})
         reliability = scope.get("g", reliability)
         reliability_reason = scope.get("r", reliability_reason)
-        reliability_verified &= scope.get("g") == "reliable" and scope.get("r") == "completion_gated_metal_resolve"
+        reliability_verified &= (
+            scope.get("v") == 1 and scope.get("s") == "gpu_pass"
+            and scope.get("g") == "reliable"
+            and scope.get("r") == "completion_gated_metal_resolve"
+        )
         for frame in record.get("gfd", []):
             frame_identity = (frame.get("e", 0), frame.get("i", 0))
             if frame_identity in raw_identities:
@@ -649,6 +669,8 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         metadata = [record for record in recording_records if record.get("k") == "run"]
         if len(metadata) != 1 or type(metadata[0].get("v")) is not int or metadata[0]["v"] not in (1, 2):
             recording_protocol_reasons.append("recording_metadata_invalid")
+        elif not recording_records or recording_records[0].get("k") != "run":
+            recording_protocol_reasons.append("recording_metadata_not_first")
         for record in recording_records:
             recording_protocol_reasons.extend(recording_field_errors(record))
             if record.get("k") == "investigation":
@@ -703,10 +725,19 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         qualification_reasons.append("recording_completion_or_health_failed")
     if not reliability_verified or not sequences:
         qualification_reasons.append("full_capture_reliability_unverified")
+    if sequences and (sequences[0] != 1 or any(
+        current != previous + 1 for previous, current in zip(sequences, sequences[1:])
+    )):
+        qualification_reasons.append("raw_sequence_origin_or_order_invalid")
     if recording is None:
         qualification_reasons.append("recording_completion_unverified")
     if not delivery_frames:
         qualification_reasons.append("no_measured_deliveries")
+    if frame_owned and any(
+        delivery.get("v") != 7 or delivery.get("su") is not True
+        for delivery in delivery_frames_by_identity.values()
+    ):
+        qualification_reasons.append("measured_delivery_validity_incomplete")
     for identity in exact_joined:
         groups = raw_frames[identity].get("g", [])
         names = [group.get("n") for group in groups]

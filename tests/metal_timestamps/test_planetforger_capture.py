@@ -69,13 +69,17 @@ def telemetry(groups=None, health=None, missing=False):
     return {
         "rt": 1,
         "sq": 1,
+        "fdd": 0, "wf": 0, "px": 0, "pd": 0, "pfd": 0, "pdd": 0, "eo": 0,
         "gfd": [{
             "e": 1,
             "i": 1,
             "v": True,
+            "ms": len(groups),
+            "tg": 0,
             "g": [{"n": name, "ms": 1, "c": 1} for name in groups],
         }],
-        "gh": health or {},
+        "gh": {**dict.fromkeys(("o", "s", "q", "m", "sf", "rf", "g", "t", "sc", "cr"), 0),
+               **(health or {})},
         "fd": [{
             "e": 1,
             "i": 1,
@@ -91,6 +95,7 @@ def telemetry(groups=None, health=None, missing=False):
             "gt": 10.009,
             "gc": 9,
             "pt": 10.01,
+            "su": True,
             "mg": missing,
             "mp": False,
         }],
@@ -113,6 +118,57 @@ class PlanetForgerCaptureTests(unittest.TestCase):
                 scenario_path,
                 recording_path=recording_path if recording is not None else None,
             )
+
+    def test_missing_health_evidence_is_unavailable_not_zero(self):
+        for container, field in (("gh", "o"), ("gh", "cr"),
+                                 ("fd", "su"), ("fd", "mg"), ("fd", "mp")):
+            with self.subTest(container=container, field=field):
+                record = telemetry()
+                target = record[container][0] if container == "fd" else record[container]
+                del target[field]
+                result = self.evaluate([record])
+                self.assertFalse(result["qualified"])
+                self.assertIn("telemetry_schema_invalid:" + container + ".missing." + field,
+                              result["qualification_reasons"])
+                self.assertEqual(result["joined_frames"], 1)
+
+    def test_missing_transport_evidence_rejects_qualification(self):
+        for field in ("sq", "fdd", "wf", "px", "pd", "pfd", "pdd", "eo"):
+            with self.subTest(field=field):
+                record = telemetry()
+                del record[field]
+                result = self.evaluate([record])
+                self.assertFalse(result["qualified"])
+                self.assertIn("telemetry_schema_invalid:record.missing." + field,
+                              result["qualification_reasons"])
+                self.assertEqual(result["joined_frames"], 1)
+
+    def test_gpu_groups_require_positive_sample_counts(self):
+        for count in (None, 0):
+            with self.subTest(count=count):
+                record = telemetry()
+                group = record["gfd"][0]["g"][0]
+                if count is None:
+                    del group["c"]
+                else:
+                    group["c"] = count
+                result = self.evaluate([record])
+                self.assertFalse(result["qualified"])
+                self.assertIn("telemetry_schema_invalid:gfd.g.c", result["qualification_reasons"])
+                self.assertEqual(result["joined_frames"], 1)
+
+    def test_missing_gpu_evidence_rejects_qualification(self):
+        for field in ("v", "ms", "tg", "g"):
+            with self.subTest(field=field):
+                record = telemetry()
+                del record["gfd"][0][field]
+                result = self.evaluate([record])
+                self.assertFalse(result["qualified"])
+                self.assertIn("telemetry_schema_invalid:gfd.missing." + field,
+                              result["qualification_reasons"])
+                self.assertEqual(result["joined_frames"], 1)
+                if field == "ms":
+                    self.assertIsNone(result["exact_gpu_ms"]["p50"])
 
     def test_summary_gpu_health_rejects_capture(self):
         for field in ("o", "s", "q", "m", "sf", "rf", "g", "t", "sc", "cr"):
@@ -347,7 +403,8 @@ class PlanetForgerCaptureTests(unittest.TestCase):
             seconds = 10 + (frame - 1) * 5 / 299 if frame < 300 else 15 + (frame - 300) / 60
             record = telemetry()
             record["sq"] = frame
-            record["rl"] = {"g": "reliable", "r": "completion_gated_metal_resolve"}
+            record["rl"] = {"v": 1, "s": "gpu_pass", "g": "reliable",
+                            "r": "completion_gated_metal_resolve"}
             record["gfd"][0]["i"] = frame
             record["fd"][0].update(i=frame, st=1000 + seconds + 0.001,
                                    gt=1000 + seconds + 0.009, pt=1000 + seconds + 0.01)
@@ -399,6 +456,47 @@ class PlanetForgerCaptureTests(unittest.TestCase):
                 self.assertFalse(result["qualified"])
                 self.assertIn(reason, result["qualification_reasons"])
                 self.assertEqual(result["joined_frames"], 1200)
+        for container, field, reason in (
+            (records[0], "pd", "record.missing.pd"),
+            (records[0]["gh"], "o", "gh.missing.o"),
+            (records[300]["fd"][0], "mg", "fd.missing.mg"),
+            (records[300]["gfd"][0], "ms", "gfd.missing.ms"),
+            (records[1499]["fd"][0], "mp", "fd.missing.mp"),
+        ):
+            with self.subTest(missing=reason):
+                previous = container.pop(field)
+                try:
+                    result = self.evaluate(records, scenarios, recording)
+                    self.assertFalse(result["qualified"])
+                    self.assertIn("telemetry_schema_invalid:" + reason,
+                                  result["qualification_reasons"])
+                    self.assertEqual(result["joined_frames"], 1200)
+                finally:
+                    container[field] = previous
+        for field, value in (("v", 3), ("v", 6), ("v", 0), ("su", False)):
+            with self.subTest(validity_field=field, value=value):
+                delivery = records[300]["fd"][0]
+                previous = delivery[field]
+                try:
+                    delivery[field] = value
+                    result = self.evaluate(records, scenarios, recording)
+                    self.assertFalse(result["qualified"])
+                    self.assertIn("measured_delivery_validity_incomplete",
+                                  result["qualification_reasons"])
+                finally:
+                    delivery[field] = previous
+        for field, value in (("v", 0), ("v", 2), ("v", True), ("s", "other")):
+            with self.subTest(scope_field=field, value=value):
+                scope = records[0]["rl"]
+                previous = scope[field]
+                try:
+                    scope[field] = value
+                    result = self.evaluate(records, scenarios, recording)
+                    self.assertFalse(result["qualified"])
+                    self.assertIn("full_capture_reliability_unverified",
+                                  result["qualification_reasons"])
+                finally:
+                    scope[field] = previous
         for index in (0, 300, 1499):
             records[index]["fd"][0]["mg"] = True
             result = self.evaluate(records, scenarios, recording)
@@ -512,6 +610,22 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         ]
         self.assertFalse(self.evaluate([telemetry()], recording=unhealthy)["accepted"])
 
+    def test_raw_sequence_requires_origin_and_publication_order(self):
+        for sequence in ((0, 1), (2, 3), (1, 3, 2)):
+            with self.subTest(sequence=sequence):
+                records = []
+                for index, number in enumerate(sequence, 1):
+                    record = telemetry()
+                    record["sq"] = number
+                    record["gfd"][0]["i"] = index
+                    record["fd"][0]["i"] = index
+                    records.append(record)
+                result = self.evaluate(records)
+                self.assertFalse(result["qualified"])
+                self.assertIn("raw_sequence_origin_or_order_invalid",
+                              result["qualification_reasons"])
+                self.assertEqual(result["joined_frames"], len(sequence))
+
     def test_rejects_incomplete_recording(self):
         for recording in ([], [{}], [None], [{"k": "telemetry_health"}]):
             result = self.evaluate([telemetry()], recording=recording)
@@ -529,7 +643,7 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         self.assertEqual(result["present_call_ms"]["p50"], 4)
         self.assertEqual(result["pacer_wait_ms"]["p50"], 5)
         self.assertEqual(result["queue_completion_ms"]["p50"], 9)
-        self.assertEqual(result["exact_gpu_ms"]["p50"], None)
+        self.assertEqual(result["exact_gpu_ms"]["p50"], 4)
         self.assertEqual(result["gpu_groups_ms"]["window"]["p50"], 1)
 
     def test_measured_phase_filters_gpu_frames_and_groups_by_delivery_identity(self):
