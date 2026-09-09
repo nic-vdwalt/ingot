@@ -8,7 +8,12 @@ IDENTITY_FIELDS = (
 
 
 def finite_number(value):
-    return type(value) in (int, float) and math.isfinite(value)
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def validate_scenario(records):
@@ -20,7 +25,8 @@ def validate_scenario(records):
     identity = {key: first.get(key) for key in IDENTITY_FIELDS}
     if any(value is None or value == "" for value in identity.values()):
         reasons.add("scenario_identity_incomplete")
-    if any(record.get(key) != value for record in records for key, value in identity.items()):
+    if any(type(record.get(key)) is not type(value) or record.get(key) != value
+           for record in records for key, value in identity.items()):
         reasons.add("scenario_identity_changed")
     if first.get("scenario") not in ("ocean", "terrain-edit", "streaming"):
         reasons.add("unsupported_scenario")
@@ -55,7 +61,7 @@ def validate_scenario(records):
         if type(record.get("v")) is not int or record.get("v") != 2 or record.get("clock_domain") != "context_monotonic_seconds" or type(record.get("clock_revision")) is not int or record.get("clock_revision") != 1:
             reasons.add("scenario_frame_clock_mapping_unverified")
         frame = (record.get("frame_epoch"), record.get("frame_index"))
-        mapping_valid = all(type(value) is int and value > 0 for value in frame)
+        mapping_valid = all(type(value) is int and 0 < value <= 2**64 - 1 for value in frame)
         if not mapping_valid or record.get("frame_mapping_valid") is not True or record.get("frame_boundary") != "before_game_draw":
             reasons.add("invalid_scenario_frame_mapping")
         if mapping_valid and previous_frame is not None:
@@ -89,7 +95,7 @@ def validate_scenario(records):
                         reasons.add("measured_start_changed")
                     if record.get("phase") not in ("measured", "cooldown"):
                         reasons.add("scenario_phase_time_mismatch")
-                elif started is not False or start_time != 0 or measurement_origin is not None:
+                elif started is not False or not finite_number(start_time) or start_time != 0 or measurement_origin is not None:
                     reasons.add("invalid_measured_start")
                 elif record.get("phase") != "warmup" or elapsed >= warmup:
                     reasons.add("scenario_phase_time_mismatch")

@@ -17,6 +17,13 @@ package gfx
 @(require) import wgglue "vendor:wgpu/glfwglue"
 
 when !INGOT_GFX_SDL3 {
+	when ODIN_OS == .Darwin {
+		foreign import platform_quartz "system:QuartzCore.framework"
+		foreign platform_quartz {
+			@(link_name = "CACurrentMediaTime")
+			platform_media_time :: proc "c" () -> f64 ---
+		}
+	}
 
 	// Native cursor handles. Kept as a package global (not in the shared Input
 	// struct) so Input carries no glfw type.
@@ -25,8 +32,6 @@ when !INGOT_GFX_SDL3 {
 	@(private)
 	glfw_live_windows: u32
 
-	// Monotonic clock epoch for platform_now(); the caller-side offset cancels, so
-	// this only needs to be a stable monotonic base.
 	@(private)
 	_mono_epoch: time.Tick
 
@@ -236,11 +241,13 @@ when !INGOT_GFX_SDL3 {
 		}
 	}
 
-	// platform_now returns a monotonic time in seconds. gfx stores the value at
-	// InitWindow and subtracts it, so only monotonicity matters.
 	@(private)
 	platform_now :: proc() -> f64 {
-		return time.duration_seconds(time.tick_since(_mono_epoch))
+		when ODIN_OS == .Darwin {
+			return platform_media_time()
+		} else {
+			return time.duration_seconds(time.tick_since(_mono_epoch))
+		}
 	}
 
 	@(private)

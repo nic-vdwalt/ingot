@@ -53,6 +53,18 @@ class ScenarioQualificationTests(unittest.TestCase):
                 self.assertTrue(result["reasons"])
                 self.assertEqual(result["ranges"], [])
 
+    def test_numeric_equality_cannot_hide_wire_type_changes(self):
+        for field, value in (("render_scale", True), ("width", 1280.0),
+                             ("requested_warmup", 5.0), ("frame_index", 2**64),
+                             ("frame_epoch", 2**64)):
+            with self.subTest(field=field):
+                records = history()
+                records[1][field] = value
+                self.assertEqual(validate_scenario(records)["ranges"], [])
+        records = history()
+        records[0]["measured_started"] = False
+        self.assertIn("invalid_measured_start", validate_scenario(records)["reasons"])
+
     def test_terminal_and_duration_are_required(self):
         for records in (history()[:-1], history() + [copy.deepcopy(history()[-1])]):
             self.assertEqual(validate_scenario(records)["ranges"], [])

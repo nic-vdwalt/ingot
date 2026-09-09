@@ -6,15 +6,31 @@ import "core:testing"
 
 frame_owner_test_context: Context
 
+when ODIN_OS == .Darwin {
+	foreign import clock_test_quartz "system:QuartzCore.framework"
+	foreign clock_test_quartz {
+		@(link_name = "CACurrentMediaTime")
+		clock_test_media_time :: proc "c" () -> f64 ---
+	}
+}
+
 @(test)
 context_clock_uses_process_independent_tick_origin :: proc(t: ^testing.T) {
 	when !INGOT_GFX_SDL3 {
 		ctx := new(Context)
 		defer free(ctx)
 		origin: time.Tick
-		ctx.start_time_s = time.duration_seconds(time.tick_since(origin))
+		before := time.duration_seconds(time.tick_since(origin))
+		when ODIN_OS == .Darwin {
+			before = clock_test_media_time()
+		}
+		ctx.start_time_s = before
 		elapsed := context_time(ctx)
-		upper := time.duration_seconds(time.tick_since(origin)) - ctx.start_time_s
+		after := time.duration_seconds(time.tick_since(origin))
+		when ODIN_OS == .Darwin {
+			after = clock_test_media_time()
+		}
+		upper := after - ctx.start_time_s
 		testing.expect(t, elapsed >= 0)
 		testing.expect(t, elapsed <= upper)
 	}

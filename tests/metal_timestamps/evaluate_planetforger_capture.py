@@ -100,6 +100,189 @@ def distribution(values):
     }
 
 
+def normalize_telemetry(record, errors):
+    def invalid(path):
+        errors.append("telemetry_schema_invalid:" + path)
+
+    def unsigned(value):
+        return type(value) is int and 0 <= value <= 2**64 - 1
+
+    def fields(value, names, predicate, path):
+        for name in names:
+            if name in value and not predicate(value[name]):
+                invalid(path + "." + name)
+                del value[name]
+
+    fields(record, ("rt", "sq", "fdd", "wf", "px"), unsigned, "record")
+    for name in ("gh", "rl"):
+        if not isinstance(record.get(name, {}), dict):
+            invalid(name)
+            record[name] = {}
+    fields(record.get("gh", {}), (*HEALTH_FIELDS, "ch"), unsigned, "gh")
+    fields(record.get("rl", {}), ("g", "r"), lambda value: isinstance(value, str), "rl")
+    for name in ("gfd", "fd"):
+        entries = record.get(name, [])
+        record[name] = []
+        if not isinstance(entries, list):
+            invalid(name)
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                invalid(name + ".entry")
+                continue
+            if any(not unsigned(entry.get(key)) or entry[key] == 0 for key in ("e", "i")):
+                invalid(name + ".identity")
+                continue
+            record[name].append(entry)
+            if name == "fd":
+                fields(entry, ("v", "bv", *PRESSURE_FIELDS.values()), unsigned, name)
+                fields(entry, ("mg", "mp"), lambda value: type(value) is bool, name)
+                numeric = ("st", "gt", "pt", "gc", "hc", "rc", "aq", "en", "sb",
+                           "ps", "pw", "rdw", *BOUNDARY_CPU_FIELDS.values(),
+                           *SUBMISSION_CALL_FIELDS.values())
+                fields(entry, numeric, finite_number, name)
+                for key in numeric:
+                    if key in entry and entry[key] < 0:
+                        invalid(name + "." + key)
+                for key in ("v", "st", "gt", "pt", "hc", "rc", "aq", "en", "sb", "ps", "pw"):
+                    if key not in entry:
+                        invalid(name + ".missing." + key)
+                continue
+            fields(entry, ("v",), lambda value: type(value) is bool, name)
+            fields(entry, ("ms",), finite_number, name)
+            groups = entry.get("g", [])
+            entry["g"] = []
+            if not isinstance(groups, list):
+                invalid("gfd.g")
+                continue
+            for group in groups:
+                if not isinstance(group, dict) or not isinstance(group.get("n"), str):
+                    invalid("gfd.g.entry")
+                    continue
+                entry["g"].append(group)
+                if not finite_number(group.get("ms")) or group["ms"] < 0:
+                    invalid("gfd.g.ms")
+                    group.pop("ms", None)
+    return record
+
+
+def investigation_field_errors(record):
+    strings = ("run_id", "process_start", "executable_id", "scenario", "seed", "quality",
+               "present_mode", "backend", "hardware", "os", "compiler", "optimization",
+               "cache_policy", "terrain_variant", "terrain_sha256", "terrain_validation",
+               "opaque_method", "phase", "terminal_outcome", "frame_boundary", "clock_domain")
+    booleans = ("terrain_artifact_saved", "terminal", "visibility_interrupted",
+                "frame_mapping_valid", "publication_failed", "measurement_started",
+                "minimized", "hidden", "occluded")
+    numbers = ("render_scale", "refresh_hz", "native_seconds", "clock_origin_seconds",
+               "requested_warmup", "requested_duration", "actual_elapsed", "measured_started")
+    validators = {key: lambda value: isinstance(value, str) for key in strings}
+    validators.update({key: lambda value: type(value) is bool for key in booleans})
+    validators.update({key: finite_number for key in numbers})
+    validators.update({key: lambda value: type(value) is int and -(2**31) <= value < 2**31
+                       for key in ("width", "height")})
+    validators.update({key: lambda value: type(value) is int and 0 <= value < 2**64
+                       for key in ("frame_epoch", "frame_index")})
+    validators["clock_revision"] = lambda value: type(value) is int and 0 <= value < 2**32
+    validators.update({key: lambda value: isinstance(value, list) and len(value) == 3
+                       and all(finite_number(item) and abs(item) <= 3.4028234663852886e38
+                               for item in value)
+                       for key in ("camera_position", "camera_target")})
+    return ["recording_investigation_field_invalid:" + key
+            for key, validator in validators.items() if key in record and not validator(record[key])]
+
+
+def recording_telemetry_errors(value):
+    unsigned64 = lambda item: type(item) is int and 0 <= item < 2**64
+    unsigned32 = lambda item: type(item) is int and 0 <= item < 2**32
+    unsigned8 = lambda item: type(item) is int and 0 <= item < 256
+    boolean = lambda item: type(item) is bool
+    string = lambda item: isinstance(item, str)
+    schemas = {}
+
+    def schema(name, groups):
+        schemas[name] = {key: predicate for keys, predicate in groups for key in keys.split()}
+
+    schema("root", [
+        ("rt om odm sbc hz", unsigned32),
+        ("sq wf px i fdd d di vd rp mc", unsigned64),
+        ("fl fm fp f50 f95 f99 gl gm gp bt mr pr aq en sb ps fc", finite_number),
+        ("gv", boolean), ("grr", string),
+        ("grl", lambda item: item in ("Unknown", "Reliable", "Unreliable", "Unsupported")
+         if isinstance(item, str) else unsigned8(item)),
+        ("rs", lambda item: finite_number(item) and abs(item) <= 3.4028234663852886e38),
+        ("ww wh tw th", lambda item: type(item) is int and -(2**31) <= item < 2**31),
+    ])
+    schema("gh", [("o s q m sf rf g t sc cr ie ii ib it ign isu", unsigned64),
+                  ("co ch ip is iqb iqe", unsigned32), ("iv", boolean), ("il", string)])
+    schema("rl", [("v", unsigned32), ("s g r", string)])
+    schema("gfd", [("e i", unsigned64), ("ms", finite_number),
+                   ("v", boolean), ("tg", unsigned32)])
+    schema("g", [("n", string), ("ms", finite_number), ("c", unsigned32)])
+    schema("gg", [("n", string), ("l m k", finite_number), ("c", unsigned32)])
+    schema("p", [("n", string), ("l m k", finite_number)])
+    schema("fd", [
+        ("e i qoa", unsigned64), ("su mg mp", boolean), ("v", unsigned8),
+        ("bv qbp qap qas qhw iuc ifc isc fuc ffc fsc", unsigned32),
+        ("rc rdw hc aq en sb ps pw st gt gc pt pi pre sta post flu upl cln inp fti "
+         "hrl hrf hdr hpr hcu hun ium ifm ism fum ffm fsm", finite_number),
+    ])
+    errors = []
+    pending = [("root", value, "y")]
+    while pending:
+        name, item, path = pending.pop()
+        if not isinstance(item, dict):
+            errors.append("recording_field_invalid:tel." + path)
+            continue
+        for key, predicate in schemas[name].items():
+            if key in item and not predicate(item[key]):
+                errors.append("recording_field_invalid:tel." + path + "." + key)
+        children = ("gh", "rl", "gfd", "fd", "gg", "p") if name == "root" else (
+            ("g",) if name == "gfd" else ())
+        for key in children:
+            if key not in item:
+                continue
+            child_path = path + "." + key
+            if key in ("gh", "rl"):
+                pending.append((key, item[key], child_path))
+            elif not isinstance(item[key], list):
+                errors.append("recording_field_invalid:tel." + child_path)
+            else:
+                pending.extend((key, child, child_path + "." + str(index))
+                               for index, child in enumerate(item[key]))
+    return errors
+
+
+def recording_field_errors(record):
+    string_value = lambda value: isinstance(value, str)
+    boolean_value = lambda value: type(value) is bool
+    integer_value = lambda value: type(value) is int and -(2**63) <= value < 2**63
+    float32_value = lambda value: finite_number(value) and abs(value) <= 3.4028234663852886e38
+    schemas = {
+        "run": {"t": finite_number, "m": string_value, "p": integer_value,
+                "x": string_value, "i": finite_number},
+        "sample": {**{key: float32_value for key in ("r", "f", "v", "c", "su", "st", "g")},
+                   "t": finite_number,
+                   "q": lambda value: type(value) is int and 0 <= value < 256},
+        "phase": {"t": finite_number, "name": string_value},
+        "activation": {"t": finite_number, "attempt": integer_value,
+                       "requested": boolean_value, "known": boolean_value},
+        "end": {"t": finite_number, "r": string_value, "e": boolean_value,
+                "c": lambda value: type(value) is int and -(2**31) <= value < 2**31,
+                "s": integer_value, "z": boolean_value},
+        "tel": {"t": finite_number, "y": lambda value: isinstance(value, dict)},
+    }
+    kind = record.get("k")
+    if not isinstance(kind, str):
+        return ["recording_kind_invalid"]
+    errors = ["recording_field_invalid:" + kind + "." + key
+              for key, predicate in schemas.get(kind, {}).items()
+              if key in record and not predicate(record[key])]
+    if kind == "tel" and isinstance(record.get("y"), dict):
+        errors.extend(recording_telemetry_errors(record["y"]))
+    return errors
+
+
 def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording_path=None):
     telemetry_path = Path(telemetry_path)
     scenario_path = Path(scenario_path)
@@ -113,7 +296,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                 record = json.loads(line)
                 if not isinstance(record, dict):
                     raise ValueError("telemetry record is not an object")
-                records.append(record)
+                records.append(normalize_telemetry(record, telemetry_errors))
             except ValueError:
                 telemetry_errors.append("malformed_telemetry_record")
     except (OSError, UnicodeError):
@@ -140,12 +323,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     for record in scenario_records:
         native_seconds = record.get("native_seconds")
         phase = record.get("phase")
-        if (
-            isinstance(native_seconds, bool)
-            or not isinstance(native_seconds, (int, float))
-            or not math.isfinite(native_seconds)
-            or native_seconds < 0
-        ):
+        if not finite_number(native_seconds) or native_seconds < 0:
             timestamp_errors.append("invalid_scenario_timestamp")
             continue
         if previous_seconds is not None and native_seconds < previous_seconds:
@@ -216,6 +394,9 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     reversed_gpu_timestamps = 0
     reversed_present_timestamps = 0
     refresh_hz = scenario_records[0].get("refresh_hz", 0)
+    if not finite_number(refresh_hz) or refresh_hz < 0:
+        identity_errors.append("invalid_scenario_refresh_rate")
+        refresh_hz = 0
     reliability = None
     reliability_reason = None
     reliability_verified = True
@@ -302,7 +483,8 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                 if not required.issubset(delivery):
                     incomplete_boundary_frames += 1
                 else:
-                    valid_detail = True
+                    valid_detail = all(finite_number(delivery[field]) and delivery[field] >= 0
+                                       for field in required)
                     detail_fields = {**BOUNDARY_CPU_FIELDS, **PRESSURE_FIELDS, **SUBMISSION_CALL_FIELDS}
                     if boundary_version == 3:
                         detail_fields["renderer_draw"] = "rdw"
@@ -347,7 +529,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             elif boundary_version != 0:
                 unknown_boundary_frames += 1
             if delivery.get("v", 0) & 2 and submit_timestamp > 0 and gpu_timestamp >= submit_timestamp:
-                if delivery.get("gc", 0) >= 0:
+                if finite_number(delivery.get("gc")) and delivery["gc"] >= 0:
                     queue_completion_ms.append(delivery["gc"])
             if delivery.get("v", 0) & 4 and present_timestamp > 0 and (
                 submit_timestamp <= 0 or present_timestamp >= submit_timestamp
@@ -381,7 +563,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             milliseconds = group.get("ms")
             if name in group_counts:
                 group_counts[name] += 1
-            if isinstance(name, str) and isinstance(milliseconds, (int, float)) and milliseconds >= 0:
+            if isinstance(name, str) and finite_number(milliseconds) and milliseconds >= 0:
                 gpu_groups.setdefault(name, []).append(milliseconds)
     failures = {
         **health,
@@ -409,10 +591,24 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         binaries[name] = {"path": str(path), "sha256": sha256(path)}
     recording = None
     recording_healthy = True
+    recording_protocol_reasons = []
     if recording_path:
         recording_path = Path(recording_path)
         try:
-            recording_records = [json.loads(line) for line in recording_path.read_text().splitlines() if line.strip()]
+            with recording_path.open("rb") as handle:
+                recording_bytes = handle.read(16 * 1024 * 1024 + 1)
+            if len(recording_bytes) > 16 * 1024 * 1024:
+                recording_protocol_reasons.append("recording_size_limit_exceeded")
+                raise ValueError("recording exceeds native size limit")
+            if any(len(line) > 64 * 1024 for line in recording_bytes.split(b"\n")):
+                recording_protocol_reasons.append("recording_line_limit_exceeded")
+                raise ValueError("recording exceeds native line limit")
+            recording_text = recording_bytes.decode("utf-8")
+            if not recording_text.endswith("\n"):
+                recording_protocol_reasons.append("recording_unterminated_tail")
+            if any(not line.strip() for line in recording_text.splitlines()):
+                recording_protocol_reasons.append("recording_blank_record")
+            recording_records = [json.loads(line) for line in recording_text.splitlines() if line.strip()]
             if any(not isinstance(record, dict) for record in recording_records):
                 recording_records = []
         except (OSError, UnicodeError, ValueError):
@@ -420,15 +616,36 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         health_records = [record for record in recording_records if record.get("k") == "telemetry_health"]
         end_records = [record for record in recording_records if record.get("k") == "end"]
         recording_complete = len(health_records) == 1 and len(end_records) == 1
+        metadata = [record for record in recording_records if record.get("k") == "run"]
+        if len(metadata) != 1 or type(metadata[0].get("v")) is not int or metadata[0]["v"] not in (1, 2):
+            recording_protocol_reasons.append("recording_metadata_invalid")
+        for record in recording_records:
+            recording_protocol_reasons.extend(recording_field_errors(record))
+            if record.get("k") == "investigation":
+                recording_protocol_reasons.extend(investigation_field_errors(record))
+            if record.get("k") == "investigation" and (
+                type(record.get("v")) is not int or record["v"] not in (1, 2)
+            ):
+                recording_protocol_reasons.append("recording_investigation_version_unsupported")
         recording_health = health_records[0] if health_records else {}
         terminal = end_records[0] if end_records else {}
+        integer_fields = ("invalid_lines", "parse_errors", "resets", "read_errors",
+                          "pending_bytes", "startup_absent")
+        boolean_fields = ("discarding", "unfinished_tail", "drain_exhausted")
+        if any(type(recording_health.get(field)) is not int
+               or not 0 <= recording_health[field] < 2**(63 if field == "pending_bytes" else 64)
+               for field in integer_fields) or any(
+            type(recording_health.get(field)) is not bool for field in boolean_fields
+        ):
+            recording_protocol_reasons.append("recording_health_fields_invalid")
+        if type(terminal.get("c")) is not int:
+            recording_protocol_reasons.append("recording_exit_code_invalid")
         recording_failures = {
             field: recording_health.get(field, 0)
             for field in ("invalid_lines", "parse_errors", "resets", "read_errors", "pending_bytes")
         }
-        recording_failures["discarding"] = int(recording_health.get("discarding", False))
-        recording_failures["unfinished_tail"] = int(recording_health.get("unfinished_tail", False))
-        recording_failures["drain_exhausted"] = int(recording_health.get("drain_exhausted", False))
+        for field in boolean_fields:
+            recording_failures[field] = recording_health.get(field, False)
         recording_healthy = (
             recording_complete
             and recording_records[-1] == terminal
@@ -448,6 +665,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     accepted = healthy and complete_groups and recording_healthy and scenario_error is None and not identity_errors
     qualification_reasons = [] if frame_owned else ["scenario_frame_clock_mapping_unverified"]
     qualification_reasons.extend(telemetry_errors)
+    qualification_reasons.extend(sorted(set(recording_protocol_reasons)))
     if not reliability_verified or not sequences:
         qualification_reasons.append("full_capture_reliability_unverified")
     if recording is None:
@@ -484,7 +702,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     if not accepted:
         qualification_reasons.append("legacy_analysis_checks_failed")
     exact_gpu_ms = [raw_frames[identity].get("ms") for identity in exact_joined]
-    exact_gpu_ms = [value for value in exact_gpu_ms if isinstance(value, (int, float)) and value >= 0]
+    exact_gpu_ms = [value for value in exact_gpu_ms if finite_number(value) and value >= 0]
     long_frames = [item for item in classifications if item["host_ms"] > 9.167]
     acquire_frames = [item for item in classifications if item["acquire_ms"] > 1]
     host_p95 = percentile([item["host_ms"] for item in classifications], 0.95)

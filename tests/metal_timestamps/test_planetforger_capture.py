@@ -105,12 +105,169 @@ class PlanetForgerCaptureTests(unittest.TestCase):
             telemetry_path.write_text("\n".join(json.dumps(record) for record in records))
             scenario_path.write_text("\n".join(json.dumps(record) for record in scenarios or [IDENTITY]))
             if recording is not None:
-                recording_path.write_text("\n".join(json.dumps(record) for record in recording))
+                recording_path.write_text("\n".join(json.dumps(record) for record in recording) + "\n")
             return evaluate_capture(
                 telemetry_path,
                 scenario_path,
                 recording_path=recording_path if recording is not None else None,
             )
+
+    def test_malformed_nested_telemetry_preserves_other_reliability_evidence(self):
+        mutations = [
+            ((name,), value)
+            for name in ("gh", "rl", "gfd", "fd")
+            for value in (False, 7, "invalid")
+        ]
+        mutations += [
+            ((name, 0), value)
+            for name in ("gfd", "fd") for value in (None, [], False)
+        ]
+        mutations += [
+            ((name, 0, key), value)
+            for name in ("gfd", "fd") for key in ("e", "i")
+            for value in ([], {}, True, 0, -1, 2**64)
+        ]
+        mutations += [
+            (("gfd", 0, "g"), {}),
+            (("gfd", 0, "g", 0), False),
+            (("gfd", 0, "g", 0, "n"), []),
+            (("gfd", 0, "g", 0, "ms"), None),
+            (("gfd", 0, "g", 0, "ms"), float("nan")),
+            (("gfd", 0, "g", 0, "ms"), True),
+            (("fd", 0, "hc"), {}),
+            (("fd", 0, "gc"), float("inf")),
+            (("fd", 0, "v"), []),
+            (("fd", 0, "bv"), {}),
+            (("fd", 0, "mg"), []),
+            (("gh", "q"), {}),
+            (("sq",), []),
+        ]
+        for path, value in mutations:
+            with self.subTest(path=path, value=value):
+                malformed = telemetry()
+                target = malformed
+                for key in path[:-1]:
+                    target = target[key]
+                target[path[-1]] = value
+                retained = telemetry(missing=True)
+                retained["sq"] = 2
+                retained["gfd"][0]["i"] = 2
+                retained["fd"][0]["i"] = 2
+                result = self.evaluate([malformed, retained])
+                self.assertFalse(result["qualified"])
+                self.assertTrue(any(reason.startswith("telemetry_schema_invalid:")
+                                    for reason in result["qualification_reasons"]))
+                self.assertGreaterEqual(result["joined_frames"], 1)
+                self.assertGreaterEqual(result["failures"]["missing_gpu_callbacks"], 1)
+
+    def test_recording_investigation_rejects_malformed_typed_fields(self):
+        for field, value in (
+            ("frame_index", True), ("frame_epoch", 2**64), ("width", 2**31),
+            ("clock_revision", -1), ("publication_failed", []), ("native_seconds", False),
+            ("clock_origin_seconds", float("nan")), ("seed", 7),
+            ("camera_position", [1, 2]), ("camera_target", [0, True, 0]),
+            ("camera_position", [0, 1e100, 0]),
+        ):
+            with self.subTest(field=field, value=value):
+                result = self.evaluate([telemetry()], recording=[
+                    {"k": "run", "v": 2},
+                    {"k": "investigation", "v": 2, field: value},
+                    {"k": "telemetry_health", "invalid_lines": 0},
+                    {"k": "end", "e": True, "c": 0, "z": False},
+                ])
+                self.assertFalse(result["qualified"])
+                self.assertIn("recording_investigation_field_invalid:" + field,
+                              result["qualification_reasons"])
+
+    def test_recording_recognized_fields_reject_wrong_wire_types(self):
+        cases = (
+            ("run", "p", True), ("run", "i", []), ("run", "m", 7),
+            ("sample", "q", 256), ("sample", "r", 1e100),
+            ("sample", "v", False), ("sample", "t", float("nan")),
+            ("phase", "name", {}), ("activation", "attempt", False),
+            ("activation", "known", 1), ("end", "c", 2**31),
+            ("end", "s", []), ("end", "e", 1), ("tel", "y", []),
+        )
+        for kind, field, value in cases:
+            with self.subTest(kind=kind, field=field):
+                record = {"k": kind, "v": 2, field: value}
+                result = self.evaluate([telemetry()], recording=[record])
+                self.assertFalse(result["qualified"])
+                self.assertIn("recording_field_invalid:" + kind + "." + field,
+                              result["qualification_reasons"])
+
+    def test_recording_nested_telemetry_wire_types(self):
+        cases = (
+            ({"rt": 2**32}, "rt"), ({"sq": True}, "sq"),
+            ({"gh": []}, "gh"), ({"gh": {"co": 2**32}}, "gh.co"),
+            ({"gh": {"iv": 1}}, "gh.iv"), ({"rl": {"v": -1}}, "rl.v"),
+            ({"fd": [{"v": 256}]}, "fd.0.v"),
+            ({"fd": [{"su": 1}]}, "fd.0.su"),
+            ({"fd": [{"qoa": 2**64}]}, "fd.0.qoa"),
+            ({"gfd": [{"tg": -1}]}, "gfd.0.tg"),
+            ({"gfd": [{"g": [{"c": True}]}]}, "gfd.0.g.0.c"),
+            ({"gg": [{"n": []}]}, "gg.0.n"),
+            ({"p": [{"l": 10**400}]}, "p.0.l"),
+            ({"fl": 10**400}, "fl"), ({"rs": 1e100}, "rs"),
+            ({"ww": 2**31}, "ww"), ({"grl": "invalid"}, "grl"),
+        )
+        for value, path in cases:
+            with self.subTest(path=path):
+                result = self.evaluate([telemetry(missing=True)], recording=[
+                    {"k": "tel", "y": value},
+                ])
+                self.assertFalse(result["qualified"])
+                self.assertIn("recording_field_invalid:tel.y." + path,
+                              result["qualification_reasons"])
+                self.assertEqual(result["failures"]["missing_gpu_callbacks"], 1)
+
+    def test_oversized_scenario_numbers_fail_closed(self):
+        for field in ("native_seconds", "refresh_hz"):
+            for value in (10**400, [], True):
+                with self.subTest(field=field, value=value):
+                    scenario = dict(IDENTITY, **{field: value})
+                    result = self.evaluate([telemetry(missing=True)], scenarios=[scenario])
+                    self.assertFalse(result["qualified"])
+                    self.assertEqual(result["failures"]["missing_gpu_callbacks"], 1)
+
+    def test_recording_health_integer_widths(self):
+        for field, value in (("startup_absent", 2**64), ("pending_bytes", 2**63),
+                             ("invalid_lines", 2**64)):
+            with self.subTest(field=field):
+                health = dict.fromkeys(("invalid_lines", "parse_errors", "resets",
+                                       "read_errors", "pending_bytes", "startup_absent"), 0)
+                health.update(discarding=False, unfinished_tail=False, drain_exhausted=False)
+                health.update(k="telemetry_health", **{field: value})
+                result = self.evaluate([telemetry()], recording=[health])
+                self.assertIn("recording_health_fields_invalid", result["qualification_reasons"])
+
+    def test_recording_native_size_limits(self):
+        for contents, reason in (
+            (b" " * (64 * 1024 + 1) + b"\n", "recording_line_limit_exceeded"),
+            (b"{}\n" * (16 * 1024 * 1024 // 3 + 1), "recording_size_limit_exceeded"),
+        ):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "capture").write_text(json.dumps(telemetry()) + "\n")
+                (root / "scenario").write_text(json.dumps(IDENTITY) + "\n")
+                (root / "recording").write_bytes(contents)
+                result = evaluate_capture(root / "capture", root / "scenario",
+                                          recording_path=root / "recording")
+                self.assertFalse(result["qualified"])
+                self.assertIn(reason, result["qualification_reasons"])
+
+    def test_recording_tail_and_blank_lines_are_not_ignored(self):
+        for suffix, reason in (("", "recording_unterminated_tail"),
+                               ("\n\n", "recording_blank_record")):
+            with self.subTest(suffix=suffix), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "capture").write_text(json.dumps(telemetry()) + "\n")
+                (root / "scenario").write_text(json.dumps(IDENTITY) + "\n")
+                (root / "recording").write_text(json.dumps({"k": "run", "v": 2}) + suffix)
+                result = evaluate_capture(root / "capture", root / "scenario",
+                                          recording_path=root / "recording")
+                self.assertFalse(result["qualified"])
+                self.assertIn(reason, result["qualification_reasons"])
 
     def test_strict_frame_owned_success_and_full_capture_failures(self):
         from test_scenario_qualification import history
@@ -127,10 +284,38 @@ class PlanetForgerCaptureTests(unittest.TestCase):
             record["fd"][0].update(i=frame, st=1000 + seconds + 0.001,
                                    gt=1000 + seconds + 0.009, pt=1000 + seconds + 0.01)
             records.append(record)
-        recording = [{"k": "telemetry_health"}, {"k": "end", "e": True, "c": 0, "z": False}]
+        recording = [
+            {"k": "run", "v": 2},
+            {"k": "telemetry_health", "invalid_lines": 0, "parse_errors": 0,
+             "resets": 0, "read_errors": 0, "pending_bytes": 0, "startup_absent": 0,
+             "discarding": False, "unfinished_tail": False, "drain_exhausted": False},
+            {"k": "end", "e": True, "c": 0, "z": False},
+        ]
         result = self.evaluate(records, scenarios, recording)
         self.assertTrue(result["qualified"], result["qualification_reasons"])
         self.assertEqual(result["joined_frames"], 1200)
+        invalid_recordings = [
+            (recording[1:], "recording_metadata_invalid"),
+            ([recording[0], *recording], "recording_metadata_invalid"),
+            ([recording[0], {"k": "telemetry_health"}, recording[-1]],
+             "recording_health_fields_invalid"),
+            ([*recording[:-1], {**recording[-1], "c": False}], "recording_exit_code_invalid"),
+            ([recording[0], {**recording[1], "discarding": []}, recording[-1]],
+             "recording_health_fields_invalid"),
+            ([recording[0], {**recording[1], "parse_errors": False}, recording[-1]],
+             "recording_health_fields_invalid"),
+        ]
+        for version in (0, 3, 2.5, True, "2"):
+            invalid_recordings.append((
+                [recording[0], {"k": "investigation", "v": version}, *recording[1:]],
+                "recording_investigation_version_unsupported",
+            ))
+        for invalid_recording, reason in invalid_recordings:
+            with self.subTest(reason=reason, recording=invalid_recording):
+                result = self.evaluate(records, scenarios, invalid_recording)
+                self.assertFalse(result["qualified"])
+                self.assertIn(reason, result["qualification_reasons"])
+                self.assertEqual(result["joined_frames"], 1200)
         for index in (0, 300, 1499):
             records[index]["fd"][0]["mg"] = True
             result = self.evaluate(records, scenarios, recording)
