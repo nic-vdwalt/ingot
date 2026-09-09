@@ -436,6 +436,7 @@ class PlanetForgerCaptureTests(unittest.TestCase):
             self.assertFalse(json.loads((root / "report").read_text())["qualified"])
         invalid_recordings = [
             (recording[1:], "recording_metadata_invalid"),
+            ([recording[1], recording[0], recording[2]], "recording_metadata_not_first"),
             ([recording[0], *recording], "recording_metadata_invalid"),
             ([recording[0], {"k": "telemetry_health"}, recording[-1]],
              "recording_health_fields_invalid"),
