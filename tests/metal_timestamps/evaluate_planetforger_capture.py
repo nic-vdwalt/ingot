@@ -102,6 +102,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     telemetry_path = Path(telemetry_path)
     scenario_path = Path(scenario_path)
     records = [json.loads(line) for line in telemetry_path.read_text().splitlines() if line.strip()]
+    scenario_error = None
     try:
         scenario_records = [
             json.loads(line) for line in scenario_path.read_text().splitlines() if line.strip()
@@ -109,15 +110,8 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         if not scenario_records or any(not isinstance(record, dict) for record in scenario_records):
             raise ValueError("scenario history must contain object records")
     except (OSError, UnicodeError, ValueError) as error:
-        return {
-            "telemetry": str(telemetry_path),
-            "telemetry_sha256": sha256(telemetry_path),
-            "scenario": str(scenario_path),
-            "accepted": False,
-            "qualified": False,
-            "qualification_reasons": ["scenario_history_unavailable_or_malformed"],
-            "scenario_error": str(error),
-        }
+        scenario_error = str(error)
+        scenario_records = [{}]
     identity_fields = ("scenario", "seed", "quality", "width", "height", "terrain_sha256")
     scenario_identity = {field: scenario_records[0].get(field) for field in identity_fields}
     measured_ranges = []
@@ -146,15 +140,15 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             measured_started = None
     if timestamp_errors:
         measured_ranges = []
-    if any(value is None or value == "" for value in scenario_identity.values()):
+    if scenario_error is None and any(value is None or value == "" for value in scenario_identity.values()):
         raise ValueError("scenario identity is incomplete")
-    if scenario_identity["scenario"] != "ocean":
+    if scenario_error is None and scenario_identity["scenario"] != "ocean":
         raise ValueError("scenario identity is not ocean")
-    if scenario_identity["quality"] not in ("fixed", "adaptive"):
+    if scenario_error is None and scenario_identity["quality"] not in ("fixed", "adaptive"):
         raise ValueError("scenario quality is invalid")
-    if scenario_identity["width"] <= 0 or scenario_identity["height"] <= 0:
+    if scenario_error is None and (scenario_identity["width"] <= 0 or scenario_identity["height"] <= 0):
         raise ValueError("scenario dimensions are invalid")
-    if len(scenario_identity["terrain_sha256"]) != 64:
+    if scenario_error is None and len(scenario_identity["terrain_sha256"]) != 64:
         raise ValueError("scenario terrain hash is invalid")
     if any(record.get(field) != value for record in scenario_records for field, value in scenario_identity.items()):
         raise ValueError("scenario identity changes within capture")
@@ -416,8 +410,10 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             "failures": recording_failures,
             "healthy": recording_healthy,
         }
-    accepted = healthy and complete_groups and recording_healthy
+    accepted = healthy and complete_groups and recording_healthy and scenario_error is None
     qualification_reasons = ["scenario_frame_clock_mapping_unverified"]
+    if scenario_error is not None:
+        qualification_reasons.append("scenario_history_unavailable_or_malformed")
     qualification_reasons.extend(sorted(set(timestamp_errors)))
     if not measured_ranges:
         qualification_reasons.append("no_bounded_measured_phase")
@@ -451,7 +447,8 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "telemetry": str(telemetry_path),
         "telemetry_sha256": sha256(telemetry_path),
         "scenario": str(scenario_path),
-        "scenario_sha256": sha256(scenario_path),
+        "scenario_sha256": sha256(scenario_path) if scenario_path.is_file() else None,
+        "scenario_error": scenario_error,
         "binaries": binaries,
         "recording": recording,
         "identity": scenario_identity,

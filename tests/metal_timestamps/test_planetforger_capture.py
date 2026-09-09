@@ -132,6 +132,9 @@ class PlanetForgerCaptureTests(unittest.TestCase):
                 result = evaluate_capture(telemetry_path, scenario_path)
                 self.assertFalse(result["qualified"])
                 self.assertFalse(result["accepted"])
+                self.assertIn("failures", result)
+                self.assertIn("raw_without_delivery", result["failures"])
+                self.assertIn("delivery_without_raw", result["failures"])
                 self.assertIn(
                     "scenario_history_unavailable_or_malformed", result["qualification_reasons"]
                 )
