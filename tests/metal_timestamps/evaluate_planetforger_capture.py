@@ -107,13 +107,18 @@ def normalize_telemetry(record, errors):
     def unsigned(value):
         return type(value) is int and 0 <= value <= 2**64 - 1
 
+    def unsigned32(value):
+        return type(value) is int and 0 <= value < 2**32
+
     def fields(value, names, predicate, path):
         for name in names:
             if name in value and not predicate(value[name]):
                 invalid(path + "." + name)
                 del value[name]
 
-    fields(record, ("rt", "sq", "fdd", "wf", "px"), unsigned, "record")
+    fields(record, ("sq", "fdd", "wf", "px", "pd", "pfd", "pdd", "eo"),
+           unsigned, "record")
+    fields(record, ("rt",), unsigned32, "record")
     for name in ("gh", "rl"):
         if not isinstance(record.get(name, {}), dict):
             invalid(name)
@@ -135,8 +140,11 @@ def normalize_telemetry(record, errors):
                 continue
             record[name].append(entry)
             if name == "fd":
-                fields(entry, ("v", "bv", *PRESSURE_FIELDS.values()), unsigned, name)
-                fields(entry, ("mg", "mp"), lambda value: type(value) is bool, name)
+                fields(entry, ("v",), lambda value: type(value) is int and 0 <= value < 256, name)
+                fields(entry, ("bv", "qbp", "qap", "qas", "qhw", "iuc", "ifc", "isc",
+                               "fuc", "ffc", "fsc"), unsigned32, name)
+                fields(entry, ("qoa",), unsigned, name)
+                fields(entry, ("su", "mg", "mp"), lambda value: type(value) is bool, name)
                 numeric = ("st", "gt", "pt", "gc", "hc", "rc", "aq", "en", "sb",
                            "ps", "pw", "rdw", *BOUNDARY_CPU_FIELDS.values(),
                            *SUBMISSION_CALL_FIELDS.values())
@@ -149,6 +157,7 @@ def normalize_telemetry(record, errors):
                         invalid(name + ".missing." + key)
                 continue
             fields(entry, ("v",), lambda value: type(value) is bool, name)
+            fields(entry, ("tg",), unsigned32, name)
             fields(entry, ("ms",), finite_number, name)
             groups = entry.get("g", [])
             entry["g"] = []
@@ -160,6 +169,7 @@ def normalize_telemetry(record, errors):
                     invalid("gfd.g.entry")
                     continue
                 entry["g"].append(group)
+                fields(group, ("c",), unsigned32, "gfd.g")
                 if not finite_number(group.get("ms")) or group["ms"] < 0:
                     invalid("gfd.g.ms")
                     group.pop("ms", None)
@@ -411,11 +421,10 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     reliability = None
     reliability_reason = None
     reliability_verified = True
+    transport_failures = dict.fromkeys(("pd", "pfd", "pdd", "eo"), 0)
     for record in records:
-        if record.get("rt") != 1:
-            continue
-        if record.get("sq"):
-            sequences.append(record["sq"])
+        for field in transport_failures:
+            transport_failures[field] = max(transport_failures[field], record.get(field, 0))
         delivery_dropped = max(delivery_dropped, record.get("fdd", 0))
         write_failures = max(write_failures, record.get("wf", 0))
         pump_exhausted = max(pump_exhausted, record.get("px", 0))
@@ -423,6 +432,10 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         for field in HEALTH_FIELDS:
             health[field] += current_health.get(field, 0)
         completion_high_water = max(completion_high_water, current_health.get("ch", 0))
+        if record.get("rt") != 1:
+            continue
+        if record.get("sq"):
+            sequences.append(record["sq"])
         scope = record.get("rl", {})
         reliability = scope.get("g", reliability)
         reliability_reason = scope.get("r", reliability_reason)
@@ -435,6 +448,8 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             raw_frames[frame_identity] = frame
             if not frame.get("v", False):
                 health["invalid_gpu_frame"] = health.get("invalid_gpu_frame", 0) + 1
+            if frame.get("tg", 0):
+                health["truncated_gpu_frame_groups"] = health.get("truncated_gpu_frame_groups", 0) + frame["tg"]
         for delivery in record.get("fd", []):
             submit_timestamp = delivery.get("st", 0)
             delivery_identity = (delivery.get("e", 0), delivery.get("i", 0))
@@ -585,6 +600,10 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "sequence_duplicates": sequence_duplicates,
         "write_failures": write_failures,
         "pump_exhausted": pump_exhausted,
+        "packet_drops": transport_failures["pd"],
+        "packet_gpu_frames_dropped": transport_failures["pfd"],
+        "packet_deliveries_dropped": transport_failures["pdd"],
+        "encode_overflows": transport_failures["eo"],
         "duplicate_raw_identities": duplicate_raw_identities,
         "duplicate_delivery_identities": duplicate_delivery_identities,
         "raw_without_delivery": raw_without_delivery,
@@ -678,6 +697,10 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     qualification_reasons.extend(telemetry_errors)
     qualification_reasons.extend(input_errors)
     qualification_reasons.extend(sorted(set(recording_protocol_reasons)))
+    qualification_reasons.extend("full_capture_failure:" + name
+                                 for name, count in failures.items() if count != 0)
+    if recording is not None and not recording_healthy:
+        qualification_reasons.append("recording_completion_or_health_failed")
     if not reliability_verified or not sequences:
         qualification_reasons.append("full_capture_reliability_unverified")
     if recording is None:

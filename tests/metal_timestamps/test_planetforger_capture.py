@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -112,6 +114,44 @@ class PlanetForgerCaptureTests(unittest.TestCase):
                 recording_path=recording_path if recording is not None else None,
             )
 
+    def test_summary_gpu_health_rejects_capture(self):
+        for field in ("o", "s", "q", "m", "sf", "rf", "g", "t", "sc", "cr"):
+            with self.subTest(field=field):
+                result = self.evaluate([telemetry(), {"rt": 0, "gh": {field: 1}}])
+                self.assertFalse(result["accepted"])
+                self.assertFalse(result["qualified"])
+                self.assertEqual(result["failures"][field], 1)
+                self.assertIn("full_capture_failure:" + field, result["qualification_reasons"])
+                self.assertEqual(result["joined_frames"], 1)
+
+    def test_gpu_group_truncation_rejects_complete_named_groups(self):
+        record = telemetry()
+        record["gfd"][0]["tg"] = 2
+        result = self.evaluate([record])
+        self.assertFalse(result["qualified"])
+        self.assertFalse(result["accepted"])
+        self.assertEqual(result["failures"]["truncated_gpu_frame_groups"], 2)
+        self.assertEqual(result["joined_frames"], 1)
+        record["gfd"][0]["tg"] = []
+        result = self.evaluate([record])
+        self.assertIn("telemetry_schema_invalid:gfd.tg", result["qualification_reasons"])
+
+    def test_transport_loss_in_summary_rejects_capture(self):
+        for field, failure in (("pd", "packet_drops"), ("pfd", "packet_gpu_frames_dropped"),
+                               ("pdd", "packet_deliveries_dropped"), ("eo", "encode_overflows"),
+                               ("wf", "write_failures"), ("px", "pump_exhausted"),
+                               ("fdd", "delivery_dropped")):
+            with self.subTest(field=field):
+                result = self.evaluate([telemetry(), {"rt": 0, field: 3}])
+                self.assertFalse(result["qualified"])
+                self.assertFalse(result["accepted"])
+                self.assertEqual(result["failures"][failure], 3)
+                self.assertIn("full_capture_failure:" + failure, result["qualification_reasons"])
+                self.assertEqual(result["joined_frames"], 1)
+                malformed = self.evaluate([telemetry(), {"rt": 0, field: []}])
+                self.assertIn("telemetry_schema_invalid:record." + field,
+                              malformed["qualification_reasons"])
+
     def test_malformed_nested_telemetry_preserves_other_reliability_evidence(self):
         mutations = [
             ((name,), value)
@@ -137,6 +177,13 @@ class PlanetForgerCaptureTests(unittest.TestCase):
             (("fd", 0, "hc"), {}),
             (("fd", 0, "gc"), float("inf")),
             (("fd", 0, "v"), []),
+            (("fd", 0, "v"), 256),
+            (("fd", 0, "su"), 1),
+            (("fd", 0, "qap"), 2**32),
+            (("fd", 0, "iuc"), 2**32),
+            (("gfd", 0, "tg"), 2**32),
+            (("gfd", 0, "g", 0, "c"), True),
+            (("rt",), 2**32),
             (("fd", 0, "bv"), {}),
             (("fd", 0, "mg"), []),
             (("gh", "q"), {}),
@@ -315,6 +362,21 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         result = self.evaluate(records, scenarios, recording)
         self.assertTrue(result["qualified"], result["qualification_reasons"])
         self.assertEqual(result["joined_frames"], 1200)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, values in (("capture", records), ("scenario", scenarios),
+                                 ("recording", recording)):
+                (root / name).write_text("\n".join(json.dumps(value) for value in values) + "\n")
+            command = [sys.executable, str(Path(__file__).with_name("evaluate_planetforger_capture.py")),
+                       str(root / "capture"), str(root / "scenario"),
+                       "--recording", str(root / "recording"), "--output", str(root / "report")]
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertTrue(json.loads((root / "report").read_text())["qualified"])
+            (root / "recording").write_text(json.dumps({"k": "end", "e": True, "c": 15}) + "\n")
+            rejected = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertEqual(rejected.returncode, 1, rejected.stderr)
+            self.assertFalse(json.loads((root / "report").read_text())["qualified"])
         invalid_recordings = [
             (recording[1:], "recording_metadata_invalid"),
             ([recording[0], *recording], "recording_metadata_invalid"),
