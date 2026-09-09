@@ -4,6 +4,8 @@ import json
 import math
 from pathlib import Path
 
+from scenario_qualification import validate_scenario
+
 
 REQUIRED_GROUPS = ("window", "world.opaque", "world.scene-copy", "world.ocean")
 HEALTH_FIELDS = ("o", "s", "q", "m", "sf", "rf", "g", "t", "sc", "cr")
@@ -112,6 +114,8 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     except (OSError, UnicodeError, ValueError) as error:
         scenario_error = str(error)
         scenario_records = [{}]
+    scenario_validation = validate_scenario(scenario_records)
+    frame_owned = any(record.get("v") == 2 for record in scenario_records)
     identity_fields = ("scenario", "seed", "quality", "width", "height", "terrain_sha256")
     scenario_identity = {field: scenario_records[0].get(field) for field in identity_fields}
     measured_ranges = []
@@ -236,7 +240,13 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                 present_timestamp <= 0 or (submit_timestamp > 0 and present_timestamp < submit_timestamp)
             ):
                 reversed_present_timestamps += 1
-            if has_scenario_timestamps and not any(
+            if frame_owned:
+                if not any(
+                    delivery_identity[0] == epoch and start <= delivery_identity[1] < end
+                    for epoch, start, end in scenario_validation["ranges"]
+                ):
+                    continue
+            elif has_scenario_timestamps and not any(
                 start <= submit_timestamp < end for start, end in measured_ranges
             ):
                 continue
@@ -415,6 +425,8 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     if scenario_error is not None:
         qualification_reasons.append("scenario_history_unavailable_or_malformed")
     qualification_reasons.extend(sorted(set(timestamp_errors)))
+    if frame_owned:
+        qualification_reasons.extend(scenario_validation["reasons"])
     if not measured_ranges:
         qualification_reasons.append("no_bounded_measured_phase")
     if measured_started is not None:
