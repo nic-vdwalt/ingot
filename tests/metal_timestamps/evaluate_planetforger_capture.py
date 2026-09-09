@@ -103,7 +103,21 @@ def distribution(values):
 def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording_path=None):
     telemetry_path = Path(telemetry_path)
     scenario_path = Path(scenario_path)
-    records = [json.loads(line) for line in telemetry_path.read_text().splitlines() if line.strip()]
+    telemetry_errors = []
+    records = []
+    try:
+        for line in telemetry_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+                if not isinstance(record, dict):
+                    raise ValueError("telemetry record is not an object")
+                records.append(record)
+            except ValueError:
+                telemetry_errors.append("malformed_telemetry_record")
+    except (OSError, UnicodeError):
+        telemetry_errors.append("telemetry_unavailable")
     scenario_error = None
     try:
         scenario_records = [
@@ -433,6 +447,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         }
     accepted = healthy and complete_groups and recording_healthy and scenario_error is None and not identity_errors
     qualification_reasons = [] if frame_owned else ["scenario_frame_clock_mapping_unverified"]
+    qualification_reasons.extend(telemetry_errors)
     if not reliability_verified or not sequences:
         qualification_reasons.append("full_capture_reliability_unverified")
     if recording is None:
@@ -490,7 +505,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         }
     return {
         "telemetry": str(telemetry_path),
-        "telemetry_sha256": sha256(telemetry_path),
+        "telemetry_sha256": sha256(telemetry_path) if telemetry_path.is_file() else None,
         "scenario": str(scenario_path),
         "scenario_sha256": sha256(scenario_path) if scenario_path.is_file() else None,
         "scenario_error": scenario_error,
