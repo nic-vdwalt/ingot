@@ -2,7 +2,7 @@
 package gfx
 
 import "core:testing"
-import "core:time"
+@(require) import "core:time"
 
 frame_owner_test_context: Context
 

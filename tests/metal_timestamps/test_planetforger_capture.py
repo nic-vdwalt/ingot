@@ -117,6 +117,62 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         self.assertTrue(result["accepted"])
         self.assertEqual(result["observed_phases"], ["background"])
         self.assertEqual(result["completion_high_water"], 0)
+        self.assertFalse(result["qualified"])
+        self.assertIn("no_bounded_measured_phase", result["qualification_reasons"])
+        self.assertIn("scenario_completion_unproven", result["qualification_reasons"])
+
+    def test_missing_or_malformed_history_returns_qualification_failure(self):
+        for contents in (None, "", "{", "[]", "null", "1"):
+            with self.subTest(contents=contents), tempfile.TemporaryDirectory() as directory:
+                telemetry_path = Path(directory) / "capture.tel"
+                scenario_path = Path(directory) / "scenario.jsonl"
+                telemetry_path.write_text(json.dumps(telemetry()))
+                if contents is not None:
+                    scenario_path.write_text(contents)
+                result = evaluate_capture(telemetry_path, scenario_path)
+                self.assertFalse(result["qualified"])
+                self.assertFalse(result["accepted"])
+                self.assertIn(
+                    "scenario_history_unavailable_or_malformed", result["qualification_reasons"]
+                )
+
+    def test_open_measured_history_is_not_qualified(self):
+        scenario = dict(IDENTITY, phase="measured", native_seconds=9)
+        result = self.evaluate([telemetry()], [scenario])
+        self.assertFalse(result["qualified"])
+        self.assertIn("open_measured_tail", result["qualification_reasons"])
+        self.assertEqual(result["delivery_frames"], 0)
+
+    def test_invalid_timestamp_does_not_select_all_frames(self):
+        for timestamp in (float("nan"), float("inf"), -1, True, "9", None):
+            with self.subTest(timestamp=timestamp):
+                scenarios = [
+                    dict(IDENTITY, phase="measured", native_seconds=timestamp),
+                    dict(IDENTITY, phase="cooldown", native_seconds=11),
+                ]
+                result = self.evaluate([telemetry()], scenarios)
+                self.assertFalse(result["qualified"])
+                self.assertEqual(result["delivery_frames"], 0)
+                self.assertIn("invalid_scenario_timestamp", result["qualification_reasons"])
+
+    def test_reversed_history_does_not_select_frames(self):
+        scenarios = [
+            dict(IDENTITY, phase="warmup", native_seconds=12),
+            dict(IDENTITY, phase="measured", native_seconds=9),
+            dict(IDENTITY, phase="cooldown", native_seconds=11),
+        ]
+        result = self.evaluate([telemetry()], scenarios)
+        self.assertEqual(result["delivery_frames"], 0)
+        self.assertIn("nonmonotonic_scenario_timestamp", result["qualification_reasons"])
+
+    def test_terminal_claim_without_frame_mapping_is_not_qualified(self):
+        scenarios = [
+            dict(IDENTITY, phase="measured", native_seconds=9),
+            dict(IDENTITY, phase="cooldown", native_seconds=11, terminal_outcome="completed"),
+        ]
+        result = self.evaluate([telemetry()], scenarios)
+        self.assertFalse(result["qualified"])
+        self.assertIn("scenario_frame_clock_mapping_unverified", result["qualification_reasons"])
 
     def test_rejects_missing_group(self):
         result = self.evaluate([telemetry(["window", "world.opaque", "world.scene-copy"])])

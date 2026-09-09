@@ -40,6 +40,8 @@ worked example applied to a subsystem before it is written.
 
 ## Build / test / check commands
 
+- **Local pinned tools**: prepend `../tools/odin-902106f` and `../ols` to `PATH`
+  from this repository before running gates; Homebrew Odin is a different revision.
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
 - **Test**: `bash scripts/test.sh` - runs the packages and examples in

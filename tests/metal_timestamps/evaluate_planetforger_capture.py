@@ -102,25 +102,50 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     telemetry_path = Path(telemetry_path)
     scenario_path = Path(scenario_path)
     records = [json.loads(line) for line in telemetry_path.read_text().splitlines() if line.strip()]
-    scenario_records = [json.loads(line) for line in scenario_path.read_text().splitlines() if line.strip()]
-    if not scenario_records:
-        raise ValueError("scenario identity is missing")
+    try:
+        scenario_records = [
+            json.loads(line) for line in scenario_path.read_text().splitlines() if line.strip()
+        ]
+        if not scenario_records or any(not isinstance(record, dict) for record in scenario_records):
+            raise ValueError("scenario history must contain object records")
+    except (OSError, UnicodeError, ValueError) as error:
+        return {
+            "telemetry": str(telemetry_path),
+            "telemetry_sha256": sha256(telemetry_path),
+            "scenario": str(scenario_path),
+            "accepted": False,
+            "qualified": False,
+            "qualification_reasons": ["scenario_history_unavailable_or_malformed"],
+            "scenario_error": str(error),
+        }
     identity_fields = ("scenario", "seed", "quality", "width", "height", "terrain_sha256")
     scenario_identity = {field: scenario_records[0].get(field) for field in identity_fields}
     measured_ranges = []
     measured_started = None
+    timestamp_errors = []
+    previous_seconds = None
+    has_scenario_timestamps = any("native_seconds" in record for record in scenario_records)
     for record in scenario_records:
         native_seconds = record.get("native_seconds")
         phase = record.get("phase")
-        if not isinstance(native_seconds, (int, float)):
+        if (
+            isinstance(native_seconds, bool)
+            or not isinstance(native_seconds, (int, float))
+            or not math.isfinite(native_seconds)
+            or native_seconds < 0
+        ):
+            timestamp_errors.append("invalid_scenario_timestamp")
             continue
+        if previous_seconds is not None and native_seconds < previous_seconds:
+            timestamp_errors.append("nonmonotonic_scenario_timestamp")
+        previous_seconds = native_seconds
         if phase == "measured" and measured_started is None:
             measured_started = native_seconds
         elif phase != "measured" and measured_started is not None:
             measured_ranges.append((measured_started, native_seconds))
             measured_started = None
-    if measured_started is not None:
-        measured_ranges.append((measured_started, math.inf))
+    if timestamp_errors:
+        measured_ranges = []
     if any(value is None or value == "" for value in scenario_identity.values()):
         raise ValueError("scenario identity is incomplete")
     if scenario_identity["scenario"] != "ocean":
@@ -217,7 +242,9 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                 present_timestamp <= 0 or (submit_timestamp > 0 and present_timestamp < submit_timestamp)
             ):
                 reversed_present_timestamps += 1
-            if measured_ranges and not any(start <= submit_timestamp < end for start, end in measured_ranges):
+            if has_scenario_timestamps and not any(
+                start <= submit_timestamp < end for start, end in measured_ranges
+            ):
                 continue
             delivery_frames += 1
             delivery_identities.add(delivery_identity)
@@ -390,6 +417,16 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             "healthy": recording_healthy,
         }
     accepted = healthy and complete_groups and recording_healthy
+    qualification_reasons = ["scenario_frame_clock_mapping_unverified"]
+    qualification_reasons.extend(sorted(set(timestamp_errors)))
+    if not measured_ranges:
+        qualification_reasons.append("no_bounded_measured_phase")
+    if measured_started is not None:
+        qualification_reasons.append("open_measured_tail")
+    if not any(record.get("terminal_outcome") == "completed" for record in scenario_records):
+        qualification_reasons.append("scenario_completion_unproven")
+    if not accepted:
+        qualification_reasons.append("legacy_analysis_checks_failed")
     exact_gpu_ms = [raw_frames[identity].get("ms") for identity in exact_joined]
     exact_gpu_ms = [value for value in exact_gpu_ms if isinstance(value, (int, float)) and value >= 0]
     long_frames = [item for item in classifications if item["host_ms"] > 9.167]
@@ -472,6 +509,8 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
         "healthy": healthy,
         "complete_groups": complete_groups,
         "accepted": accepted,
+        "qualified": False,
+        "qualification_reasons": qualification_reasons,
     }
 
 
@@ -506,7 +545,7 @@ def main():
     if arguments.output:
         Path(arguments.output).write_text(text)
     print(text, end="")
-    if not result["accepted"]:
+    if not result["qualified"]:
         raise SystemExit(1)
 
 
