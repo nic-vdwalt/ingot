@@ -16,6 +16,11 @@ Host_Frame_Timing :: struct {
 	cursor_seconds:  f64,
 }
 
+Frame_Delivery_Identity :: struct {
+	epoch:       u64,
+	frame_index: u64,
+}
+
 Frame_Delivery_Timing :: struct {
 	epoch:                           u64,
 	presentation_supported:          bool,
@@ -44,6 +49,8 @@ Frame_Delivery_Timing :: struct {
 	host_cursor_cpu_seconds:         f64,
 	host_unaccounted_seconds:        f64,
 	pacer_wait_seconds:              f64,
+	host_valid:                      bool,
+	pacer_wait_valid:                bool,
 	submissions_before_poll:         u32,
 	submissions_after_poll:          u32,
 	submissions_at_submit:           u32,
@@ -80,12 +87,12 @@ Frame_Delivery_Slot :: struct {
 }
 
 Frame_Delivery_State :: struct {
-	mutex:          sync.Mutex,
-	slots:          [FRAME_DELIVERY_MAX]Frame_Delivery_Slot,
-	last_presented: f64,
-	dropped:        u64,
-	supported:      bool,
-	closing:        bool,
+	mutex:                  sync.Mutex,
+	slots:                  [FRAME_DELIVERY_MAX]Frame_Delivery_Slot,
+	last_presented:         f64,
+	dropped:                u64,
+	supported:              bool,
+	closing:                bool,
 }
 
 context_frame_delivery_supported :: proc(ctx: ^Context) -> bool {
@@ -114,26 +121,31 @@ context_frame_delivery_quiesce :: proc(ctx: ^Context) -> bool {
 	return _frame_delivery_pending_count(ctx) == 0
 }
 
+context_frame_delivery_latest_identity :: proc(ctx: ^Context) -> Frame_Delivery_Identity {
+	if ctx == nil || ctx.stats_latest.frame_index == 0 do return {}
+	return {epoch = ctx.epoch, frame_index = ctx.stats_latest.frame_index}
+}
+
 context_frame_delivery_record_host_detail :: proc(
 	ctx: ^Context,
+	identity: Frame_Delivery_Identity,
 	timing: Host_Frame_Timing,
 	pacer_wait_seconds: f64,
-) {
+) -> bool {
 	accounted :=
 		timing.reload_seconds +
 		timing.refresh_seconds +
 		timing.draw_seconds +
 		timing.prepare_seconds +
 		timing.cursor_seconds
-	if ctx == nil || timing.total_seconds < 0 || pacer_wait_seconds < 0 || accounted < 0 do return
-	if timing.reload_seconds < 0 || timing.refresh_seconds < 0 || timing.draw_seconds < 0 do return
-	if timing.prepare_seconds < 0 || timing.cursor_seconds < 0 do return
+	if ctx == nil || timing.total_seconds < 0 || pacer_wait_seconds < 0 || accounted < 0 do return false
+	if timing.reload_seconds < 0 || timing.refresh_seconds < 0 || timing.draw_seconds < 0 do return false
+	if timing.prepare_seconds < 0 || timing.cursor_seconds < 0 do return false
+	if identity.epoch == 0 || identity.frame_index == 0 do return false
 	sync.mutex_lock(&ctx.delivery.mutex)
 	defer sync.mutex_unlock(&ctx.delivery.mutex)
-	frame_index := ctx.stats_latest.frame_index
-	if frame_index == 0 do return
-	slot := _frame_delivery_slot(ctx, frame_index)
-	if slot == nil || slot.epoch != ctx.epoch do return
+	slot := _frame_delivery_slot(ctx, identity.frame_index)
+	if slot == nil || slot.epoch != identity.epoch do return false
 	slot.timing.host_cpu_seconds = timing.total_seconds
 	slot.timing.host_reload_cpu_seconds = timing.reload_seconds
 	slot.timing.host_refresh_cpu_seconds = timing.refresh_seconds
@@ -142,15 +154,20 @@ context_frame_delivery_record_host_detail :: proc(
 	slot.timing.host_cursor_cpu_seconds = timing.cursor_seconds
 	slot.timing.host_unaccounted_seconds = max(timing.total_seconds - accounted, f64(0))
 	slot.timing.pacer_wait_seconds = pacer_wait_seconds
+	slot.timing.host_valid = true
+	slot.timing.pacer_wait_valid = true
+	return true
 }
 
 context_frame_delivery_record_host :: proc(
 	ctx: ^Context,
+	identity: Frame_Delivery_Identity,
 	host_cpu_seconds, pacer_wait_seconds: f64,
-) {
-	if ctx == nil do return
-	context_frame_delivery_record_host_detail(
+) -> bool {
+	if ctx == nil do return false
+	return context_frame_delivery_record_host_detail(
 		ctx,
+		identity,
 		{total_seconds = host_cpu_seconds},
 		pacer_wait_seconds,
 	)
@@ -172,7 +189,7 @@ context_frame_delivery_drain :: proc(
 	for &slot in ctx.delivery.slots {
 		if count >= len(out) do break
 		if !slot.active || !slot.timing.cpu_valid do continue
-		terminal := slot.gpu_done && slot.present_done
+		terminal := slot.gpu_done && slot.present_done && slot.timing.host_valid
 		stale :=
 			latest_frame > slot.timing.frame_index &&
 			latest_frame - slot.timing.frame_index >= FRAME_DELIVERY_RETIRE_LAG
@@ -319,12 +336,16 @@ _frame_delivery_gpu_complete :: proc(
 }
 
 @(private)
-_frame_delivery_presented :: proc(ctx: ^Context, frame_index: u64, timestamp: f64) {
-	if ctx == nil || frame_index == 0 do return
+_frame_delivery_presented :: proc(
+	ctx: ^Context,
+	identity: Frame_Delivery_Identity,
+	timestamp: f64,
+) {
+	if ctx == nil || identity.epoch == 0 || identity.frame_index == 0 do return
 	sync.mutex_lock(&ctx.delivery.mutex)
 	defer sync.mutex_unlock(&ctx.delivery.mutex)
-	slot := _frame_delivery_slot(ctx, frame_index)
-	if slot == nil || slot.epoch != ctx.epoch do return
+	slot := _frame_delivery_slot(ctx, identity.frame_index)
+	if slot == nil || slot.epoch != identity.epoch do return
 	slot.present_done = true
 	if timestamp <= 0 do return
 	slot.timing.presented_timestamp = timestamp

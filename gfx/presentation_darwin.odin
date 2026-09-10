@@ -31,12 +31,20 @@ when !INGOT_GFX_SDL3 {
 	g_presentation_next: Presentation_Next_Proc
 
 	@(private = "file")
+	Presentation_Callback :: struct {
+		identity: Frame_Delivery_Identity,
+	}
+
+	@(private = "file")
 	presentation_done :: proc "c" (user_data: rawptr, drawable: ^CA.MetalDrawable) {
 		context = runtime.default_context()
 		owner := g_presentation_owner
-		frame_index := u64(uintptr(user_data))
-		if owner == nil || drawable == nil || frame_index == 0 do return
-		_frame_delivery_presented(owner, frame_index, f64(drawable->presentedTime()))
+		callback := (^Presentation_Callback)(user_data)
+		if callback == nil do return
+		identity := callback.identity
+		free(callback)
+		if owner == nil || drawable == nil do return
+		_frame_delivery_presented(owner, identity, f64(drawable->presentedTime()))
 	}
 
 	@(private = "file")
@@ -48,7 +56,10 @@ when !INGOT_GFX_SDL3 {
 		if drawable == nil || owner == nil || owner.delivery.closing do return drawable
 		frame_index := owner.stats_current.frame_index
 		if frame_index == 0 do return drawable
-		block := NS.Block_createLocalWithParam(rawptr(uintptr(frame_index)), presentation_done)
+		callback := new(Presentation_Callback)
+		if callback == nil do return drawable
+		callback.identity = {epoch = owner.epoch, frame_index = frame_index}
+		block := NS.Block_createLocalWithParam(rawptr(callback), presentation_done)
 		drawable->addPresentedHandler(block)
 		return drawable
 	}

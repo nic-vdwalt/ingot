@@ -61,19 +61,81 @@ def correlation(left, right):
 
 
 def classify_boundary_frame(delivery, renderer_unaccounted):
-    if delivery["hun"] > 0.25:
-        return "unaccounted"
-    if delivery["qap"] >= 3 or delivery["qoa"] >= 3:
-        return "submission_pressure"
+    boundary_version = delivery.get("bv")
+    required = {
+        "hc", "rc", "aq", "en", "sb", "ps",
+        *BOUNDARY_CPU_FIELDS.values(), *PRESSURE_FIELDS.values(),
+        *SUBMISSION_CALL_FIELDS.values(),
+    }
+    if boundary_version == 3:
+        required.add("rdw")
+    valid = (
+        boundary_version in (2, 3)
+        and required.issubset(delivery)
+        and finite_number(renderer_unaccounted)
+        and renderer_unaccounted >= 0
+        and all(finite_number(delivery[field]) and delivery[field] >= 0 for field in required)
+    )
+    if not valid:
+        return {
+            "classification": None,
+            "dominant_span": None,
+            "dominant_ms": None,
+            "secondary_observations": [],
+            "pressure_correlates": [],
+            "evidence_complete": False,
+            "unexplained_ms": None,
+        }
+
+    candidates = [
+        ("host_unaccounted", delivery["hun"], "unaccounted"),
+        ("renderer_unaccounted", renderer_unaccounted, "unaccounted"),
+        ("host_outside_renderer", max(delivery["hc"] - delivery["rc"], 0), "host_work"),
+        ("pre_acquire", delivery["pre"], "renderer_work"),
+        ("stream_acquire", delivery["sta"], "renderer_work"),
+        ("drawable_acquisition", delivery["aq"], "drawable_acquisition"),
+        ("post_acquire", delivery["post"], "renderer_work"),
+        ("flush", delivery["flu"], "renderer_work"),
+    ]
+    if boundary_version == 3:
+        candidates.extend((
+            ("renderer_draw", delivery["rdw"], "renderer_work"),
+            ("final_upload", delivery["fum"], "renderer_work"),
+            ("final_finish", delivery["ffm"], "finish_or_submit"),
+            ("final_submit", delivery["fsm"], "finish_or_submit"),
+        ))
+    else:
+        candidates.extend((
+            ("stream_upload", delivery["upl"], "renderer_work"),
+            ("encode", delivery["en"], "finish_or_submit"),
+            ("submit", delivery["sb"], "finish_or_submit"),
+        ))
+    candidates.extend((
+        ("present_call", delivery["ps"], "presentation_pacing"),
+        ("cleanup", delivery["cln"], "renderer_work"),
+        ("input", delivery["inp"], "renderer_work"),
+        ("frame_timing", delivery["fti"], "presentation_pacing"),
+    ))
+    dominant_span, dominant_ms, classification = max(candidates, key=lambda candidate: candidate[1])
+    secondary_observations = []
     if delivery["aq"] > 1:
-        return "drawable_acquisition"
+        secondary_observations.append("drawable_acquisition")
     if max(delivery["en"], delivery["sb"], delivery["ifm"], delivery["ism"], delivery["ffm"], delivery["fsm"]) > 1:
-        return "finish_or_submit"
+        secondary_observations.append("finish_or_submit")
     if delivery["ps"] > 1 or delivery["fti"] > 1:
-        return "presentation_pacing"
-    if renderer_unaccounted >= max(delivery["hc"] - delivery["rc"], 0):
-        return "renderer_work"
-    return "host_work"
+        secondary_observations.append("presentation_pacing")
+    pressure_correlates = []
+    if delivery["qap"] >= 3 or delivery["qoa"] >= 3:
+        pressure_correlates.append("submission_pressure")
+    return {
+        "classification": classification,
+        "dominant_span": dominant_span,
+        "dominant_ms": dominant_ms,
+        "secondary_observations": secondary_observations,
+        "pressure_correlates": pressure_correlates,
+        "evidence_complete": True,
+        "unexplained_ms": delivery["hun"] + renderer_unaccounted,
+    }
 
 
 def sha256(path):
@@ -499,15 +561,18 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             delivery_frames += 1
             delivery_identities.add(delivery_identity)
             delivery_frames_by_identity[delivery_identity] = delivery
+            validity = delivery.get("v", 0)
             fields = {
-                "host": "hc",
                 "renderer": "rc",
                 "acquire": "aq",
                 "encode": "en",
                 "submit": "sb",
                 "present_call": "ps",
-                "pacer_wait": "pw",
             }
+            if validity & 8:
+                fields["host"] = "hc"
+            if validity & 16:
+                fields["pacer_wait"] = "pw"
             for name, field in fields.items():
                 value = delivery.get(field)
                 if value is None:
@@ -519,6 +584,9 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             boundary_version = delivery.get("bv", 0)
             boundary_versions.add(boundary_version)
             if boundary_version in (2, 3):
+                if validity & 8 == 0 or validity & 16 == 0:
+                    incomplete_boundary_frames += 1
+                    continue
                 required = {
                     "hc", "rc", "aq", "en", "sb", "ps",
                     *BOUNDARY_CPU_FIELDS.values(), *PRESSURE_FIELDS.values(),
@@ -558,13 +626,13 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                         boundary_metrics["host_closure_error"].append(abs(delivery["hc"] - host_children))
                         boundary_metrics["renderer_closure_error"].append(max(renderer_children - delivery["rc"], 0))
                         boundary_metrics["renderer_unaccounted"].append(renderer_unaccounted)
-                        classification = classify_boundary_frame(delivery, renderer_unaccounted)
+                        evidence = classify_boundary_frame(delivery, renderer_unaccounted)
                         classifications.append({
                             "epoch": delivery_identity[0],
                             "frame": delivery_identity[1],
                             "host_ms": delivery["hc"],
                             "acquire_ms": delivery["aq"],
-                            "classification": classification,
+                            **evidence,
                         })
                         correlation_rows.append({
                             "host": delivery["hc"],
@@ -734,7 +802,7 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     if not delivery_frames:
         qualification_reasons.append("no_measured_deliveries")
     if frame_owned and any(
-        delivery.get("v") != 7 or delivery.get("su") is not True
+        delivery.get("v") != 31 or delivery.get("su") is not True
         for delivery in delivery_frames_by_identity.values()
     ):
         qualification_reasons.append("measured_delivery_validity_incomplete")
@@ -774,7 +842,11 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
     host_p95 = percentile([item["host_ms"] for item in classifications], 0.95)
     p95_host_frames = [item for item in classifications if host_p95 is not None and item["host_ms"] >= host_p95]
     detailed_cpu_frames = boundary_metrics["host_closure_error"]
-    classification_coverage = len(classifications) / delivery_frames if delivery_frames else 0
+    complete_classifications = [item for item in classifications if item["evidence_complete"]]
+    complete_long_frames = [item for item in long_frames if item["evidence_complete"]]
+    complete_acquire_frames = [item for item in acquire_frames if item["evidence_complete"]]
+    complete_p95_host_frames = [item for item in p95_host_frames if item["evidence_complete"]]
+    classification_coverage = len(complete_classifications) / delivery_frames if delivery_frames else 0
     pressure_correlations = {}
     for pressure_name in ("after_poll", "oldest_age"):
         pressure_correlations[pressure_name] = {
@@ -824,12 +896,12 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
             "detailed_frames": len(detailed_cpu_frames),
             "classification_coverage": classification_coverage,
             "long_frames": len(long_frames),
-            "long_frames_classified": len(long_frames),
+            "long_frames_classified": len(complete_long_frames),
             "acquire_frames": len(acquire_frames),
-            "acquire_frames_classified": len(acquire_frames),
+            "acquire_frames_classified": len(complete_acquire_frames),
             "p95_host_threshold_ms": host_p95,
             "p95_host_frames": len(p95_host_frames),
-            "p95_host_frames_classified": len(p95_host_frames),
+            "p95_host_frames_classified": len(complete_p95_host_frames),
         },
         "boundary_ms": {name: distribution(values) for name, values in boundary_metrics.items()},
         "submission_calls": {
@@ -844,6 +916,20 @@ def evaluate_capture(telemetry_path, scenario_path, binary_paths=None, recording
                 "host_work", "renderer_work", "submission_pressure", "drawable_acquisition",
                 "finish_or_submit", "presentation_pacing", "unaccounted",
             )
+        },
+        "observation_counts": {
+            "drawable_acquisition": sum(
+                "drawable_acquisition" in item["secondary_observations"] for item in classifications
+            ),
+            "finish_or_submit": sum(
+                "finish_or_submit" in item["secondary_observations"] for item in classifications
+            ),
+            "presentation_pacing": sum(
+                "presentation_pacing" in item["secondary_observations"] for item in classifications
+            ),
+            "submission_pressure": sum(
+                "submission_pressure" in item["pressure_correlates"] for item in classifications
+            ),
         },
         "deadline_samples": deadline_samples,
         "deadline_misses": deadline_misses,

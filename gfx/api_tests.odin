@@ -211,8 +211,9 @@ frame_delivery_correlates_cpu_gpu_and_presentation :: proc(t: ^testing.T) {
 			final_submit_max_seconds = 0.004,
 		},
 	)
+	context_frame_delivery_record_host(ctx, {epoch = 3, frame_index = 7}, 0.005, 0)
 	_frame_delivery_gpu_complete(ctx, 7, 10.006, true)
-	_frame_delivery_presented(ctx, 7, 10.008)
+	_frame_delivery_presented(ctx, {epoch = 3, frame_index = 7}, 10.008)
 	out: [1]Frame_Delivery_Timing
 	count, dropped := context_frame_delivery_drain(ctx, out[:])
 	testing.expect_value(t, count, 1)
@@ -271,8 +272,9 @@ frame_delivery_rejects_reversed_completion_timestamp :: proc(t: ^testing.T) {
 	_frame_delivery_begin(ctx, 1)
 	_frame_delivery_submitted(ctx, 1, 10)
 	_frame_delivery_cpu(ctx, {frame_index = 1, frame_cpu_seconds = 0.001})
+	context_frame_delivery_record_host(ctx, {epoch = 1, frame_index = 1}, 0.001, 0)
 	_frame_delivery_gpu_complete(ctx, 1, 9, true)
-	_frame_delivery_presented(ctx, 1, 11)
+	_frame_delivery_presented(ctx, {epoch = 1, frame_index = 1}, 11)
 	out: [1]Frame_Delivery_Timing
 	count, _ := context_frame_delivery_drain(ctx, out[:])
 	testing.expect_value(t, count, 1)
@@ -289,8 +291,9 @@ frame_delivery_emits_failed_gpu_completion :: proc(t: ^testing.T) {
 	_frame_delivery_begin(ctx, 2)
 	_frame_delivery_submitted(ctx, 2, 10)
 	_frame_delivery_cpu(ctx, {frame_index = 2, frame_cpu_seconds = 0.001})
+	context_frame_delivery_record_host(ctx, {epoch = 1, frame_index = 2}, 0.001, 0)
 	_frame_delivery_gpu_complete(ctx, 2, 11, false)
-	_frame_delivery_presented(ctx, 2, 12)
+	_frame_delivery_presented(ctx, {epoch = 1, frame_index = 2}, 12)
 	out: [1]Frame_Delivery_Timing
 	count, _ := context_frame_delivery_drain(ctx, out[:])
 	testing.expect_value(t, count, 1)
@@ -306,6 +309,7 @@ frame_delivery_emits_cpu_gpu_without_presentation_support :: proc(t: ^testing.T)
 	_frame_delivery_begin(ctx, 3)
 	_frame_delivery_submitted(ctx, 3, 10)
 	_frame_delivery_cpu(ctx, {frame_index = 3, frame_cpu_seconds = 0.001})
+	context_frame_delivery_record_host(ctx, {epoch = 1, frame_index = 3}, 0.001, 0)
 	_frame_delivery_gpu_complete(ctx, 3, 11, true)
 	out: [1]Frame_Delivery_Timing
 	count, _ := context_frame_delivery_drain(ctx, out[:])
@@ -334,10 +338,11 @@ frame_delivery_quiesce_requires_terminal_callbacks :: proc(t: ^testing.T) {
 	_frame_delivery_begin(ctx, 1)
 	_frame_delivery_submitted(ctx, 1, 10)
 	_frame_delivery_cpu(ctx, {frame_index = 1, frame_cpu_seconds = 0.001})
+	context_frame_delivery_record_host(ctx, {epoch = 1, frame_index = 1}, 0.001, 0)
 	testing.expect_value(t, _frame_delivery_pending_count(ctx), u32(1))
 	_frame_delivery_gpu_complete(ctx, 1, 11, true)
 	testing.expect_value(t, _frame_delivery_pending_count(ctx), u32(1))
-	_frame_delivery_presented(ctx, 1, 12)
+	_frame_delivery_presented(ctx, {epoch = 1, frame_index = 1}, 12)
 	testing.expect_value(t, _frame_delivery_pending_count(ctx), u32(0))
 	testing.expect(t, context_frame_delivery_quiesce(ctx))
 }
@@ -350,6 +355,7 @@ frame_delivery_retires_stale_missing_callback :: proc(t: ^testing.T) {
 	ctx.delivery.supported = true
 	_frame_delivery_begin(ctx, 4)
 	_frame_delivery_cpu(ctx, {frame_index = 4, frame_cpu_seconds = 0.001})
+	context_frame_delivery_record_host(ctx, {epoch = 1, frame_index = 4}, 0.001, 0)
 	ctx.stats_latest.frame_index = 4 + FRAME_DELIVERY_RETIRE_LAG
 	out: [1]Frame_Delivery_Timing
 	count, _ := context_frame_delivery_drain(ctx, out[:])

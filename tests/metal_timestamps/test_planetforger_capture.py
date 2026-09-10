@@ -83,7 +83,7 @@ def telemetry(groups=None, health=None, missing=False):
         "fd": [{
             "e": 1,
             "i": 1,
-            "v": 7,
+            "v": 31,
             "rc": 7,
             "hc": 8,
             "aq": 1,
@@ -474,7 +474,7 @@ class PlanetForgerCaptureTests(unittest.TestCase):
                     self.assertEqual(result["joined_frames"], 1200)
                 finally:
                     container[field] = previous
-        for field, value in (("v", 3), ("v", 6), ("v", 0), ("su", False)):
+        for field, value in (("v", 7), ("v", 27), ("v", 0), ("su", False)):
             with self.subTest(validity_field=field, value=value):
                 delivery = records[300]["fd"][0]
                 previous = delivery[field]
@@ -693,12 +693,24 @@ class PlanetForgerCaptureTests(unittest.TestCase):
 
     def test_absent_cpu_metrics_are_not_measured_zeroes(self):
         record = telemetry()
+        record["fd"][0]["v"] = 7
         for field in ("rc", "aq", "en", "sb", "ps", "pw"):
             del record["fd"][0][field]
         result = self.evaluate([record])
         self.assertEqual(result["renderer_ms"]["count"], 0)
         self.assertEqual(result["acquire_ms"]["count"], 0)
+        self.assertEqual(result["host_ms"]["count"], 0)
+        self.assertEqual(result["pacer_wait_ms"]["count"], 0)
         self.assertTrue(result["accepted"])
+
+    def test_boundary_requires_explicit_host_and_pacer_validity(self):
+        record = telemetry()
+        record["fd"][0].update(boundary_fields())
+        record["fd"][0]["v"] = 7
+        result = self.evaluate([record])
+        self.assertEqual(result["failures"]["incomplete_boundary_frames"], 1)
+        self.assertEqual(result["boundary_schema"]["detailed_frames"], 0)
+        self.assertFalse(result["accepted"])
 
     def test_rejects_negative_cpu_duration(self):
         record = telemetry()
@@ -754,16 +766,70 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         self.assertEqual(result["boundary_schema"]["detailed_frames"], 1)
         self.assertTrue(result["accepted"])
 
-    def test_classifies_submission_pressure_before_acquire(self):
-        record = telemetry()
+    def test_renderer_draw_dominates_acquisition_observation(self):
         fields = boundary_fields()
-        fields["qap"] = 3
-        fields["qoa"] = 2
-        record["fd"][0].update(fields)
-        result = self.evaluate([record])
-        self.assertEqual(result["classification_counts"]["submission_pressure"], 1)
-        self.assertEqual(result["boundary_schema"]["long_frames"], 0)
-        self.assertEqual(result["boundary_schema"]["acquire_frames_classified"], 1)
+        fields.update({"hc": 98, "rc": 97, "rdw": 87, "aq": 10, "hdr": 97, "hun": 0})
+        evidence = classify_boundary_frame(fields, 0)
+        self.assertEqual(evidence["classification"], "renderer_work")
+        self.assertEqual(evidence["dominant_span"], "renderer_draw")
+        self.assertEqual(evidence["dominant_ms"], 87)
+        self.assertIn("drawable_acquisition", evidence["secondary_observations"])
+
+    def test_submission_pressure_is_a_correlate_not_a_duration(self):
+        fields = boundary_fields()
+        fields.update({"qap": 3, "qoa": 3, "aq": 1.5, "rdw": 4})
+        evidence = classify_boundary_frame(fields, 0)
+        self.assertEqual(evidence["classification"], "renderer_work")
+        self.assertIn("submission_pressure", evidence["pressure_correlates"])
+        self.assertIn("drawable_acquisition", evidence["secondary_observations"])
+
+    def test_classifies_dominant_host_outside_renderer(self):
+        fields = boundary_fields()
+        fields.update({"hc": 20, "rc": 5.8, "aq": 0.1, "hdr": 19.9, "hun": 0})
+        evidence = classify_boundary_frame(fields, 0)
+        self.assertEqual(evidence["classification"], "host_work")
+        self.assertEqual(evidence["dominant_span"], "host_outside_renderer")
+
+    def test_classifies_dominant_final_finish_or_submit(self):
+        fields = boundary_fields()
+        fields.update({"hc": 8, "rc": 7, "rdw": 0.2, "aq": 0.1, "fsm": 3})
+        evidence = classify_boundary_frame(fields, 0)
+        self.assertEqual(evidence["classification"], "finish_or_submit")
+        self.assertEqual(evidence["dominant_span"], "final_submit")
+
+    def test_classifies_dominant_presentation_pacing(self):
+        fields = boundary_fields()
+        fields.update({"hc": 8, "rc": 7, "rdw": 0.2, "aq": 0.1, "ps": 3})
+        evidence = classify_boundary_frame(fields, 0)
+        self.assertEqual(evidence["classification"], "presentation_pacing")
+        self.assertEqual(evidence["dominant_span"], "present_call")
+
+    def test_classifies_unexplained_remainder(self):
+        fields = boundary_fields()
+        fields.update({"hc": 8, "rc": 7, "rdw": 0.2, "aq": 0.1, "hun": 2})
+        evidence = classify_boundary_frame(fields, 0.5)
+        self.assertEqual(evidence["classification"], "unaccounted")
+        self.assertEqual(evidence["dominant_span"], "host_unaccounted")
+        self.assertEqual(evidence["unexplained_ms"], 2.5)
+
+    def test_classification_keeps_v2_and_v3_nested_spans_non_overlapping(self):
+        v3 = boundary_fields()
+        v3.update({"rdw": 4, "aq": 0.1, "ism": 20, "fsm": 1})
+        self.assertEqual(classify_boundary_frame(v3, 0)["dominant_span"], "renderer_draw")
+        v2 = dict(v3)
+        v2.update({"bv": 2, "upl": 0.5, "en": 2, "sb": 3})
+        del v2["rdw"]
+        self.assertEqual(classify_boundary_frame(v2, 0)["dominant_span"], "submit")
+
+    def test_classification_reports_incomplete_nonfinite_or_unknown_evidence(self):
+        for update in ({"bv": 4}, {"rdw": float("nan")}, {"rdw": None}):
+            with self.subTest(update=update):
+                fields = boundary_fields()
+                fields.update(update)
+                evidence = classify_boundary_frame(fields, None)
+                self.assertFalse(evidence["evidence_complete"])
+                self.assertIsNone(evidence["classification"])
+                self.assertIsNone(evidence["unexplained_ms"])
 
     def test_stable_triple_buffer_occupancy_is_not_pressure(self):
         record = telemetry()
@@ -772,26 +838,28 @@ class PlanetForgerCaptureTests(unittest.TestCase):
         fields["qoa"] = 2
         record["fd"][0].update(fields)
         result = self.evaluate([record])
-        self.assertEqual(result["classification_counts"]["submission_pressure"], 0)
-        self.assertEqual(result["classification_counts"]["drawable_acquisition"], 1)
+        self.assertEqual(result["observation_counts"]["submission_pressure"], 0)
+        self.assertEqual(result["observation_counts"]["drawable_acquisition"], 1)
 
-    def test_oldest_submission_age_three_is_pressure(self):
+    def test_oldest_submission_age_three_is_pressure_observation(self):
         record = telemetry()
         fields = boundary_fields()
         fields["qap"] = 2
         fields["qoa"] = 3
         record["fd"][0].update(fields)
         result = self.evaluate([record])
-        self.assertEqual(result["classification_counts"]["submission_pressure"], 1)
+        self.assertEqual(result["observation_counts"]["submission_pressure"], 1)
 
-    def test_classifies_intermediate_submit_maximum(self):
+    def test_reports_intermediate_submit_observation_without_double_counting_v3(self):
         record = telemetry()
         fields = boundary_fields()
         fields["aq"] = 0.1
+        fields["rdw"] = 2
         fields["ism"] = 1.5
         record["fd"][0].update(fields)
         result = self.evaluate([record])
-        self.assertEqual(result["classification_counts"]["finish_or_submit"], 1)
+        self.assertEqual(result["classification_counts"]["renderer_work"], 1)
+        self.assertEqual(result["observation_counts"]["finish_or_submit"], 1)
         self.assertEqual(result["submission_calls"]["intermediate_submit_max"]["p50"], 1.5)
 
     def test_reports_pressure_correlations_and_p95_host_frames(self):
