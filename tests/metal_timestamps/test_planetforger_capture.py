@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from evaluate_planetforger_capture import evaluate_capture
+from evaluate_planetforger_capture import classify_boundary_frame, evaluate_capture
 
 
 IDENTITY = {
