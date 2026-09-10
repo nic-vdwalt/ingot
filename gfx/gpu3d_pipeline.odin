@@ -716,14 +716,9 @@ gpu_3d_target_depth_texture :: proc(target: ^Gpu_3D_Target) -> (Texture2D, bool)
 	return target.texture.depth, true
 }
 
-context_copy_gpu_3d_target_named :: proc(
-	ctx: ^Context,
-	source, destination: ^Gpu_3D_Target,
-	name: string,
-) -> bool {
-	assert(ctx != nil, "context_copy_gpu_3d_target_named: nil context")
-	if source == nil || destination == nil do return false
-	if ctx.resources.gpu_3d.active_pass_generation != 0 do return false
+@(private)
+_gpu_3d_target_copy_compatible :: proc(source, destination: ^Gpu_3D_Target) -> bool {
+	if source == nil || destination == nil || source == destination do return false
 	if source.antialiasing != .None || destination.antialiasing != .None do return false
 	width, height, source_ok := gpu_3d_target_size(source)
 	destination_width, destination_height, destination_ok := gpu_3d_target_size(destination)
@@ -733,6 +728,24 @@ context_copy_gpu_3d_target_named :: proc(
 	   height != destination_height {
 		return false
 	}
+	return(
+		source.texture.texture.id != destination.texture.texture.id &&
+		source.texture.depth.id != destination.texture.depth.id \
+	)
+}
+
+@(private)
+_gpu_3d_target_copy_resources :: proc(
+	ctx: ^Context,
+	source, destination: ^Gpu_3D_Target,
+) -> (
+	^Tex_Entry,
+	^Tex_Entry,
+	^Tex_Entry,
+	^Tex_Entry,
+	bool,
+) {
+	if ctx == nil || !_gpu_3d_target_copy_compatible(source, destination) do return nil, nil, nil, nil, false
 	source_color := context_get_texture(ctx, source.texture.texture.id)
 	source_depth := context_get_texture(ctx, source.texture.depth.id)
 	destination_color := context_get_texture(ctx, destination.texture.texture.id)
@@ -741,34 +754,63 @@ context_copy_gpu_3d_target_named :: proc(
 	   source_depth == nil ||
 	   destination_color == nil ||
 	   destination_depth == nil {
-		return false
+		return nil, nil, nil, nil, false
 	}
 	if source_color.wgformat != destination_color.wgformat ||
 	   source_depth.wgformat != destination_depth.wgformat {
-		return false
+		return nil, nil, nil, nil, false
 	}
+	return source_color, source_depth, destination_color, destination_depth, true
+}
+
+@(private)
+_gpu_3d_target_copy_encode :: proc(
+	ctx: ^Context,
+	encoder: wg.CommandEncoder,
+	source, destination: ^Gpu_3D_Target,
+) -> bool {
+	if encoder == nil do return false
+	source_color, source_depth, destination_color, destination_depth, ok :=
+		_gpu_3d_target_copy_resources(ctx, source, destination)
+	if !ok do return false
+	width, height, _ := gpu_3d_target_size(source)
+	extent := wg.Extent3D{u32(width), u32(height), 1}
+	color_source := wg.TexelCopyTextureInfo {
+			texture = source_color.tex,
+			aspect  = .All,
+		}
+	color_destination := wg.TexelCopyTextureInfo {
+			texture = destination_color.tex,
+			aspect  = .All,
+		}
+	depth_source := wg.TexelCopyTextureInfo {
+			texture = source_depth.tex,
+			aspect  = .DepthOnly,
+		}
+	depth_destination := wg.TexelCopyTextureInfo {
+			texture = destination_depth.tex,
+			aspect  = .DepthOnly,
+		}
+	wg.CommandEncoderCopyTextureToTexture(encoder, &color_source, &color_destination, &extent)
+	wg.CommandEncoderCopyTextureToTexture(encoder, &depth_source, &depth_destination, &extent)
+	return true
+}
+
+context_copy_gpu_3d_target_named :: proc(
+	ctx: ^Context,
+	source, destination: ^Gpu_3D_Target,
+	name: string,
+) -> bool {
+	assert(ctx != nil, "context_copy_gpu_3d_target_named: nil context")
+	if ctx.resources.gpu_3d.active_pass_generation != 0 do return false
+	if !_gpu_3d_target_copy_compatible(source, destination) do return false
 	encoder := _gpu_timing_command_encoder(ctx, name)
 	if encoder == nil do return false
 	timing := _gpu_timing_encoder_begin(ctx, encoder, name)
-	extent := wg.Extent3D{u32(width), u32(height), 1}
-	color_source := wg.TexelCopyTextureInfo {
-		texture = source_color.tex,
-		aspect  = .All,
+	if !_gpu_3d_target_copy_encode(ctx, encoder, source, destination) {
+		wg.CommandEncoderRelease(encoder)
+		return false
 	}
-	color_destination := wg.TexelCopyTextureInfo {
-		texture = destination_color.tex,
-		aspect  = .All,
-	}
-	depth_source := wg.TexelCopyTextureInfo {
-		texture = source_depth.tex,
-		aspect  = .DepthOnly,
-	}
-	depth_destination := wg.TexelCopyTextureInfo {
-		texture = destination_depth.tex,
-		aspect  = .DepthOnly,
-	}
-	wg.CommandEncoderCopyTextureToTexture(encoder, &color_source, &color_destination, &extent)
-	wg.CommandEncoderCopyTextureToTexture(encoder, &depth_source, &depth_destination, &extent)
 	_gpu_timing_encoder_end(ctx, encoder, timing)
 	finish_started := platform_now()
 	command := wg.CommandEncoderFinish(encoder, nil)
@@ -2188,12 +2230,9 @@ _gpu_3d_should_upload_stream :: proc(allow_submit: bool) -> bool {
 	return allow_submit
 }
 
-end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
-	if pass == nil || pass.owner == nil do return
+@(private)
+_gpu_3d_pass_submit :: proc(pass: ^Gpu_3D_Pass) {
 	ctx := pass.owner
-	if !_gpu_3d_pass_current(&ctx.resources.gpu_3d, pass) do return
-	wg.RenderPassEncoderEnd(pass.pass)
-	wg.RenderPassEncoderRelease(pass.pass)
 	_gpu_timing_encoder_end(ctx, pass.encoder, pass.timing)
 	retirement := u64(0)
 	if pass.owns_stream do retirement = _submission_reserve(&ctx.submissions)
@@ -2237,6 +2276,38 @@ end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
 	}
 	ctx.resources.gpu_3d.active_pass_generation = 0
 	pass^ = {}
+}
+
+end_gpu_3d :: proc(pass: ^Gpu_3D_Pass) {
+	if pass == nil || pass.owner == nil do return
+	ctx := pass.owner
+	if !_gpu_3d_pass_current(&ctx.resources.gpu_3d, pass) do return
+	wg.RenderPassEncoderEnd(pass.pass)
+	wg.RenderPassEncoderRelease(pass.pass)
+	_gpu_3d_pass_submit(pass)
+}
+
+end_gpu_3d_and_copy_target_named :: proc(
+	pass: ^Gpu_3D_Pass,
+	destination: ^Gpu_3D_Target,
+	name: string,
+) -> bool {
+	if pass == nil || pass.owner == nil do return false
+	ctx := pass.owner
+	if !_gpu_3d_pass_current(&ctx.resources.gpu_3d, pass) do return false
+	_, _, _, _, resources_ok := _gpu_3d_target_copy_resources(ctx, pass.target, destination)
+	if !resources_ok do return false
+	wg.RenderPassEncoderEnd(pass.pass)
+	wg.RenderPassEncoderRelease(pass.pass)
+	timing := _gpu_timing_encoder_begin(ctx, pass.encoder, name)
+	if !_gpu_3d_target_copy_encode(ctx, pass.encoder, pass.target, destination) do return false
+	_gpu_timing_encoder_end(ctx, pass.encoder, timing)
+	_gpu_3d_pass_submit(pass)
+	return true
+}
+
+end_gpu_3d_and_copy_target :: proc(pass: ^Gpu_3D_Pass, destination: ^Gpu_3D_Target) -> bool {
+	return end_gpu_3d_and_copy_target_named(pass, destination, "gpu3d-copy")
 }
 
 @(private)
