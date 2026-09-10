@@ -27,6 +27,23 @@ presentation_submission_ignores_missing_frame :: proc(t: ^testing.T) {
 }
 
 @(test)
+presentation_latest_identity_requires_an_attachable_slot :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 2
+	ctx.stats_latest.frame_index = 7
+	testing.expect_value(t, context_frame_delivery_latest_identity(ctx), Frame_Delivery_Identity{})
+	_frame_delivery_begin(ctx, 7)
+	testing.expect_value(
+		t,
+		context_frame_delivery_latest_identity(ctx),
+		Frame_Delivery_Identity{epoch = 2, frame_index = 7},
+	)
+	context_frame_delivery_record_host(ctx, {epoch = 2, frame_index = 7}, 0.01, 0)
+	testing.expect_value(t, context_frame_delivery_latest_identity(ctx), Frame_Delivery_Identity{})
+}
+
+@(test)
 presentation_records_valid_frame_and_rejects_stale_epoch :: proc(t: ^testing.T) {
 	ctx := new(Context)
 	defer free(ctx)

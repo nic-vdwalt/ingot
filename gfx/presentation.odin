@@ -123,6 +123,10 @@ context_frame_delivery_quiesce :: proc(ctx: ^Context) -> bool {
 
 context_frame_delivery_latest_identity :: proc(ctx: ^Context) -> Frame_Delivery_Identity {
 	if ctx == nil || ctx.stats_latest.frame_index == 0 do return {}
+	sync.mutex_lock(&ctx.delivery.mutex)
+	defer sync.mutex_unlock(&ctx.delivery.mutex)
+	slot := _frame_delivery_slot(ctx, ctx.stats_latest.frame_index)
+	if slot == nil || slot.epoch != ctx.epoch || slot.timing.host_valid do return {}
 	return {epoch = ctx.epoch, frame_index = ctx.stats_latest.frame_index}
 }
 
