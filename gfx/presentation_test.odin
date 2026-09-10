@@ -95,6 +95,29 @@ presentation_host_detail_closes_to_total :: proc(t: ^testing.T) {
 }
 
 @(test)
+presentation_surface_wait_is_excluded_from_active_host_cpu :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.epoch = 1
+	_frame_delivery_begin(ctx, 3)
+	identity := Frame_Delivery_Identity{epoch = 1, frame_index = 3}
+	timing := Host_Frame_Timing {
+		total_seconds        = 0.012,
+		draw_seconds         = 0.010,
+		prepare_seconds      = 0.001,
+		cursor_seconds       = 0.001,
+		surface_wait_seconds = 0.006,
+	}
+	testing.expect(t, context_frame_delivery_record_host_detail(ctx, identity, timing, 0.002))
+	slot := _frame_delivery_slot(ctx, 3)
+	testing.expect(t, slot != nil)
+	if slot == nil do return
+	testing.expect_value(t, slot.timing.host_cpu_seconds, f64(0.006))
+	testing.expect_value(t, slot.timing.host_draw_cpu_seconds, f64(0.004))
+	testing.expect_value(t, slot.timing.pacer_wait_seconds, f64(0.008))
+}
+
+@(test)
 presentation_drain_waits_for_explicit_host_attachment :: proc(t: ^testing.T) {
 	ctx := new(Context)
 	defer free(ctx)

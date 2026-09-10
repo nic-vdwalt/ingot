@@ -8,12 +8,13 @@ FRAME_DELIVERY_QUIESCE_POLLS :: 200
 FRAME_DELIVERY_QUIESCE_SECONDS :: 0.005
 
 Host_Frame_Timing :: struct {
-	total_seconds:   f64,
-	reload_seconds:  f64,
-	refresh_seconds: f64,
-	draw_seconds:    f64,
-	prepare_seconds: f64,
-	cursor_seconds:  f64,
+	total_seconds:      f64,
+	reload_seconds:     f64,
+	refresh_seconds:    f64,
+	draw_seconds:       f64,
+	prepare_seconds:    f64,
+	cursor_seconds:     f64,
+	surface_wait_seconds: f64,
 }
 
 Frame_Delivery_Identity :: struct {
@@ -145,19 +146,20 @@ context_frame_delivery_record_host_detail :: proc(
 	if ctx == nil || timing.total_seconds < 0 || pacer_wait_seconds < 0 || accounted < 0 do return false
 	if timing.reload_seconds < 0 || timing.refresh_seconds < 0 || timing.draw_seconds < 0 do return false
 	if timing.prepare_seconds < 0 || timing.cursor_seconds < 0 do return false
+	if timing.surface_wait_seconds < 0 || timing.surface_wait_seconds > timing.draw_seconds do return false
 	if identity.epoch == 0 || identity.frame_index == 0 do return false
 	sync.mutex_lock(&ctx.delivery.mutex)
 	defer sync.mutex_unlock(&ctx.delivery.mutex)
 	slot := _frame_delivery_slot(ctx, identity.frame_index)
 	if slot == nil || slot.epoch != identity.epoch do return false
-	slot.timing.host_cpu_seconds = timing.total_seconds
+	slot.timing.host_cpu_seconds = timing.total_seconds - timing.surface_wait_seconds
 	slot.timing.host_reload_cpu_seconds = timing.reload_seconds
 	slot.timing.host_refresh_cpu_seconds = timing.refresh_seconds
-	slot.timing.host_draw_cpu_seconds = timing.draw_seconds
+	slot.timing.host_draw_cpu_seconds = timing.draw_seconds - timing.surface_wait_seconds
 	slot.timing.host_prepare_cpu_seconds = timing.prepare_seconds
 	slot.timing.host_cursor_cpu_seconds = timing.cursor_seconds
 	slot.timing.host_unaccounted_seconds = max(timing.total_seconds - accounted, f64(0))
-	slot.timing.pacer_wait_seconds = pacer_wait_seconds
+	slot.timing.pacer_wait_seconds = pacer_wait_seconds + timing.surface_wait_seconds
 	slot.timing.host_valid = true
 	slot.timing.pacer_wait_valid = true
 	return true
