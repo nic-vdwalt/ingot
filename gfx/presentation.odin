@@ -8,12 +8,12 @@ FRAME_DELIVERY_QUIESCE_POLLS :: 200
 FRAME_DELIVERY_QUIESCE_SECONDS :: 0.005
 
 Host_Frame_Timing :: struct {
-	total_seconds:      f64,
-	reload_seconds:     f64,
-	refresh_seconds:    f64,
-	draw_seconds:       f64,
-	prepare_seconds:    f64,
-	cursor_seconds:     f64,
+	total_seconds:        f64,
+	reload_seconds:       f64,
+	refresh_seconds:      f64,
+	draw_seconds:         f64,
+	prepare_seconds:      f64,
+	cursor_seconds:       f64,
 	surface_wait_seconds: f64,
 }
 
@@ -88,12 +88,12 @@ Frame_Delivery_Slot :: struct {
 }
 
 Frame_Delivery_State :: struct {
-	mutex:                  sync.Mutex,
-	slots:                  [FRAME_DELIVERY_MAX]Frame_Delivery_Slot,
-	last_presented:         f64,
-	dropped:                u64,
-	supported:              bool,
-	closing:                bool,
+	mutex:          sync.Mutex,
+	slots:          [FRAME_DELIVERY_MAX]Frame_Delivery_Slot,
+	last_presented: f64,
+	dropped:        u64,
+	supported:      bool,
+	closing:        bool,
 }
 
 context_frame_delivery_supported :: proc(ctx: ^Context) -> bool {
@@ -143,10 +143,12 @@ context_frame_delivery_record_host_detail :: proc(
 		timing.draw_seconds +
 		timing.prepare_seconds +
 		timing.cursor_seconds
-	if ctx == nil || timing.total_seconds < 0 || pacer_wait_seconds < 0 || accounted < 0 do return false
-	if timing.reload_seconds < 0 || timing.refresh_seconds < 0 || timing.draw_seconds < 0 do return false
-	if timing.prepare_seconds < 0 || timing.cursor_seconds < 0 do return false
-	if timing.surface_wait_seconds < 0 || timing.surface_wait_seconds > timing.draw_seconds do return false
+	if ctx == nil || timing.total_seconds < 0 do return false
+	if pacer_wait_seconds < 0 || accounted < 0 do return false
+	if timing.reload_seconds < 0 || timing.refresh_seconds < 0 do return false
+	if timing.draw_seconds < 0 || timing.prepare_seconds < 0 do return false
+	if timing.cursor_seconds < 0 || timing.surface_wait_seconds < 0 do return false
+	if timing.surface_wait_seconds > timing.draw_seconds do return false
 	if identity.epoch == 0 || identity.frame_index == 0 do return false
 	sync.mutex_lock(&ctx.delivery.mutex)
 	defer sync.mutex_unlock(&ctx.delivery.mutex)

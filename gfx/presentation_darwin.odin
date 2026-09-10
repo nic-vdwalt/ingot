@@ -58,7 +58,10 @@ when !INGOT_GFX_SDL3 {
 		if frame_index == 0 do return drawable
 		callback := new(Presentation_Callback)
 		if callback == nil do return drawable
-		callback.identity = {epoch = owner.epoch, frame_index = frame_index}
+		callback.identity = {
+			epoch       = owner.epoch,
+			frame_index = frame_index,
+		}
 		block := NS.Block_createLocalWithParam(rawptr(callback), presentation_done)
 		drawable->addPresentedHandler(block)
 		return drawable

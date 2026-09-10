@@ -100,7 +100,10 @@ presentation_surface_wait_is_excluded_from_active_host_cpu :: proc(t: ^testing.T
 	defer free(ctx)
 	ctx.epoch = 1
 	_frame_delivery_begin(ctx, 3)
-	identity := Frame_Delivery_Identity{epoch = 1, frame_index = 3}
+	identity := Frame_Delivery_Identity {
+		epoch       = 1,
+		frame_index = 3,
+	}
 	timing := Host_Frame_Timing {
 		total_seconds        = 0.012,
 		draw_seconds         = 0.010,
