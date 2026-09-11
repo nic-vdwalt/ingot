@@ -156,6 +156,10 @@ Mouse_Position :: proc(surface: ^Surface) -> Point {
 	return Surface_Mouse_Position(surface)
 }
 
+Wheel_V :: proc(surface: ^Surface) -> Point {
+	return Surface_Wheel_V(surface)
+}
+
 Wheel :: proc(surface: ^Surface) -> f32 {
 	return Surface_Wheel(surface)
 }

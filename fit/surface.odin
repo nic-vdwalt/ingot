@@ -416,6 +416,11 @@ Surface_Mouse_Position :: proc(surface: ^Surface) -> Point {
 	return from_point(ui.get_mouse_position(u.frame))
 }
 
+Surface_Wheel_V :: proc(surface: ^Surface) -> Point {
+	u := surface_ui(surface)
+	return from_point(ui.get_mouse_wheel_move_v(u.frame))
+}
+
 Surface_Wheel :: proc(surface: ^Surface) -> f32 {
 	u := surface_ui(surface)
 	return ui.get_wheel_move(u.frame)

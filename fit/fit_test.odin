@@ -56,6 +56,11 @@ Fit_Test_Legacy_Button_State :: struct {
 	consumed: bool,
 }
 
+Fit_Test_Wheel_State :: struct {
+	wheel:    Point,
+	dominant: f32,
+}
+
 fit_test_icon_render :: proc(surface: ^Surface, _: Rect, _: rawptr) -> bool {
 	_ = Surface_Icon_Button(surface, Widget_Id(1), .Settings, "Settings", {10, 10, 28, 28})
 	return false
@@ -63,6 +68,17 @@ fit_test_icon_render :: proc(surface: ^Surface, _: Rect, _: rawptr) -> bool {
 
 fit_test_icon_draw :: proc(builder: ^Builder, _: rawptr) {
 	Canvas(builder, fit_test_icon_render)
+}
+
+fit_test_wheel_render :: proc(surface: ^Surface, _: Rect, userdata: rawptr) -> bool {
+	state := cast(^Fit_Test_Wheel_State)userdata
+	state.wheel = Surface_Wheel_V(surface)
+	state.dominant = Surface_Wheel(surface)
+	return false
+}
+
+fit_test_wheel_draw :: proc(builder: ^Builder, userdata: rawptr) {
+	Canvas(builder, fit_test_wheel_render, userdata)
 }
 
 fit_test_noop_render :: proc(_: ^Surface, _: Rect, _: rawptr) -> bool {
@@ -123,6 +139,21 @@ fit_standard_icon_button_is_font_independent :: proc(t: ^testing.T) {
 	testing.expect(t, summary.main_geometry_commands >= 11)
 	testing.expect_value(t, summary.semantic_nodes, 1)
 	testing.expect_value(t, diagnostics.unsupported_glyphs, i32(0))
+}
+
+@(test)
+fit_surface_wheel_preserves_both_axes :: proc(t: ^testing.T) {
+	driver: Test_Driver
+	Test_Driver_Init(&driver)
+	defer Test_Driver_Destroy(&driver)
+	state: Fit_Test_Wheel_State
+	input := Test_Input {
+		mouse_wheel = {3, 1},
+		screen_size = {320, 240},
+	}
+	testing.expect(t, Test_Driver_Frame(&driver, input, fit_test_wheel_draw, &state))
+	testing.expect_value(t, state.wheel, input.mouse_wheel)
+	testing.expect_value(t, state.dominant, input.mouse_wheel.y)
 }
 
 @(test)
