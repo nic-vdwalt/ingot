@@ -84,19 +84,29 @@ tab_bar_id :: proc(
 		is_active := active^ == i32(index)
 		color := Ink.Primary if is_active || hovers[index] else .Secondary
 		pad := metrics.CONTROL_GAP
-		text(
-			frame,
-			label,
-			rect.x + pad,
-			rect.y + (rect.h - text_role_size(frame, .Body)) / 2,
-			.Body,
-			color,
-		)
-		if is_active && !rect_culled_frame(frame, rect) {
-			draw_rectangle(frame, indicator.x, indicator.y, indicator.w, indicator.h,
-				ui_frame_theme(frame).fg_accent)
+		if !rect_culled_frame(frame, rect) {
+			text(
+				frame,
+				label,
+				rect.x + pad,
+				rect.y + (rect.h - text_role_size(frame, .Body)) / 2,
+				.Body,
+				color,
+			)
 		}
-		if focus_opt_focused(fo) do draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
+		if is_active && !rect_culled_frame(frame, rect) {
+			draw_rectangle(
+				frame,
+				indicator.x,
+				indicator.y,
+				indicator.w,
+				indicator.h,
+				ui_frame_theme(frame).fg_accent,
+			)
+		}
+		if focus_opt_focused(fo) && !rect_culled_frame(frame, rect) {
+			draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
+		}
 		sem: Sem_State
 		if is_active do sem += {.Selected}
 		semantic_push(frame, .Tab, rect, label, sem, fo, widget = widget)
@@ -105,12 +115,19 @@ tab_bar_id :: proc(
 }
 
 tabs_motion_rect :: proc(
-	frame: ^Ui_Frame, rect: Rect_I32, motion: ^Control_Motion_State, identity: u64,
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	motion: ^Control_Motion_State,
+	identity: u64,
 ) -> Rect_I32 {
 	assert(frame != nil && frame.open, "tabs motion: invalid frame")
 	assert(rect.w >= 0 && rect.h >= 0, "tabs motion: invalid rect")
-	target := Rect_I32{rect.x, rect.y + rect.h - ui_frame_sc(frame, 2), rect.w,
-		ui_frame_sc(frame, 2)}
+	target := Rect_I32 {
+		rect.x,
+		rect.y + rect.h - ui_frame_sc(frame, 2),
+		rect.w,
+		ui_frame_sc(frame, 2),
+	}
 	if motion == nil do return target
 	snap := motion.identity != identity || !slot_visible(rect) || rect_culled_frame(frame, rect)
 	motion.identity = identity
@@ -130,7 +147,11 @@ tab_bar_string :: proc(
 }
 
 tab_bar_u64 :: proc(
-	u: ^Ui, key: u64, labels: []string, active: ^i32, height: i32 = 36,
+	u: ^Ui,
+	key: u64,
+	labels: []string,
+	active: ^i32,
+	height: i32 = 36,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(u != nil && u.open && key != 0, "tab_bar: invalid argument")

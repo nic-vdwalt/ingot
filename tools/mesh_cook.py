@@ -781,14 +781,14 @@ def _select_blades(components, descriptors, target):
     first = max(ids, key=lambda key: (normalized[key][2] +
                 sum((normalized[key][axis] - 0.5) ** 2 for axis in range(2)), -key))
     order = [first]
-    remaining = set(ids) - {first}
+    remaining = [key for key in ids if key != first]
     distances = {key: float("inf") for key in remaining}
     while remaining:
         latest = normalized[order[-1]]
-        for key in sorted(remaining):
+        for key in remaining:
             distance = sum((normalized[key][axis] - latest[axis]) ** 2 for axis in range(3))
             distances[key] = min(distances[key], distance)
-        chosen = max(sorted(remaining), key=lambda key: (distances[key], -key))
+        chosen = max(remaining, key=lambda key: (distances[key], -key))
         order.append(chosen)
         remaining.remove(chosen)
     cost = 0
@@ -811,7 +811,8 @@ def _omitted_blade_error(vertices, components, selected):
         if key in selected:
             continue
         points = [vertices[index][:3] for index in components[key]]
-        center = tuple(sum(point[axis] for point in points) / len(points) for axis in range(3))
+        center = tuple(math.fsum(point[axis] for point in points) / len(points)
+                       for axis in range(3))
         representative = min(representatives, key=lambda point:
                              (sum((point[axis] - center[axis]) ** 2 for axis in range(3)), point))
         error = max(error, max(math.dist(point, representative) for point in points))
@@ -850,6 +851,8 @@ def validate_cook_constraints(vertices, indices, grounded, ground_tolerance, bla
     if not math.isfinite(ground_tolerance) or ground_tolerance < 0:
         fail(f"{label}: ground tolerance must be finite and nonnegative")
     if blade_ids is not None:
+        if not isinstance(blade_ids, (list, tuple)):
+            fail(f"{label}: blade IDs must be a list or tuple")
         if len(blade_ids) != len(indices) // 3 or any(
             type(blade_id) is not int or blade_id < 0 for blade_id in blade_ids
         ):

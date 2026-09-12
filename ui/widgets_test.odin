@@ -124,6 +124,56 @@ button_spec_and_facade_share_geometry :: proc(t: ^testing.T) {
 }
 
 @(test)
+disclosure_motion_keeps_expansion_immediate :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	sem_enable(&runtime, true)
+	theme := theme_dark()
+	theme.tactile_controls = true
+	ui_runtime_set_theme(&runtime, theme)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	motion: Control_Motion_State
+	transition_f32_reset(&motion.value, 0)
+	open := false
+	slot: int = 1
+	options := Collapsible_Header_Options {
+		focus  = {&slot, 1},
+		motion = &motion,
+	}
+	input := Ui_Input {
+		frame_time = 1.0 / 60.0,
+	}
+	input.keys_pressed[input_key_index(.SPACE)] = true
+	ui_frame_begin(&frame, &runtime, &input)
+	result := collapsible_header_at(&frame, {20, 20, 200, 30}, "Details", &open, options)
+	testing.expect(t, result.toggled && open)
+	testing.expect_value(t, result.next_y, i32(46))
+	testing.expect(t, motion.value.current > 0 && motion.value.current < 1)
+	testing.expect(t, .Expanded in frame.semantics.cur.nodes[0].state)
+	testing.expect_value(t, frame.semantics.cur.nodes[0].rect, Rect_I32{20, 20, 200, 26})
+	ui_frame_end(&frame)
+	input.keys_pressed[input_key_index(.SPACE)] = false
+	ui_frame_begin(&frame, &runtime, &input)
+	frame.text_cull_top, frame.text_cull_bottom = 100, 200
+	_ = collapsible_header_at(&frame, {20, 20, 200, 30}, "Details", &open, options)
+	testing.expect_value(t, motion.value.current, f32(1))
+	testing.expect_value(t, output.main.count, 0)
+	testing.expect(t, !output.platform.request_redraw)
+	testing.expect(t, .Expanded in frame.semantics.cur.nodes[0].state)
+	ui_frame_end(&frame)
+}
+
+@(test)
 button_surface_preserves_palettes_and_gloss :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

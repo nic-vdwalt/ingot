@@ -18,6 +18,7 @@ Collapsible_Header_Facade_Options :: struct {
 	font_size:   i32,
 	height:      i32,
 	field_id:    string,
+	motion:      ^Control_Motion_State,
 }
 
 // collapsible_header carves a full-width row and toggles open^ on click or
@@ -41,6 +42,7 @@ collapsible_header :: proc(
 		height      = ui_frame_sc(u.frame, height),
 		field_id    = options.field_id,
 		widget      = id,
+		motion      = options.motion,
 	}
 	if slot_visible(rect) do opts.focus = focus(u, id)
 	return collapsible_header_at(u.frame, rect, label, open, opts).toggled

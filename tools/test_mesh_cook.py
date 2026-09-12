@@ -452,7 +452,7 @@ class WholeBladeTest(unittest.TestCase):
 
     def test_invalid_metadata_and_clustered_policy_fail(self):
         vertices, indices, ids = blade_fixture()
-        for metadata in (None, ids[:-1], [True] * len(ids), [-1] * len(ids)):
+        for metadata in (None, 1, iter(ids), {}, ids[:-1], [True] * len(ids), [-1] * len(ids)):
             with self.assertRaises(cook.CookError):
                 cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=metadata)
         with self.assertRaisesRegex(cook.CookError, "clustered"):
@@ -525,6 +525,21 @@ class WholeBladeTest(unittest.TestCase):
         boundary = {(points[index], points[(index + 1) % 4]) for index in range(4)}
         with self.assertRaisesRegex(cook.CookError, "self-intersecting"):
             cook._validate_patch_outline(boundary, [first], "test")
+
+    def test_nonmanifold_segment_junction_fails(self):
+        root = (0.0, 0.0, 0.0)
+        tip = (0.0, 0.0, 1.0)
+        faces = []
+        for point in ((1.0, 0.0, 0.5), (0.0, 1.0, 0.5), (-1.0, -1.0, 0.5)):
+            triangle = (root, tip, point)
+            faces.extend((triangle, triangle[::-1]))
+        with self.assertRaisesRegex(cook.CookError, "nonmanifold"):
+            cook._validate_blade_faces(faces, "junction")
+
+    def test_target_ties_prefer_lower_triangle_cost(self):
+        components = {0: [0] * 12, 1: [0] * 12, 2: [0] * 12}
+        descriptors = {0: (0, 0, 3), 1: (1, 0, 1), 2: (0, 1, 2)}
+        self.assertEqual(cook._select_blades(components, descriptors, 18), [0])
 
     def test_component_limits_fail_before_expensive_validation(self):
         vertices, indices, ids = blade_fixture()

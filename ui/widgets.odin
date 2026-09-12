@@ -2002,6 +2002,7 @@ Collapsible_Header_Options :: struct {
 	focus:       Focus_Opt,
 	field_id:    string,
 	widget:      Widget_Id,
+	motion:      ^Control_Motion_State,
 }
 
 Collapsible_Header_Result :: struct {
@@ -2032,36 +2033,51 @@ collapsible_header_at :: proc(
 	if interaction.hovered do request_cursor(frame, .POINTING_HAND)
 	toggled := interaction.clicked || focus_opt_activated(frame, options.focus)
 	if toggled do open^ = !open^
-	if focus_opt_focused(options.focus) do draw_focus_ring(frame, x, y, w, height)
+	culled := rect_culled_frame(frame, {x, y, w, height})
+	channel: ^Transition_F32_State
+	if options.motion != nil do channel = &options.motion.value
+	emphasis := control_motion_fraction(
+		frame,
+		channel,
+		1 if open^ || interaction.hovered else 0,
+		snap = culled,
+	)
+	if !culled {
+		if style.tactile_controls {
+			background := color_mix(Color{}, style.bg_hover, emphasis)
+			draw_surface_colors(frame, rect, {bg = background}, border = .None)
+		}
+		if focus_opt_focused(options.focus) do draw_focus_ring(frame, x, y, w, height)
 
-	pad := ui_frame_sc(frame, 10)
-	text_y := y + (height - font_size) / 2
-	indicator: cstring = "\u25BE" if open^ else "\u25B8"
-	indicator_w := measure_text_frame(frame, indicator, font_size)
-	draw_text_frame(frame, indicator, x + pad, text_y, font_size, style.fg_secondary)
-	left := x + pad + indicator_w + ui_frame_sc(frame, 6)
-	if options.icon != 0 {
-		draw_codepoint_frame(frame, options.icon, left, text_y, font_size, style.fg_accent)
-		left += rune_width_frame(frame, options.icon, font_size) + ui_frame_sc(frame, 6)
-	}
-	draw_text_string_frame(frame, label, left, text_y, font_size, style.fg_label)
-	label_w := measure_text_string_frame(frame, label, font_size)
-	right := x + w - pad
-	if len(options.right_label) > 0 {
-		right_w := measure_text_string_frame(frame, options.right_label, font_size)
-		draw_text_string_frame(
-			frame,
-			options.right_label,
-			right - right_w,
-			text_y,
-			font_size,
-			style.fg_secondary,
-		)
-		right -= right_w + ui_frame_sc(frame, 8)
-	}
-	line_x := left + label_w + ui_frame_sc(frame, 8)
-	if right > line_x {
-		draw_rectangle(frame, line_x, y + height / 2, right - line_x, 1, style.border_subtle)
+		pad := ui_frame_sc(frame, 10)
+		text_y := y + (height - font_size) / 2
+		indicator: cstring = "\u25BE" if open^ else "\u25B8"
+		indicator_w := measure_text_frame(frame, indicator, font_size)
+		draw_text_frame(frame, indicator, x + pad, text_y, font_size, style.fg_secondary)
+		left := x + pad + indicator_w + ui_frame_sc(frame, 6)
+		if options.icon != 0 {
+			draw_codepoint_frame(frame, options.icon, left, text_y, font_size, style.fg_accent)
+			left += rune_width_frame(frame, options.icon, font_size) + ui_frame_sc(frame, 6)
+		}
+		draw_text_string_frame(frame, label, left, text_y, font_size, style.fg_label)
+		label_w := measure_text_string_frame(frame, label, font_size)
+		right := x + w - pad
+		if len(options.right_label) > 0 {
+			right_w := measure_text_string_frame(frame, options.right_label, font_size)
+			draw_text_string_frame(
+				frame,
+				options.right_label,
+				right - right_w,
+				text_y,
+				font_size,
+				style.fg_secondary,
+			)
+			right -= right_w + ui_frame_sc(frame, 8)
+		}
+		line_x := left + label_w + ui_frame_sc(frame, 8)
+		if right > line_x {
+			draw_rectangle(frame, line_x, y + height / 2, right - line_x, 1, style.border_subtle)
+		}
 	}
 	sem_state: Sem_State
 	if open^ do sem_state += {.Expanded}

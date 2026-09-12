@@ -3,6 +3,151 @@ package ui
 
 import "core:testing"
 
+@(test)
+animated_tabs_emit_one_final_selection :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	sem_enable(&runtime, true)
+	theme := theme_dark()
+	theme.tactile_controls = true
+	ui_runtime_set_theme(&runtime, theme)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	defer ui_frame_destroy(&frame)
+	motion: Control_Motion_State
+	active: i32
+	labels := []string{"Overview", "Details", "Logs"}
+	input := Ui_Input {
+		frame_time = 1.0 / 60.0,
+	}
+	second: Rect_I32
+	for iteration in 0 ..< 4 {
+		if iteration == 1 {
+			input.mouse_position = {f32(second.x + 2), f32(second.y + 2)}
+			input.mouse_pressed[input_mouse_index(.LEFT)] = true
+			input.mouse_down[input_mouse_index(.LEFT)] = true
+		}
+		if iteration == 2 {
+			input.mouse_pressed[input_mouse_index(.LEFT)] = false
+			input.mouse_down[input_mouse_index(.LEFT)] = false
+			input.mouse_released[input_mouse_index(.LEFT)] = true
+		}
+		if iteration == 3 {
+			input.mouse_released[input_mouse_index(.LEFT)] = false
+			labels = []string{"Logs", "Details", "Overview"}
+		}
+		ui_frame_begin(&frame, &runtime, &input)
+		u: Ui
+		begin(&u, &frame, {0, 0, 600, 100})
+		_ = tab_bar(&u, "tabs", labels, &active, motion = &motion)
+		end(&u)
+		testing.expect_value(t, frame.semantics.cur.count, 3)
+		selected := 0
+		for node, index in frame.semantics.cur.nodes[:frame.semantics.cur.count] {
+			if .Selected in node.state {
+				selected += 1
+				testing.expect_value(t, i32(index), active)
+			}
+		}
+		testing.expect_value(t, selected, 1)
+		second = frame.semantics.cur.nodes[1].rect
+		if iteration == 2 {
+			testing.expect_value(t, active, i32(1))
+			testing.expect(t, motion.indicator.current.x < motion.indicator.target.x)
+			testing.expect(t, output.platform.request_redraw)
+		}
+		if iteration == 3 {
+			testing.expect(t, transition_rect_settled(&motion.indicator))
+			testing.expect(t, !output.platform.request_redraw)
+		}
+		ui_frame_end(&frame)
+	}
+}
+
+@(test)
+animated_tabs_bound_geometry_and_snap_when_hidden :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	sem_enable(&runtime, true)
+	theme := theme_dark()
+	theme.tactile_controls = true
+	ui_runtime_set_theme(&runtime, theme)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	defer ui_frame_destroy(&frame)
+	motion: Control_Motion_State
+	labels := []string {
+		"a",
+		"b",
+		"c",
+		"d",
+		"e",
+		"f",
+		"g",
+		"h",
+		"i",
+		"j",
+		"k",
+		"l",
+		"m",
+		"n",
+		"o",
+		"p",
+	}
+	active: i32 = TAB_COUNT_MAX - 1
+	input := Ui_Input {
+		frame_time = 1.0 / 60.0,
+	}
+	for iteration in 0 ..< 6 {
+		ui_frame_begin(&frame, &runtime, &input)
+		if iteration == 1 do active = 0
+		if iteration == 2 do active = TAB_COUNT_MAX - 1
+		if iteration == 3 do frame.text_cull_top, frame.text_cull_bottom = 200, 300
+		bounds := Rect_I32{0, 0, 1600, 100}
+		if iteration == 4 do bounds = {}
+		if iteration == 5 do bounds.x = 100
+		u: Ui
+		begin(&u, &frame, bounds)
+		_ = tab_bar(&u, "tabs", labels, &active, motion = &motion)
+		end(&u)
+		if iteration == 1 || iteration == 2 {
+			testing.expect(t, !transition_rect_settled(&motion.indicator))
+			testing.expect(t, motion.indicator.current.x >= 0)
+			testing.expect(
+				t,
+				motion.indicator.current.x <= motion.indicator.target.x || iteration == 1,
+			)
+		}
+		if iteration == 3 || iteration == 4 {
+			testing.expect_value(t, output.main.count, 0)
+			testing.expect(t, transition_rect_settled(&motion.indicator))
+			testing.expect(t, !output.platform.request_redraw)
+		}
+		if iteration != 4 do testing.expect_value(t, frame.semantics.cur.count, TAB_COUNT_MAX)
+		if iteration == 4 do testing.expect_value(t, u.focus_count, 0)
+		testing.expect_value(t, output.main.dropped_commands, 0)
+		ui_frame_end(&frame)
+	}
+}
+
 // The facade wrappers exist to guarantee three properties for every widget:
 // the slot comes from the layout in logical units, focus registers only when
 // that slot is visible, and a collapsed root never paints. These tests pin
@@ -164,13 +309,18 @@ facade_widgets_skip_focus_when_slot_collapses :: proc(t: ^testing.T) {
 	open := true
 	// A zero-area root collapses every slot, so no widget may claim a
 	// traversal entry a later frame would have to clean up.
+	motion: Control_Motion_State
+	transition_f32_reset(&motion.value, 0)
 	begin(&u, &frame, {0, 0, 0, 0})
-	_ = collapsible_header(&u, id(&u, "details"), "Details", &open)
+	_ = collapsible_header(&u, id(&u, "details"), "Details", &open, {motion = &motion})
 	_ = icon_btn(&u, id(&u, "close"), "\u2715")
 	_ = section_header(&u, "SECTION")
 	end(&u)
 
 	testing.expect_value(t, u.focus_count, 0)
+	testing.expect_value(t, output.main.count, 0)
+	testing.expect(t, !output.platform.request_redraw)
+	testing.expect_value(t, motion.value.current, f32(1))
 }
 
 // The ink variants exist so status call sites name a meaning instead of a
