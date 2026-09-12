@@ -16,6 +16,7 @@ Formats are specified in `ingot/docs/cooked-mesh-v2.md`. Nothing here writes a
 file; `write_bundle` is the only I/O and it writes atomically.
 """
 
+from collections import Counter
 import heapq
 import math
 import os
@@ -838,10 +839,10 @@ def _build_blade_chain(vertices, indices, blade_ids, tolerance, label):
     reduced, reduced_indices = optimize(vertices, coarse_indices)
     validate_ground(reduced, reduced_indices, tolerance, f"{label}: whole-blade level 1")
     validate_mesh(reduced, reduced_indices, f"{label}: whole-blade level 1")
-    expected = sorted(tuple(vertices[index] for index in coarse_indices[offset:offset + 3])
-                      for offset in range(0, len(coarse_indices), 3))
-    actual = sorted(tuple(reduced[index] for index in reduced_indices[offset:offset + 3])
-                    for offset in range(0, len(reduced_indices), 3))
+    expected = Counter(tuple(vertices[index] for index in coarse_indices[offset:offset + 3])
+                       for offset in range(0, len(coarse_indices), 3))
+    actual = Counter(tuple(reduced[index] for index in reduced_indices[offset:offset + 3])
+                     for offset in range(0, len(reduced_indices), 3))
     if expected != actual:
         fail(f"{label}: optimization changed whole-blade geometry or attributes")
     error = _omitted_blade_error(vertices, components, selected)

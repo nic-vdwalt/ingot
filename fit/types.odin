@@ -629,6 +629,8 @@ Label_Options :: struct {
 	size:  Size_Options,
 }
 
+Control_Motion_State :: ui.Control_Motion_State
+
 Button_Options :: struct {
 	style:       Button_Style,
 	disabled:    bool,
@@ -639,6 +641,7 @@ Button_Options :: struct {
 	// build callback returns, so it must outlive the build and render.
 	activated:   ^bool,
 	action:      Action,
+	motion:      ^Control_Motion_State,
 }
 
 Control_Options :: struct {
@@ -647,6 +650,7 @@ Control_Options :: struct {
 	// changed follows the activated lifetime contract on Button_Options: it
 	// is written during Render and must outlive the build callback.
 	changed: ^bool,
+	motion:  ^Control_Motion_State,
 }
 
 Leaf_Options :: struct {

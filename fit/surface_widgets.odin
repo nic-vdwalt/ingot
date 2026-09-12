@@ -384,9 +384,11 @@ Region_Button_String :: proc(
 	key, label: string,
 	style: Button_Style = .Secondary,
 	enabled: bool = true,
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
-	return ui.button(&region.inner, key, label, style, enabled)
+	return ui.button(&region.inner, key, label,
+		ui.Button_Options{style = style, disabled = !enabled, motion = motion})
 }
 
 Region_Button_Id :: proc(
@@ -395,9 +397,11 @@ Region_Button_Id :: proc(
 	label: string,
 	style: Button_Style = .Secondary,
 	enabled: bool = true,
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
-	return ui.button(&region.inner, ui.Widget_Id(widget), label, style, enabled)
+	return ui.button(&region.inner, ui.Widget_Id(widget), label,
+		ui.Button_Options{style = style, disabled = !enabled, motion = motion})
 }
 
 Region_Button_U64 :: proc(
@@ -406,9 +410,11 @@ Region_Button_U64 :: proc(
 	label: string,
 	style: Button_Style = .Secondary,
 	enabled: bool = true,
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
-	return ui.button(&region.inner, key, label, style, enabled)
+	return ui.button(&region.inner, key, label,
+		ui.Button_Options{style = style, disabled = !enabled, motion = motion})
 }
 
 Region_Button :: proc {
@@ -416,6 +422,27 @@ Region_Button :: proc {
 	Region_Button_Id,
 	Region_Button_U64,
 }
+
+Region_Toggle_Id :: proc(
+	region: ^Region, widget: Widget_Id, label: string, value: ^bool,
+	motion: ^Control_Motion_State = nil,
+) -> bool {
+	assert(region != nil && region.inner.open, "Fit.Region_Toggle: region not open")
+	assert(value != nil && label != "", "Fit.Region_Toggle: invalid value")
+	spec := ui.Toggle_Spec{id = ui.Widget_Id(widget), label = label, checked = value, motion = motion}
+	return ui.toggle(&region.inner, spec)
+}
+
+Region_Toggle_String :: proc(
+	region: ^Region, key, label: string, value: ^bool,
+	motion: ^Control_Motion_State = nil,
+) -> bool {
+	assert(region != nil && region.inner.open, "Fit.Region_Toggle: region not open")
+	assert(key != "", "Fit.Region_Toggle: empty key")
+	return Region_Toggle_Id(region, Widget_Id(ui.id(&region.inner, key)), label, value, motion)
+}
+
+Region_Toggle :: proc {Region_Toggle_String, Region_Toggle_Id}
 
 Region_Checkbox_String :: proc(region: ^Region, key, label: string, value: ^bool) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Checkbox: region not open")
@@ -497,9 +524,12 @@ Region_Section_Header :: proc(region: ^Region, title: string) {
 	_ = ui.section_header(&region.inner, title)
 }
 
-Region_Tab_Bar :: proc(region: ^Region, key: string, labels: []string, active: ^i32) -> bool {
+Region_Tab_Bar :: proc(
+	region: ^Region, key: string, labels: []string, active: ^i32,
+	motion: ^Control_Motion_State = nil,
+) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Tab_Bar: region not open")
-	return ui.tab_bar(&region.inner, key, labels, active)
+	return ui.tab_bar(&region.inner, key, labels, active, motion = motion)
 }
 
 @(private = "package")

@@ -338,6 +338,7 @@ to_button_options :: proc(value: Button_Options) -> ui.Fit_Button_Options {
 		style = value.style,
 		disabled = value.disabled,
 		web_form_id = value.web_form_id,
+		motion = value.motion,
 		track = to_track(value.track),
 		size = to_size(value.size),
 		activated = value.activated,
@@ -352,7 +353,8 @@ to_button_options :: proc(value: Button_Options) -> ui.Fit_Button_Options {
 
 @(private = "package")
 to_control_options :: proc(value: Control_Options) -> ui.Fit_Control_Options {
-	return {track = to_track(value.track), size = to_size(value.size), changed = value.changed}
+	return {track = to_track(value.track), size = to_size(value.size),
+		changed = value.changed, motion = value.motion}
 }
 
 @(private = "package")

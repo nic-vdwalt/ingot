@@ -43,6 +43,13 @@ toggle_spec_size :: proc(u: ^Ui, spec: Toggle_Spec) -> Intrinsic_Size {
 	return intrinsic_leaf(width, metrics.ROW_H_SM)
 }
 
+toggle :: proc(u: ^Ui, spec: Toggle_Spec) -> bool {
+	assert(u != nil && u.open, "toggle: invalid UI")
+	assert(spec.id != WIDGET_ID_NONE && spec.checked != nil, "toggle: invalid spec")
+	size := toggle_spec_size(u, spec)
+	return toggle_spec_at(u, spec, slot_next_px(u, size.w, size.h))
+}
+
 toggle_spec_at :: proc(u: ^Ui, spec: Toggle_Spec, rect: Rect_I32) -> bool {
 	assert(u != nil && u.open, "toggle_spec_at: frame not open")
 	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.checked != nil)

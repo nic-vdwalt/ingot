@@ -30,7 +30,7 @@ animated_tabs_emit_one_final_selection :: proc(t: ^testing.T) {
 		frame_time = 1.0 / 60.0,
 	}
 	second: Rect_I32
-	for iteration in 0 ..< 4 {
+	for iteration in 0 ..< 6 {
 		if iteration == 1 {
 			input.mouse_position = {f32(second.x + 2), f32(second.y + 2)}
 			input.mouse_pressed[input_mouse_index(.LEFT)] = true
@@ -44,6 +44,16 @@ animated_tabs_emit_one_final_selection :: proc(t: ^testing.T) {
 		if iteration == 3 {
 			input.mouse_released[input_mouse_index(.LEFT)] = false
 			labels = []string{"Logs", "Details", "Overview"}
+		}
+		if iteration == 4 {
+			input.mouse_position = {2, 2}
+			input.mouse_pressed[input_mouse_index(.LEFT)] = true
+			input.mouse_down[input_mouse_index(.LEFT)] = true
+		}
+		if iteration == 5 {
+			input.mouse_pressed[input_mouse_index(.LEFT)] = false
+			input.mouse_down[input_mouse_index(.LEFT)] = false
+			input.mouse_released[input_mouse_index(.LEFT)] = true
 		}
 		ui_frame_begin(&frame, &runtime, &input)
 		u: Ui
@@ -64,6 +74,10 @@ animated_tabs_emit_one_final_selection :: proc(t: ^testing.T) {
 			testing.expect_value(t, active, i32(1))
 			testing.expect(t, motion.indicator.current.x < motion.indicator.target.x)
 			testing.expect(t, output.platform.request_redraw)
+		}
+		if iteration == 5 {
+			testing.expect_value(t, active, i32(0))
+			testing.expect(t, motion.indicator.current.x > motion.indicator.target.x)
 		}
 		if iteration == 3 {
 			testing.expect(t, transition_rect_settled(&motion.indicator))

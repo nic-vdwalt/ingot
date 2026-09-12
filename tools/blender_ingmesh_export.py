@@ -150,24 +150,59 @@ def material_scalar(obj, polygon, allowed_materials=None):
     return MATERIAL_SCALARS[material.name]
 
 
-def evaluated_mesh(obj):
+def blade_attribute(mesh, label):
+    attribute = mesh.attributes.get("ingot_blade_id")
+    if attribute is None or attribute.domain != "FACE" or attribute.data_type != "INT":
+        fail(f"{label}: ingot_blade_id must be an integer FACE attribute")
+    if len(attribute.data) != len(mesh.polygons):
+        fail(f"{label}: blade attribute length differs from face count")
+    if any(value.value < 0 for value in attribute.data):
+        fail(f"{label}: blade IDs must be nonnegative")
+    return attribute
+
+
+def evaluated_mesh(obj, require_blades=False):
     dependency_graph = bpy.context.evaluated_depsgraph_get()
     evaluated = obj.evaluated_get(dependency_graph)
     mesh = evaluated.to_mesh(preserve_all_data_layers=True, depsgraph=dependency_graph)
     if mesh is None:
         fail(f"{obj.name}: cannot evaluate mesh")
     triangulated = bmesh.new()
-    triangulated.from_mesh(mesh)
-    bmesh.ops.triangulate(triangulated, faces=triangulated.faces[:])
-    triangulated.to_mesh(mesh)
-    triangulated.free()
-    mesh.calc_loop_triangles()
-    return evaluated, mesh
+    try:
+        expected_counts = {}
+        if require_blades:
+            attribute = blade_attribute(mesh, obj.name)
+            for polygon in mesh.polygons:
+                blade_id = attribute.data[polygon.index].value
+                expected_counts[blade_id] = expected_counts.get(blade_id, 0) + len(polygon.vertices) - 2
+        triangulated.from_mesh(mesh)
+        bmesh.ops.triangulate(triangulated, faces=triangulated.faces[:])
+        triangulated.to_mesh(mesh)
+        mesh.calc_loop_triangles()
+        if require_blades:
+            attribute = blade_attribute(mesh, obj.name)
+            actual_counts = {}
+            for polygon in mesh.polygons:
+                blade_id = attribute.data[polygon.index].value
+                actual_counts[blade_id] = actual_counts.get(blade_id, 0) + 1
+            if actual_counts != expected_counts:
+                fail(f"{obj.name}: triangulation changed blade identity")
+        return evaluated, mesh
+    except BaseException:
+        evaluated.to_mesh_clear()
+        raise
+    finally:
+        triangulated.free()
 
 
 def mesh_payload(obj, expected):
-    evaluated, mesh = evaluated_mesh(obj)
+    require_blades = expected.get("lod_policy") == "grass_blades_2"
+    if require_blades:
+        blade_attribute(obj.data, obj.name)
+    evaluated, mesh = evaluated_mesh(obj, require_blades)
     try:
+        attribute = blade_attribute(mesh, obj.name) if require_blades else None
+        blade_ids = [] if require_blades else None
         if not mesh.uv_layers.active:
             fail(f"{obj.name}: active UV layer is required")
         uv_data = mesh.uv_layers.active.data
@@ -176,6 +211,8 @@ def mesh_payload(obj, expected):
         unique = {}
         for triangle in mesh.loop_triangles:
             polygon = mesh.polygons[triangle.polygon_index]
+            if blade_ids is not None:
+                blade_ids.append(attribute.data[triangle.polygon_index].value)
             scalar = material_scalar(obj, polygon, expected.get("materials"))
             for loop_index in triangle.loops:
                 loop = mesh.loops[loop_index]
@@ -195,9 +232,27 @@ def mesh_payload(obj, expected):
         maximum = tuple(max(vertex[axis] for vertex in vertices) for axis in range(3))
         if expected["grounded"] and abs(minimum[2]) > GROUND_TOLERANCE:
             fail(f"{obj.name}: minimum Z must be ground level, got {minimum[2]}")
-        return vertices, indices, minimum, maximum
+        return vertices, indices, minimum, maximum, blade_ids
     finally:
         evaluated.to_mesh_clear()
+
+
+def validate_stored_ground(mesh, packed):
+    minimum = struct.unpack("<3f", struct.pack("<3f", *mesh.bounds[0]))
+    maximum = struct.unpack("<3f", struct.pack("<3f", *mesh.bounds[1]))
+    for level, lod in enumerate(mesh.lods):
+        heights = []
+        for index in lod.indices:
+            vertex = lod.vertices[index]
+            if packed:
+                encoded = mesh_cook.pack_vertex(vertex, mesh.bounds, mesh.uv_bounds)
+                quantized = struct.unpack_from("<3H", encoded)[2]
+                height = minimum[2] + quantized / 65535.0 * (maximum[2] - minimum[2])
+            else:
+                height = struct.unpack("<f", struct.pack("<f", vertex[2]))[0]
+            heights.append(height)
+        if not heights or abs(min(heights)) > GROUND_TOLERANCE:
+            fail(f"mesh {mesh.id}: stored level {level} is not grounded")
 
 
 def serialize_v2(meshes, expected_objects, packed):
@@ -208,7 +263,7 @@ def serialize_v2(meshes, expected_objects, packed):
     what the old single fixed decimate could not express.
     """
     cooked = []
-    for mesh_id, vertices, indices, _minimum, _maximum in meshes:
+    for mesh_id, vertices, indices, _minimum, _maximum, blade_ids in meshes:
         record = expected_objects[mesh_id]
         cooked.append(
             mesh_cook.cook_mesh(
@@ -218,8 +273,14 @@ def serialize_v2(meshes, expected_objects, packed):
                 policy=record.get("lod_policy", "none"),
                 clustered=record.get("cluster", False),
                 label=record["name"],
+                grounded=record["grounded"],
+                ground_tolerance=GROUND_TOLERANCE,
+                blade_ids=blade_ids,
             )
         )
+    for mesh in cooked:
+        if expected_objects[mesh.id]["grounded"]:
+            validate_stored_ground(mesh, packed)
     return mesh_cook.serialize(cooked, packed=packed)
 
 
@@ -264,7 +325,9 @@ def serialize(meshes):
     index_bytes = bytearray()
     first_vertex = 0
     first_index = 0
-    for mesh_id, vertices, indices, minimum, maximum in meshes:
+    for mesh_id, vertices, indices, minimum, maximum, blade_ids in meshes:
+        if blade_ids is not None:
+            fail(f"mesh {mesh_id}: whole-blade LODs require format v2")
         records.extend(
             struct.pack(
                 "<IIIIIffffff",

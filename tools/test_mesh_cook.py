@@ -573,6 +573,22 @@ class WholeBladeTest(unittest.TestCase):
         self.assertEqual([len(lod.indices) for lod in mesh.lods], [24, 12])
         self.assertEqual(min(vertex[2] for vertex in mesh.lods[1].vertices), 0)
 
+    def test_full_component_budget_is_supported(self):
+        vertices, indices, ids = blade_fixture(cook.BLADE_MAX_COUNT)
+        mesh = cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+        self.assertEqual(len(mesh.lods[1].indices), len(indices) // 4)
+        self.assertTrue(math.isfinite(mesh.lods[1].error))
+
+    def test_malformed_normals_and_uvs_are_rejected(self):
+        vertices, indices, ids = blade_fixture()
+        for attribute in (3, 7):
+            invalid = list(vertices)
+            vertex = list(invalid[0])
+            vertex[attribute] = float("nan")
+            invalid[0] = tuple(vertex)
+            with self.assertRaisesRegex(cook.CookError, "non-finite"):
+                cook.cook_mesh(4, invalid, indices, "grass_blades_2", blade_ids=ids)
+
     def test_target_ties_prefer_lower_triangle_cost(self):
         components = {0: [0] * 12, 1: [0] * 12, 2: [0] * 12}
         descriptors = {0: (0, 0, 3), 1: (1, 0, 1), 2: (0, 1, 2)}

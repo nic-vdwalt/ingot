@@ -30,6 +30,7 @@ Fit_Button_Options :: struct {
 	// and cleared at the start of the next build.
 	activated:   ^bool,
 	action:      Fit_Action,
+	motion:      ^Control_Motion_State,
 }
 
 Fit_Control_Options :: struct {
@@ -37,6 +38,7 @@ Fit_Control_Options :: struct {
 	size:    Prepared_Size,
 	// changed follows the activated lifetime contract on Fit_Button_Options.
 	changed: ^bool,
+	motion:  ^Control_Motion_State,
 }
 
 Fit_Leaf_Options :: struct {
@@ -436,7 +438,9 @@ fit_builder_slider :: proc(
 ) {
 	assert(builder != nil, "fit_builder_slider: nil builder")
 	fit_builder_add_child(builder)
-	handle := prepared_slider(&builder.prepared, spec, options.track)
+	value := spec
+	if options.motion != nil do value.motion = options.motion
+	handle := prepared_slider(&builder.prepared, value, options.track)
 	prepared_nodes(&builder.prepared)[i32(handle)].sizing = options.size
 	fit_builder_output(builder, handle, options.changed)
 }
@@ -526,6 +530,10 @@ fit_builder_composite :: proc(
 	fit_builder_add_child(builder)
 	value := spec
 	if options.size != (Prepared_Size{}) do value.size = options.size
+	if options.motion != nil {
+		if value.kind == .Toggle do value.toggle.motion = options.motion
+		if value.kind == .Tabs do value.tabs.motion = options.motion
+	}
 	handle := prepared_composite(&builder.prepared, value, options.track)
 	fit_builder_output(builder, handle, options.changed)
 }
@@ -741,5 +749,6 @@ fit_builder_output :: proc(builder: ^Fit_Builder, handle: Prepared_Handle, desti
 
 @(private = "file")
 fit_button_options :: proc(options: Fit_Button_Options) -> Button_Options {
-	return {style = options.style, disabled = options.disabled, web_form_id = options.web_form_id}
+	return {style = options.style, disabled = options.disabled,
+		web_form_id = options.web_form_id, motion = options.motion}
 }
