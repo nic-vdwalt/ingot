@@ -43,6 +43,7 @@ apply_window_style :: proc(window_handle: rawptr = nil) {
 
 	content := intrinsics.objc_send(^Window_Style_View, window, "contentView")
 	if content == nil do return
+	responder := intrinsics.objc_send(NS.id, window, "firstResponder")
 	bounds := intrinsics.objc_send(NS.Rect, content, "bounds")
 
 	effect := intrinsics.objc_send(^Window_Style_Effect_View, Window_Style_Effect_View, "alloc")
@@ -57,4 +58,6 @@ apply_window_style :: proc(window_handle: rawptr = nil) {
 	intrinsics.objc_send(nil, content, "setAutoresizingMask:", resize_mask)
 	intrinsics.objc_send(nil, window, "setContentView:", effect)
 	intrinsics.objc_send(nil, effect, "addSubview:", content)
+	if responder == nil do responder = NS.id(content)
+	_ = intrinsics.objc_send(NS.BOOL, window, "makeFirstResponder:", responder)
 }

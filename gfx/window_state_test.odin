@@ -98,6 +98,30 @@ test_window_activation_retry_policy :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_window_activation_rearm_policy :: proc(t: ^testing.T) {
+	testing.expect(
+		t,
+		_activation_should_rearm(true, false, false, true, true),
+		"application activation repairs a non-key eligible window",
+	)
+	testing.expect(
+		t,
+		!_activation_should_rearm(true, true, false, true, true),
+		"an active application does not repeatedly steal focus",
+	)
+	testing.expect(
+		t,
+		!_activation_should_rearm(true, false, true, true, true),
+		"a key window needs no activation repair",
+	)
+	testing.expect(
+		t,
+		!_activation_should_rearm(true, false, false, true, false),
+		"an unfocused or hidden window remains ineligible",
+	)
+}
+
+@(test)
 test_surface_reconfigure_policy :: proc(t: ^testing.T) {
 	testing.expect(
 		t,

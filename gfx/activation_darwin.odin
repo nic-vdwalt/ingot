@@ -34,10 +34,23 @@ _platform_activate_window :: proc(ctx: ^Context) {
 _platform_activation_poll :: proc(ctx: ^Context) {
 	assert(ctx != nil, "_platform_activation_poll: nil context")
 	focused, known := _platform_native_window_focus(ctx)
-	next, retry := _activation_retry_advance(ctx.activation_retries_pending, known && focused)
+	application := NS.Application_sharedApplication()
+	app_active := application != nil && bool(NS.Application_active(application))
+	rearm := _activation_should_rearm(
+		app_active,
+		ctx.application_was_active,
+		focused,
+		known,
+		_window_should_activate(ctx.config_flags),
+	)
+	ctx.application_was_active = app_active
+	pending := ctx.activation_retries_pending
+	if pending == 0 && rearm do pending = ACTIVATION_RETRY_LIMIT
+	next, retry := _activation_retry_advance(pending, known && focused)
 	ctx.activation_retries_pending = next
 	if retry do _darwin_activate_window(ctx)
 	assert(ctx.activation_retries_pending <= ACTIVATION_RETRY_LIMIT)
+	assert(!focused || ctx.activation_retries_pending == 0)
 }
 
 @(private)

@@ -24,6 +24,13 @@ _activation_retry_advance :: proc(pending: u8, focused: bool) -> (next: u8, retr
 }
 
 @(private)
+_activation_should_rearm :: proc(
+	app_active, app_was_active, focused, known, eligible: bool,
+) -> bool {
+	return app_active && !app_was_active && known && !focused && eligible
+}
+
+@(private)
 _window_wants_initial_focus :: proc(flags: ConfigFlags) -> bool {
 	return .WINDOW_UNFOCUSED not_in flags
 }
