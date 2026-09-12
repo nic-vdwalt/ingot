@@ -97,6 +97,25 @@ test_window_activation_retry_policy :: proc(t: ^testing.T) {
 	testing.expect_value(t, next, u8(0))
 }
 
+when ODIN_OS == .Darwin {
+	@(test)
+	test_event_pumps_advance_activation_once :: proc(t: ^testing.T) {
+		modes := [?]bool{false, true}
+		for should_wait in modes {
+			ctx := new(Context)
+			ctx.activation_retries_pending = ACTIVATION_RETRY_LIMIT
+			input_service_events(ctx, should_wait, 0.001)
+			testing.expect_value(t, ctx.activation_retries_pending, ACTIVATION_RETRY_LIMIT - 1)
+			for attempt in 0 ..< int(ACTIVATION_RETRY_LIMIT) {
+				input_service_events(ctx, should_wait, 0.001)
+				_ = attempt
+			}
+			testing.expect_value(t, ctx.activation_retries_pending, u8(0))
+			free(ctx)
+		}
+	}
+}
+
 @(test)
 test_window_activation_rearm_policy :: proc(t: ^testing.T) {
 	testing.expect(

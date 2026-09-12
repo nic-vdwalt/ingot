@@ -204,8 +204,10 @@ when !INGOT_GFX_SDL3 {
 	// elapse (event-driven idle). glfw.PostEmptyEvent (platform_wake) unblocks it
 	// from any thread.
 	@(private)
-	platform_wait_events :: proc(timeout: f64) {
+	platform_wait_events :: proc(timeout: f64, ctx: ^Context) {
+		assert(ctx != nil, "platform_wait_events: nil context")
 		glfw.WaitEventsTimeout(timeout)
+		_platform_activation_poll(ctx)
 	}
 
 	// platform_wake unblocks a platform_wait_events in progress. Thread-safe
