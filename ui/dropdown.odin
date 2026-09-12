@@ -91,6 +91,7 @@ dropdown_at :: proc(
 	focus: Focus_Opt = {},
 	a11y_label: string = "",
 	widget: Widget_Id = WIDGET_ID_NONE,
+	interaction_rect: ^Rect_I32 = nil,
 ) -> (
 	changed: bool,
 ) {
@@ -106,9 +107,11 @@ dropdown_at :: proc(
 	if selected^ < 0 do selected^ = 0
 	if int(selected^) >= len(items) do selected^ = i32(len(items) - 1)
 
+	hit := rect
+	if interaction_rect != nil do hit = interaction_rect^
 	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	it := interact(frame, rrect)
-	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	it := interact(frame, rect_f32(hit))
+	focus_opt_click(frame, focus, hit.x, hit.y, hit.w, hit.h)
 	if it.hovered do request_cursor(frame, .POINTING_HAND)
 
 	// Closed chrome: input-style box, current label, chevron.

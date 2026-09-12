@@ -91,6 +91,7 @@ FIT_PUBLIC_ALIAS_ALLOW = {
     "Button_Style :: ui.Btn_Style",
     "Caption_Button :: ui.Caption_Button",
     "Combobox_Item :: ui.Combobox_Item",
+    "Control_Motion_State :: ui.Control_Motion_State",
     "Cross_Align :: ui.Cross_Align",
     "Diff_Layout :: ui.Diff_Layout",
     "Diff_Row_Kind :: ui.Diff_Row_Kind",

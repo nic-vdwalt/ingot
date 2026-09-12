@@ -129,6 +129,9 @@ class ConsumerPolicyTests(unittest.TestCase):
 
     def test_fit_approved_public_alias_to_ui_is_allowed(self) -> None:
         self.assertEqual(policy.fit_public_violations("Track :: ui.Track\n"), [])
+        self.assertEqual(
+            policy.fit_public_violations("Control_Motion_State :: ui.Control_Motion_State\n"), []
+        )
 
     def test_fit_unapproved_public_alias_to_ui_is_rejected(self) -> None:
         failures = policy.fit_public_violations("Unexpected :: ui.Track\n")

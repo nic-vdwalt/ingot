@@ -11,9 +11,15 @@ Surface_Button :: proc(
 	style: Button_Style = .Secondary,
 	enabled: bool = true,
 	focus: Focus_Link = {},
+	interaction_rect: ^Rect = nil,
 ) -> bool {
 	u := surface_ui(surface)
 	assert(widget != Widget_Id(0), "Fit.Surface_Button: zero widget")
+	hit: ^ui.Rect_I32
+	if interaction_rect != nil {
+		converted := to_rect(interaction_rect^)
+		hit = &converted
+	}
 	return ui.button_at(
 		u.frame,
 		to_rect(rect),
@@ -22,6 +28,7 @@ Surface_Button :: proc(
 		enabled = enabled,
 		focus = focus.inner,
 		widget = ui.Widget_Id(widget),
+		interaction_rect = hit,
 	)
 }
 
@@ -134,10 +141,23 @@ Surface_Checkbox :: proc(
 	label: string,
 	value: ^bool,
 	rect: Rect,
+	interaction_rect: ^Rect = nil,
 ) -> bool {
 	u := surface_ui(surface)
 	assert(widget != Widget_Id(0) && value != nil, "Fit.Surface_Checkbox: invalid argument")
-	return ui.checkbox_at(u.frame, to_rect(rect), label, value, widget = ui.Widget_Id(widget))
+	hit: ^ui.Rect_I32
+	if interaction_rect != nil {
+		converted := to_rect(interaction_rect^)
+		hit = &converted
+	}
+	return ui.checkbox_at(
+		u.frame,
+		to_rect(rect),
+		label,
+		value,
+		widget = ui.Widget_Id(widget),
+		interaction_rect = hit,
+	)
 }
 
 Surface_Radio :: proc(
@@ -168,10 +188,16 @@ Surface_Slider :: proc(
 	value: ^f32,
 	minimum, maximum, step: f32,
 	rect: Rect,
+	interaction_rect: ^Rect = nil,
 ) -> bool {
 	u := surface_ui(surface)
 	assert(widget != Widget_Id(0) && value != nil, "Fit.Surface_Slider: invalid argument")
 	assert(minimum <= maximum && step >= 0, "Fit.Surface_Slider: invalid range")
+	hit: ^ui.Rect_I32
+	if interaction_rect != nil {
+		converted := to_rect(interaction_rect^)
+		hit = &converted
+	}
 	return ui.slider_at(
 		u.frame,
 		to_rect(rect),
@@ -180,6 +206,7 @@ Surface_Slider :: proc(
 		maximum,
 		step,
 		widget = ui.Widget_Id(widget),
+		interaction_rect = hit,
 	)
 }
 
@@ -191,10 +218,16 @@ Surface_Dropdown :: proc(
 	state: ^Dropdown_State,
 	rect: Rect,
 	a11y_label: string = "Dropdown",
+	interaction_rect: ^Rect = nil,
 ) -> bool {
 	u := surface_ui(surface)
 	assert(widget != Widget_Id(0) && selected != nil, "Fit.Surface_Dropdown: invalid argument")
 	assert(state != nil && len(items) > 0, "Fit.Surface_Dropdown: invalid state")
+	hit: ^ui.Rect_I32
+	if interaction_rect != nil {
+		converted := to_rect(interaction_rect^)
+		hit = &converted
+	}
 	return ui.dropdown_at(
 		u.frame,
 		to_rect(rect),
@@ -205,6 +238,7 @@ Surface_Dropdown :: proc(
 		u.screen_h,
 		a11y_label = a11y_label,
 		widget = ui.Widget_Id(widget),
+		interaction_rect = hit,
 	)
 }
 
@@ -387,8 +421,12 @@ Region_Button_String :: proc(
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
-	return ui.button(&region.inner, key, label,
-		ui.Button_Options{style = style, disabled = !enabled, motion = motion})
+	return ui.button(
+		&region.inner,
+		key,
+		label,
+		ui.Button_Options{style = style, disabled = !enabled, motion = motion},
+	)
 }
 
 Region_Button_Id :: proc(
@@ -400,8 +438,12 @@ Region_Button_Id :: proc(
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
-	return ui.button(&region.inner, ui.Widget_Id(widget), label,
-		ui.Button_Options{style = style, disabled = !enabled, motion = motion})
+	return ui.button(
+		&region.inner,
+		ui.Widget_Id(widget),
+		label,
+		ui.Button_Options{style = style, disabled = !enabled, motion = motion},
+	)
 }
 
 Region_Button_U64 :: proc(
@@ -413,8 +455,12 @@ Region_Button_U64 :: proc(
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
-	return ui.button(&region.inner, key, label,
-		ui.Button_Options{style = style, disabled = !enabled, motion = motion})
+	return ui.button(
+		&region.inner,
+		key,
+		label,
+		ui.Button_Options{style = style, disabled = !enabled, motion = motion},
+	)
 }
 
 Region_Button :: proc {
@@ -424,17 +470,27 @@ Region_Button :: proc {
 }
 
 Region_Toggle_Id :: proc(
-	region: ^Region, widget: Widget_Id, label: string, value: ^bool,
+	region: ^Region,
+	widget: Widget_Id,
+	label: string,
+	value: ^bool,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Toggle: region not open")
 	assert(value != nil && label != "", "Fit.Region_Toggle: invalid value")
-	spec := ui.Toggle_Spec{id = ui.Widget_Id(widget), label = label, checked = value, motion = motion}
+	spec := ui.Toggle_Spec {
+		id      = ui.Widget_Id(widget),
+		label   = label,
+		checked = value,
+		motion  = motion,
+	}
 	return ui.toggle(&region.inner, spec)
 }
 
 Region_Toggle_String :: proc(
-	region: ^Region, key, label: string, value: ^bool,
+	region: ^Region,
+	key, label: string,
+	value: ^bool,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Toggle: region not open")
@@ -442,7 +498,10 @@ Region_Toggle_String :: proc(
 	return Region_Toggle_Id(region, Widget_Id(ui.id(&region.inner, key)), label, value, motion)
 }
 
-Region_Toggle :: proc {Region_Toggle_String, Region_Toggle_Id}
+Region_Toggle :: proc {
+	Region_Toggle_String,
+	Region_Toggle_Id,
+}
 
 Region_Checkbox_String :: proc(region: ^Region, key, label: string, value: ^bool) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Checkbox: region not open")
@@ -525,7 +584,10 @@ Region_Section_Header :: proc(region: ^Region, title: string) {
 }
 
 Region_Tab_Bar :: proc(
-	region: ^Region, key: string, labels: []string, active: ^i32,
+	region: ^Region,
+	key: string,
+	labels: []string,
+	active: ^i32,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "Fit.Region_Tab_Bar: region not open")

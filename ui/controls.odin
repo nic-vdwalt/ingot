@@ -211,6 +211,7 @@ checkbox_at :: proc(
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
 	font_size: i32 = 0,
+	interaction_rect: ^Rect_I32 = nil,
 ) -> (
 	changed: bool,
 ) {
@@ -218,10 +219,11 @@ checkbox_at :: proc(
 	if ui_frame_drop_degenerate(frame, rect.w <= 0 || rect.h <= 0) do return false
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "checkbox: empty accessible label")
-	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
-	it := interact(frame, rrect)
+	hit := rect
+	if interaction_rect != nil do hit = interaction_rect^
+	it := interact(frame, rect_f32(hit))
 	hovered := it.hovered
-	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	focus_opt_click(frame, focus, hit.x, hit.y, hit.w, hit.h)
 	if hovered do request_cursor(frame, .POINTING_HAND)
 	if it.clicked || focus_opt_activated(frame, focus, .Checkbox, widget) {
 		checked^ = !checked^
@@ -542,21 +544,23 @@ slider_at :: proc(
 	a11y_label: string = "",
 	widget: Widget_Id = WIDGET_ID_NONE,
 	motion: ^Control_Motion_State = nil,
+	interaction_rect: ^Rect_I32 = nil,
 ) -> (
 	changed: bool,
 ) {
 	assert(value != nil, "slider: nil value")
 	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
-	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+	hit := rect
+	if interaction_rect != nil do hit = interaction_rect^
 	mouse := frame_to_local(frame, get_mouse_position(frame))
 	press := frame_to_local(frame, frame.interaction.press_pos)
 	dragging :=
 		is_mouse_button_down(frame, .LEFT) &&
 		frame.interaction.press_seen &&
-		point_in_rect(press, rrect)
-	it := interact(frame, rrect)
+		point_in_rect(press, rect_f32(hit))
+	it := interact(frame, rect_f32(hit))
 	hovered := it.hovered
-	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	focus_opt_click(frame, focus, hit.x, hit.y, hit.w, hit.h)
 	if hovered do request_cursor(frame, .POINTING_HAND)
 	return slider_resolve_and_paint(
 		frame,
@@ -586,13 +590,15 @@ slider_at_state :: proc(
 	a11y_label: string = "",
 	widget: Widget_Id = WIDGET_ID_NONE,
 	motion: ^Control_Motion_State = nil,
+	interaction_rect: ^Rect_I32 = nil,
 ) -> bool {
 	assert(state != nil && value != nil, "slider_at_state: nil state or value")
 	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
-	rrect := Rectangle{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
+	hit := rect
+	if interaction_rect != nil do hit = interaction_rect^
 	mouse := frame_to_local(frame, get_mouse_position(frame))
-	it := interact(frame, rrect, &state.dragging)
-	focus_opt_click(frame, focus, rect.x, rect.y, rect.w, rect.h)
+	it := interact(frame, rect_f32(hit), &state.dragging)
+	focus_opt_click(frame, focus, hit.x, hit.y, hit.w, hit.h)
 	if it.hovered do request_cursor(frame, .POINTING_HAND)
 	return slider_resolve_and_paint(
 		frame,

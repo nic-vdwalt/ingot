@@ -716,6 +716,125 @@ fit_parent_handles_support_ancestor_reuse_and_scopes :: proc(t: ^testing.T) {
 	builder_close(&builder)
 }
 @(test)
+fit_controls_forward_caller_owned_motion :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	theme := Theme_Dark()
+	Theme_Set_Tactile_Controls(&theme, true)
+	ui.ui_runtime_set_theme(&runtime, theme.inner)
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame := ui.Ui_Frame {
+		output = output,
+	}
+	defer ui.ui_frame_destroy(&frame)
+	button_motion, toggle_motion, slider_motion, tabs_motion: Control_Motion_State
+	checked := false
+	value: f32 = 40
+	active: i32
+	labels := []string{"First", "Second"}
+	input := ui.Ui_Input {
+		frame_time = 1.0 / 60.0,
+	}
+	for iteration in 0 ..< 2 {
+		if iteration == 1 {
+			checked = true
+			active = 1
+		}
+		ui.ui_frame_begin(&frame, &runtime, &input)
+		builder: Builder
+		builder_open(&builder, &frame, {0, 0, 600, 300})
+		root := Column(&builder)
+		before := toggle_motion
+		Button(root, "button", "Button", Button_Options{motion = &button_motion})
+		Toggle(root, "toggle", "Toggle", &checked, {motion = &toggle_motion})
+		Slider(root, "slider", &value, 0, 100, 5, "Value", {motion = &slider_motion})
+		Tabs(root, "tabs", labels, &active, options = {motion = &tabs_motion})
+		testing.expect_value(t, toggle_motion, before)
+		_ = Measure(&builder)
+		testing.expect_value(t, toggle_motion, before)
+		_ = Render(&builder)
+		builder_close(&builder)
+		testing.expect(t, button_motion.hover.initialized && slider_motion.hover.initialized)
+		testing.expect(t, toggle_motion.value.initialized && tabs_motion.indicator.initialized)
+		if iteration == 1 {
+			testing.expect(t, toggle_motion.value.current > 0 && toggle_motion.value.current < 1)
+			testing.expect(t, tabs_motion.indicator.current != tabs_motion.indicator.target)
+		}
+		testing.expect_value(t, value, f32(40))
+		ui.ui_frame_end(&frame)
+	}
+}
+
+@(test)
+fit_regions_forward_caller_owned_motion :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	backend := i32(1)
+	fit_test_runtime(&runtime, &backend)
+	defer ui.ui_runtime_destroy(&runtime)
+	theme := Theme_Dark()
+	Theme_Set_Tactile_Controls(&theme, true)
+	ui.ui_runtime_set_theme(&runtime, theme.inner)
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame := ui.Ui_Frame {
+		output = output,
+	}
+	defer ui.ui_frame_destroy(&frame)
+	button_motion, toggle_motion, slider_motion, tabs_motion, header_motion: Control_Motion_State
+	checked, open: bool
+	value: f32 = 40
+	active: i32
+	slider: Slider_State
+	input := ui.Ui_Input {
+		frame_time = 1.0 / 60.0,
+	}
+	region: Region
+	for iteration in 0 ..< 2 {
+		if iteration == 1 {
+			checked, open = true, true
+			active = 1
+		}
+		ui.ui_frame_begin(&frame, &runtime, &input)
+		ui.begin(&region.inner, &frame, {0, 0, 600, 300})
+		_ = Region_Button(&region, "button", "Button", motion = &button_motion)
+		_ = Region_Toggle(&region, "toggle", "Toggle", &checked, &toggle_motion)
+		_ = Region_Slider(
+			&region,
+			"slider",
+			&slider,
+			&value,
+			0,
+			100,
+			5,
+			240,
+			"Value",
+			&slider_motion,
+		)
+		_ = Region_Tab_Bar(&region, "tabs", []string{"First", "Second"}, &active, &tabs_motion)
+		_ = Region_Collapsible_Header(
+			&region,
+			"header",
+			"Details",
+			&open,
+			{motion = &header_motion},
+		)
+		ui.end(&region.inner)
+		testing.expect(t, button_motion.hover.initialized && slider_motion.hover.initialized)
+		testing.expect(t, toggle_motion.value.initialized && header_motion.value.initialized)
+		testing.expect(t, tabs_motion.indicator.initialized)
+		if iteration == 1 {
+			testing.expect(t, toggle_motion.value.current > 0 && toggle_motion.value.current < 1)
+			testing.expect(t, header_motion.value.current > 0 && header_motion.value.current < 1)
+			testing.expect(t, tabs_motion.indicator.current != tabs_motion.indicator.target)
+		}
+		ui.ui_frame_end(&frame)
+	}
+}
+
+@(test)
 fit_native_controls_measure_and_render_once :: proc(t: ^testing.T) {
 	runtime: ui.Ui_Runtime
 	backend := i32(1)

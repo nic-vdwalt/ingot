@@ -89,6 +89,41 @@ tactile_widgets_keep_interaction_geometry :: proc(t: ^testing.T) {
 }
 
 @(test)
+button_interaction_rect_preserves_visual_geometry :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	sem_enable(&runtime, true)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame{output = output}
+	visual := Rect_I32{20, 20, 100, 30}
+	hit := Rect_I32{20, 30, 100, 20}
+	input := Ui_Input{mouse_position = {50, 25}}
+	input.mouse_pressed[input_mouse_index(.LEFT)] = true
+	input.mouse_down[input_mouse_index(.LEFT)] = true
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(t, !button_at(&frame, visual, "Save", interaction_rect = &hit))
+	testing.expect_value(t, frame.semantics.cur.nodes[0].rect, visual)
+	ui_frame_end(&frame)
+	input.mouse_position = {50, 35}
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(t, !button_at(&frame, visual, "Save", interaction_rect = &hit))
+	ui_frame_end(&frame)
+	input.mouse_pressed[input_mouse_index(.LEFT)] = false
+	input.mouse_down[input_mouse_index(.LEFT)] = false
+	input.mouse_released[input_mouse_index(.LEFT)] = true
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(t, button_at(&frame, visual, "Save", interaction_rect = &hit))
+	ui_frame_end(&frame)
+}
+
+@(test)
 button_spec_and_facade_share_geometry :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

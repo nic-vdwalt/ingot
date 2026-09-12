@@ -749,6 +749,10 @@ fit_builder_output :: proc(builder: ^Fit_Builder, handle: Prepared_Handle, desti
 
 @(private = "file")
 fit_button_options :: proc(options: Fit_Button_Options) -> Button_Options {
-	return {style = options.style, disabled = options.disabled,
-		web_form_id = options.web_form_id, motion = options.motion}
+	return {
+		style = options.style,
+		disabled = options.disabled,
+		web_form_id = options.web_form_id,
+		motion = options.motion,
+	}
 }

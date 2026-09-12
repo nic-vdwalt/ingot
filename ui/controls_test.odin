@@ -343,6 +343,40 @@ slider_pointer_mapping_uses_pane_local_coordinates :: proc(t: ^testing.T) {
 }
 
 @(test)
+control_interaction_rect_preserves_visual_geometry :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	sem_enable(&runtime, true)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame{output = output}
+	visual := Rect_I32{20, 20, 200, 30}
+	hit := Rect_I32{20, 30, 200, 20}
+	checked := false
+	value: f32 = 50
+	input := slider_test_input({120, 25}, pressed = true, down = true)
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(t, !checkbox_at(&frame, visual, "Enabled", &checked, interaction_rect = &hit))
+	testing.expect(t, !slider_at(&frame, visual, &value, 0, 100, interaction_rect = &hit))
+	testing.expect(t, !checked && value == 50)
+	testing.expect_value(t, frame.semantics.cur.nodes[0].rect, visual)
+	testing.expect_value(t, frame.semantics.cur.nodes[1].rect, visual)
+	ui_frame_end(&frame)
+	input = slider_test_input({170, 35}, pressed = true, down = true)
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(t, slider_at(&frame, visual, &value, 0, 100, interaction_rect = &hit))
+	testing.expect(t, value > 50)
+	testing.expect_value(t, frame.semantics.cur.nodes[0].rect, visual)
+	ui_frame_end(&frame)
+}
+
+@(test)
 slider_state_drag_uses_pane_local_coordinates :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
