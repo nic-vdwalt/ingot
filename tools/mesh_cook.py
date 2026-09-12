@@ -767,17 +767,22 @@ def _blade_components(vertices, indices, blade_ids, tolerance, label):
         roots = [point for point in points if abs(point[2]) <= tolerance]
         descriptors[blade_id] = (sum(point[0] for point in roots) / len(roots),
                                 sum(point[1] for point in roots) / len(roots),
-                                max(point[2] for point in points))
+                                max(point[2] for point in points),
+                                math.hypot(max(point[0] for point in roots) -
+                                           min(point[0] for point in roots),
+                                           max(point[1] for point in roots) -
+                                           min(point[1] for point in roots)))
     return components, descriptors
 
 
 def _select_blades(components, descriptors, target):
     ids = sorted(components)
-    minimum = [min(descriptors[key][axis] for key in ids) for axis in range(3)]
+    dimensions = len(descriptors[ids[0]])
+    minimum = [min(descriptors[key][axis] for key in ids) for axis in range(dimensions)]
     spans = [max(max(descriptors[key][axis] for key in ids) - minimum[axis], 1e-9)
-             for axis in range(3)]
+             for axis in range(dimensions)]
     normalized = {key: tuple((descriptors[key][axis] - minimum[axis]) / spans[axis]
-                            for axis in range(3)) for key in ids}
+                            for axis in range(dimensions)) for key in ids}
     first = max(ids, key=lambda key: (normalized[key][2] +
                 sum((normalized[key][axis] - 0.5) ** 2 for axis in range(2)), -key))
     order = [first]
@@ -786,7 +791,8 @@ def _select_blades(components, descriptors, target):
     while remaining:
         latest = normalized[order[-1]]
         for key in remaining:
-            distance = sum((normalized[key][axis] - latest[axis]) ** 2 for axis in range(3))
+            distance = sum((normalized[key][axis] - latest[axis]) ** 2
+                           for axis in range(dimensions))
             distances[key] = min(distances[key], distance)
         chosen = max(remaining, key=lambda key: (distances[key], -key))
         order.append(chosen)
@@ -831,6 +837,13 @@ def _build_blade_chain(vertices, indices, blade_ids, tolerance, label):
     base_vertices, base_indices = optimize(vertices, indices)
     reduced, reduced_indices = optimize(vertices, coarse_indices)
     validate_ground(reduced, reduced_indices, tolerance, f"{label}: whole-blade level 1")
+    validate_mesh(reduced, reduced_indices, f"{label}: whole-blade level 1")
+    expected = sorted(tuple(vertices[index] for index in coarse_indices[offset:offset + 3])
+                      for offset in range(0, len(coarse_indices), 3))
+    actual = sorted(tuple(reduced[index] for index in reduced_indices[offset:offset + 3])
+                    for offset in range(0, len(reduced_indices), 3))
+    if expected != actual:
+        fail(f"{label}: optimization changed whole-blade geometry or attributes")
     error = _omitted_blade_error(vertices, components, selected)
     return [Lod(base_vertices, base_indices, 0.0, LOD_SCREEN_BASE),
             Lod(reduced, reduced_indices, error, LOD_SCREEN_BASE / LOD_SCREEN_FALLOFF)]

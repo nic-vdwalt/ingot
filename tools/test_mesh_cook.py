@@ -536,6 +536,43 @@ class WholeBladeTest(unittest.TestCase):
         with self.assertRaisesRegex(cook.CookError, "nonmanifold"):
             cook._validate_blade_faces(faces, "junction")
 
+    def test_optimization_cannot_change_retained_attributes(self):
+        vertices, indices, ids = blade_fixture()
+        original = cook.optimize
+
+        def corrupt(source, selected):
+            reduced, reordered = original(source, selected)
+            if len(selected) < len(indices):
+                vertex = reduced[0]
+                reduced[0] = vertex[:7] + (vertex[7] + 0.25, vertex[8])
+            return reduced, reordered
+
+        with mock.patch.object(cook, "optimize", side_effect=corrupt):
+            with self.assertRaisesRegex(cook.CookError, "changed whole-blade"):
+                cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+
+    def test_all_source_points_fit_conservative_error(self):
+        vertices, indices, ids = blade_fixture()
+        mesh = cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+        retained = [vertex[:3] for vertex in mesh.lods[1].vertices]
+        for vertex in vertices:
+            self.assertLessEqual(min(math.dist(vertex[:3], point) for point in retained),
+                                 mesh.lods[1].error)
+
+    def test_selection_spreads_roots_and_preserves_tall_silhouette(self):
+        vertices, indices, ids = blade_fixture()
+        components, descriptors = cook._blade_components(vertices, indices, ids, 0.0001, "test")
+        self.assertEqual(cook._select_blades(components, descriptors, 24), [7, 0])
+        self.assertTrue(all(len(descriptor) == 4 for descriptor in descriptors.values()))
+        self.assertTrue(all(descriptor[3] > 0 for descriptor in descriptors.values()))
+
+    def test_two_blades_keep_one_even_below_nominal_budget(self):
+        vertices, indices, ids = blade_fixture(2)
+        with mock.patch.dict(cook.LOD_POLICIES, {"grass_blades_2": (1.0, 0.001)}):
+            mesh = cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+        self.assertEqual([len(lod.indices) for lod in mesh.lods], [24, 12])
+        self.assertEqual(min(vertex[2] for vertex in mesh.lods[1].vertices), 0)
+
     def test_target_ties_prefer_lower_triangle_cost(self):
         components = {0: [0] * 12, 1: [0] * 12, 2: [0] * 12}
         descriptors = {0: (0, 0, 3), 1: (1, 0, 1), 2: (0, 1, 2)}

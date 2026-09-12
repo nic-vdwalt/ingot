@@ -171,6 +171,20 @@ disclosure_motion_keeps_expansion_immediate :: proc(t: ^testing.T) {
 	testing.expect(t, !output.platform.request_redraw)
 	testing.expect(t, .Expanded in frame.semantics.cur.nodes[0].state)
 	ui_frame_end(&frame)
+	for enabled in ([?]bool{true, false}) {
+		theme.tactile_controls = enabled
+		theme.reduced_motion = true
+		ui_runtime_set_theme(&runtime, theme)
+		transition_f32_reset(&motion.value, 0)
+		ui_frame_begin(&frame, &runtime, &input)
+		result = collapsible_header_at(&frame, {20, 20, 200, 30}, "Details", &open, options)
+		testing.expect_value(t, result.next_y, i32(46))
+		testing.expect(t, !result.toggled && open)
+		testing.expect_value(t, motion.value.current, f32(1))
+		testing.expect(t, !output.platform.request_redraw)
+		testing.expect(t, .Expanded in frame.semantics.cur.nodes[0].state)
+		ui_frame_end(&frame)
+	}
 }
 
 @(test)

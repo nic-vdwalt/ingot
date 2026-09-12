@@ -116,7 +116,12 @@ animated_tabs_bound_geometry_and_snap_when_hidden :: proc(t: ^testing.T) {
 	input := Ui_Input {
 		frame_time = 1.0 / 60.0,
 	}
-	for iteration in 0 ..< 6 {
+	for iteration in 0 ..< 7 {
+		if iteration == 6 {
+			theme.reduced_motion = true
+			ui_runtime_set_theme(&runtime, theme)
+			active = 0
+		}
 		ui_frame_begin(&frame, &runtime, &input)
 		if iteration == 1 do active = 0
 		if iteration == 2 do active = TAB_COUNT_MAX - 1
@@ -140,6 +145,11 @@ animated_tabs_bound_geometry_and_snap_when_hidden :: proc(t: ^testing.T) {
 			testing.expect_value(t, output.main.count, 0)
 			testing.expect(t, transition_rect_settled(&motion.indicator))
 			testing.expect(t, !output.platform.request_redraw)
+		}
+		if iteration == 6 {
+			testing.expect(t, transition_rect_settled(&motion.indicator))
+			testing.expect(t, !output.platform.request_redraw)
+			testing.expect(t, .Selected in frame.semantics.cur.nodes[0].state)
 		}
 		if iteration != 4 do testing.expect_value(t, frame.semantics.cur.count, TAB_COUNT_MAX)
 		if iteration == 4 do testing.expect_value(t, u.focus_count, 0)
@@ -313,12 +323,12 @@ facade_widgets_skip_focus_when_slot_collapses :: proc(t: ^testing.T) {
 	transition_f32_reset(&motion.value, 0)
 	begin(&u, &frame, {0, 0, 0, 0})
 	_ = collapsible_header(&u, id(&u, "details"), "Details", &open, {motion = &motion})
+	testing.expect_value(t, output.main.count, 0)
 	_ = icon_btn(&u, id(&u, "close"), "\u2715")
 	_ = section_header(&u, "SECTION")
 	end(&u)
 
 	testing.expect_value(t, u.focus_count, 0)
-	testing.expect_value(t, output.main.count, 0)
 	testing.expect(t, !output.platform.request_redraw)
 	testing.expect_value(t, motion.value.current, f32(1))
 }

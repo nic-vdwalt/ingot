@@ -44,7 +44,11 @@ collapsible_header :: proc(
 		widget      = id,
 		motion      = options.motion,
 	}
-	if slot_visible(rect) do opts.focus = focus(u, id)
+	if !slot_visible(rect) {
+		if options.motion != nil do transition_f32_reset(&options.motion.value, 1 if open^ else 0)
+		return false
+	}
+	opts.focus = focus(u, id)
 	return collapsible_header_at(u.frame, rect, label, open, opts).toggled
 }
 
