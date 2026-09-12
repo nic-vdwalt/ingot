@@ -153,7 +153,11 @@ fit_surface_wheel_preserves_both_axes :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, Test_Driver_Frame(&driver, input, fit_test_wheel_draw, &state))
 	testing.expect_value(t, state.wheel, input.mouse_wheel)
-	testing.expect_value(t, state.dominant, input.mouse_wheel.y)
+	expected_dominant := input.mouse_wheel.y
+	when ODIN_OS == .Windows {
+		expected_dominant *= 5
+	}
+	testing.expect_value(t, state.dominant, expected_dominant)
 }
 
 @(test)
