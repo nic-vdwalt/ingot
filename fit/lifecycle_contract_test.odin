@@ -120,19 +120,35 @@ fit_owner_teardown_with_async_completion_is_rejected :: proc(t: ^testing.T) {
 }
 
 @(test)
-fit_parent_mutation_outside_build_phase_is_rejected :: proc(t: ^testing.T) {
-	runtime: ui.Ui_Runtime
-	ui.ui_runtime_init(&runtime)
-	defer ui.ui_runtime_destroy(&runtime)
-	frame: ui.Ui_Frame
-	ui.ui_frame_begin(&frame, &runtime)
-	defer ui.ui_frame_end(&frame)
+fit_async_completion_into_retired_owner_is_rejected :: proc(t: ^testing.T) {
 	builder: Builder
-	builder_open(&builder, &frame, {0, 0, 320, 240})
-	defer builder_close(&builder)
-	root := Column(&builder)
-	ui.ui_frame_phase_set(&frame, .Measure)
-	defer ui.ui_frame_phase_set(&frame, .Build)
+	debug_owner_prepare(&builder)
+	ticket, ok := Debug_Async_Begin(&builder)
+	testing.expect(t, ok)
+	builder.owner.outstanding = 0
+	debug_owner_retire(&builder)
+	testing.expect_assert_message(t, "Fit.Debug_Async_Complete: completion into destroyed owner")
+	Debug_Async_Complete(ticket)
+}
+
+@(test)
+fit_parent_mutation_outside_build_phase_is_rejected :: proc(t: ^testing.T) {
+	frame := ui.Ui_Frame {
+		generation = 1,
+		phase      = .Measure,
+		open       = true,
+	}
+	builder := Builder {
+		generation = 1,
+		frame_ticket = {frame = &frame, generation = 1},
+		bound = true,
+	}
+	root := Parent {
+		builder    = &builder,
+		generation = 1,
+		handle     = 0,
+		identity   = ui.Widget_Id(1),
+	}
 	testing.expect_assert_message(t, "Fit.Parent: invalid phase")
 	Label(root, "Invalid")
 }

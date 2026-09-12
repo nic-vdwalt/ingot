@@ -57,6 +57,22 @@ keep `Button_State`, `Slider_State`, `Input_Box`, menu state, and scrollbar stat
 in the component that draws them. Stable IDs identify focus targets; they do not
 own widget state.
 
+### Development lifetime checks
+
+`Ui_Frame_Ticket` captures one frame generation. It is valid only between
+`ui_frame_begin` and `ui_frame_release`; a later frame using the same storage has
+a different generation. Fit also checks that prepared-tree mutation happens only
+in the build phase. Custom measurement and rendering run in read-only phases, so
+reentrant declarations fail at the mutation boundary rather than corrupting the
+prepared tree.
+
+`fit.Debug_Async_Begin` ties an asynchronous completion to the owning builder's
+epoch. Every ticket must complete exactly once before the app, session, or test
+driver is destroyed. Destruction rejects outstanding work, and completion rejects
+a retired or reused owner. These tickets diagnose misuse only while their anchor
+storage remains allocated; they never make it safe to dereference freed storage.
+Owners must cancel and drain work before releasing that storage.
+
 ## Design tokens
 
 Visual decisions resolve through named tokens rather than being made at each
