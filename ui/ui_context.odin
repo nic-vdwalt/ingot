@@ -48,8 +48,23 @@ MAX_PANE_SCOPES :: 16
 MAX_Z_SCOPES :: 8
 MAX_MODAL_STACK :: 8
 
+Ui_Frame_Phase :: enum u8 {
+	Closed,
+	Build,
+	Measure,
+	Render,
+	Finalize,
+}
+
+Ui_Frame_Ticket :: struct {
+	frame:      ^Ui_Frame,
+	generation: u64,
+}
+
 Ui_Frame :: struct {
 	runtime:                        ^Ui_Runtime,
+	generation:                     u64,
+	phase:                          Ui_Frame_Phase,
 	input_default:                  Ui_Input,
 	input:                          ^Ui_Input,
 	output:                         ^Ui_Output,
@@ -85,6 +100,31 @@ Ui_Frame :: struct {
 	markdown_telemetry:             Markdown_Telemetry,
 	finalized:                      bool,
 	open:                           bool,
+}
+
+ui_frame_ticket :: proc(frame: ^Ui_Frame) -> Ui_Frame_Ticket {
+	assert(frame != nil && frame.open, "ui frame ticket: invalid frame")
+	return {frame = frame, generation = frame.generation}
+}
+
+ui_frame_ticket_valid :: proc(ticket: Ui_Frame_Ticket) -> bool {
+	return(
+		ticket.frame != nil &&
+		ticket.frame.open &&
+		ticket.generation != 0 &&
+		ticket.frame.generation == ticket.generation \
+	)
+}
+
+ui_frame_phase :: proc(ticket: Ui_Frame_Ticket) -> Ui_Frame_Phase {
+	assert(ui_frame_ticket_valid(ticket), "ui frame phase: expired ticket")
+	return ticket.frame.phase
+}
+
+ui_frame_phase_set :: proc(frame: ^Ui_Frame, phase: Ui_Frame_Phase) {
+	assert(frame != nil && frame.open, "ui frame phase: invalid frame")
+	assert(phase != .Closed, "ui frame phase: invalid open phase")
+	frame.phase = phase
 }
 
 // ui_frame_drop_degenerate records that a widget declined to draw because its
@@ -237,7 +277,9 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	assert(frame != nil && runtime != nil, "ui_frame_begin: nil frame or runtime")
 	assert(runtime.initialized && !frame.open, "ui_frame_begin: invalid lifetime")
 	frame_scratch_begin(&frame.scratch)
+	assert(runtime.frame_generation < max(u64), "ui_frame_begin: generation exhausted")
 	runtime.frame_generation += 1
+	frame.generation = runtime.frame_generation
 	frame.input = input if input != nil else &frame.input_default
 	input_normalize(frame.input)
 	ui_runtime_update_focus_modality(runtime, frame.input)
@@ -265,6 +307,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	}
 	frame.finalized = false
 	frame.open = true
+	frame.phase = .Build
 	route_begin_frame(frame)
 	modal_frame_begin(frame)
 	interact_frame_begin(frame)
@@ -292,7 +335,9 @@ ui_runtime_update_focus_modality :: proc(runtime: ^Ui_Runtime, input: ^Ui_Input)
 
 ui_frame_finalize :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open && !frame.finalized)
+	assert(frame.phase == .Build, "ui_frame_finalize: invalid phase")
 	assert(frame.open_roots == 0 && frame.pane_count == 0 && !frame.overlay.open)
+	frame.phase = .Finalize
 	assert(frame.z_count == 0, "ui_frame_finalize: unbalanced z scope")
 	if frame.output != nil {
 		// Report the leaking begin_scissor_mode call site: the depth alone
@@ -350,8 +395,10 @@ ui_finalize_lifetimes :: proc(frame: ^Ui_Frame) {
 
 ui_frame_release :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open && frame.finalized)
+	assert(frame.phase == .Finalize, "ui_frame_release: invalid phase")
 	frame.text_cull_top = min(i32); frame.text_cull_bottom = max(i32)
 	frame_scratch_end(&frame.scratch)
+	frame.phase = .Closed
 	frame.runtime = nil; frame.input = nil; frame.open = false; frame.finalized = false
 }
 ui_frame_end :: proc(frame: ^Ui_Frame) {ui_frame_finalize(frame); ui_frame_release(frame)}

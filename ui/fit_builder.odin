@@ -541,12 +541,18 @@ fit_builder_custom :: proc(
 
 fit_measure :: proc(builder: ^Fit_Builder) -> Intrinsic_Size {
 	fit_builder_assert_balanced(builder)
+	frame := builder.prepared.u.frame
+	ui_frame_phase_set(frame, .Measure)
+	defer ui_frame_phase_set(frame, .Build)
 	return prepared_measure(builder.prepared.u, &builder.prepared)
 }
 
 fit_render_at :: proc(builder: ^Fit_Builder, rect: Rect_I32) {
 	assert(builder != nil && builder.prepared.measured, "fit_render_at: builder not measured")
 	assert(!builder.prepared.rendered, "fit_render_at: builder already rendered")
+	frame := builder.prepared.u.frame
+	ui_frame_phase_set(frame, .Render)
+	defer ui_frame_phase_set(frame, .Build)
 	outputs := fit_builder_outputs(builder)
 	clear_started := prepared_phase_begin(builder.prepared.u.frame, .Output_Clear)
 	fit_outputs_clear(outputs, builder.output_count)
@@ -558,6 +564,9 @@ fit_render_at :: proc(builder: ^Fit_Builder, rect: Rect_I32) {
 fit_render :: proc(builder: ^Fit_Builder) -> Rect_I32 {
 	assert(builder != nil, "fit_render: nil builder")
 	fit_builder_assert_balanced(builder)
+	frame := builder.prepared.u.frame
+	ui_frame_phase_set(frame, .Render)
+	defer ui_frame_phase_set(frame, .Build)
 	outputs := fit_builder_outputs(builder)
 	clear_started := prepared_phase_begin(builder.prepared.u.frame, .Output_Clear)
 	fit_outputs_clear(outputs, builder.output_count)
@@ -635,6 +644,7 @@ fit_builder_assert_balanced :: proc(builder: ^Fit_Builder) {
 fit_builder_assert_open :: proc(builder: ^Fit_Builder) {
 	assert(builder != nil && builder.prepared.open, "fit builder: builder not open")
 	assert(builder.prepared.u != nil && builder.prepared.u.open, "fit builder: invalid UI")
+	assert(builder.prepared.u.frame.phase == .Build, "fit builder: mutation outside build phase")
 	assert(!builder.prepared.rendered, "fit builder: already rendered")
 }
 

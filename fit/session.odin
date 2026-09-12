@@ -6,6 +6,7 @@ import "ingot:ui_gfx"
 Session_Init :: proc(session: ^Session, config: Session_Config = {}) {
 	assert(session != nil && !session.inner.initialized, "Fit.Session_Init: invalid session")
 	ui_gfx.session_init(&session.inner, to_session_config(config))
+	debug_owner_prepare(&session.builder)
 }
 
 Session_Draw :: proc(session: ^Session, draw: Session_Draw_Proc, user_data: rawptr = nil) -> bool {
@@ -23,8 +24,11 @@ Session_Draw :: proc(session: ^Session, draw: Session_Draw_Proc, user_data: rawp
 Session_Destroy :: proc(session: ^Session) {
 	assert(session != nil && session.inner.initialized, "Fit.Session_Destroy: invalid session")
 	assert(!session.builder.bound && session.draw == nil, "Fit.Session_Destroy: frame open")
+	debug_owner_retire(&session.builder)
+	epoch := session.builder.owner.epoch
 	ui_gfx.session_destroy(&session.inner)
 	session^ = {}
+	session.builder.owner.epoch = epoch
 }
 
 Session_Set_Scale :: proc(session: ^Session, scale: f32) {

@@ -11,7 +11,26 @@ Builder :: struct {
 	custom_storage: []Custom_Spec,
 	customs_used:   i32,
 	generation:     u64,
+	frame_ticket:   ui.Ui_Frame_Ticket,
+	owner:          Debug_Owner,
 	bound:          bool,
+}
+
+Debug_Owner :: struct {
+	epoch:       u64,
+	outstanding: u32,
+	alive:       bool,
+}
+
+Debug_Async_Ticket :: struct {
+	owner: ^Debug_Owner,
+	epoch: u64,
+}
+
+Debug_Frame_Access :: struct {
+	builder:    ^Builder,
+	generation: u64,
+	frame:      ui.Ui_Frame_Ticket,
 }
 
 Parent :: struct {

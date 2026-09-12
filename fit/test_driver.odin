@@ -23,13 +23,21 @@ Test_Driver_Init :: proc(driver: ^Test_Driver) {
 		&impl.runtime,
 		{data = impl, font_for_size = test_driver_font, measure = test_driver_measure},
 	)
+	debug_owner_prepare(&impl.builder)
 	driver.inner = impl
+}
+
+Test_Driver_Debug_Frame_Access :: proc(driver: ^Test_Driver) -> Debug_Frame_Access {
+	assert(driver != nil && driver.inner != nil, "Fit test driver access: invalid driver")
+	impl := cast(^Test_Driver_Impl)driver.inner
+	return Debug_Frame_Access_Get(&impl.builder)
 }
 
 Test_Driver_Destroy :: proc(driver: ^Test_Driver) {
 	assert(driver != nil && driver.inner != nil, "Fit.Test_Driver_Destroy: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner
 	assert(!impl.builder.bound, "Fit.Test_Driver_Destroy: frame open")
+	debug_owner_retire(&impl.builder)
 	ui.ui_frame_destroy(impl.frame)
 	ui.ui_runtime_destroy(&impl.runtime)
 	free(impl.output)

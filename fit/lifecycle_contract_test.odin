@@ -3,6 +3,7 @@ package fit
 
 import "core:testing"
 import "ingot:gfx"
+import "ingot:ui"
 import "ingot:ui_gfx"
 
 @(test)
@@ -63,4 +64,75 @@ contract_scale_metrics :: proc(scale: f32) {
 @(private = "file")
 contract_scale_invalidate :: proc() {
 	contract_invalidation_calls += 1
+}
+
+@(private = "file")
+contract_access_draw :: proc(builder: ^Builder, user_data: rawptr) {
+	assert(builder != nil && user_data != nil)
+	access := cast(^Debug_Frame_Access)user_data
+	access^ = Debug_Frame_Access_Get(builder)
+	root := Column(builder)
+	Label(root, "Lifecycle")
+}
+
+@(test)
+fit_frame_access_expires_after_test_driver_frame :: proc(t: ^testing.T) {
+	driver: Test_Driver
+	Test_Driver_Init(&driver)
+	defer Test_Driver_Destroy(&driver)
+	access: Debug_Frame_Access
+	testing.expect(t, Test_Driver_Frame(&driver, {}, contract_access_draw, &access))
+	testing.expect(t, !Debug_Frame_Access_Valid(access))
+}
+
+@(test)
+fit_async_ticket_completes_once_before_owner_teardown :: proc(t: ^testing.T) {
+	builder: Builder
+	debug_owner_prepare(&builder)
+	ticket, ok := Debug_Async_Begin(&builder)
+	testing.expect(t, ok)
+	testing.expect_value(t, builder.owner.outstanding, u32(1))
+	Debug_Async_Complete(ticket)
+	testing.expect_value(t, builder.owner.outstanding, u32(0))
+	debug_owner_retire(&builder)
+	testing.expect(t, !builder.owner.alive)
+}
+
+@(test)
+fit_async_duplicate_completion_is_rejected :: proc(t: ^testing.T) {
+	builder: Builder
+	debug_owner_prepare(&builder)
+	ticket, ok := Debug_Async_Begin(&builder)
+	testing.expect(t, ok)
+	Debug_Async_Complete(ticket)
+	testing.expect_assert_message(t, "Fit.Debug_Async_Complete: duplicate completion")
+	Debug_Async_Complete(ticket)
+}
+
+@(test)
+fit_owner_teardown_with_async_completion_is_rejected :: proc(t: ^testing.T) {
+	builder: Builder
+	debug_owner_prepare(&builder)
+	_, ok := Debug_Async_Begin(&builder)
+	testing.expect(t, ok)
+	testing.expect_assert_message(t, "fit debug owner: callbacks outstanding")
+	debug_owner_retire(&builder)
+}
+
+@(test)
+fit_parent_mutation_outside_build_phase_is_rejected :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	ui.ui_runtime_init(&runtime)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	builder: Builder
+	builder_open(&builder, &frame, {0, 0, 320, 240})
+	defer builder_close(&builder)
+	root := Column(&builder)
+	ui.ui_frame_phase_set(&frame, .Measure)
+	defer ui.ui_frame_phase_set(&frame, .Build)
+	testing.expect_assert_message(t, "Fit.Parent: invalid phase")
+	Label(root, "Invalid")
 }

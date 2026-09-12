@@ -59,10 +59,74 @@ parent_validate :: proc(parent: Parent) -> ^Builder {
 		parent.generation != 0 && parent.generation == builder.generation,
 		"Fit.Parent: stale handle",
 	)
+	assert(ui.ui_frame_ticket_valid(builder.frame_ticket), "Fit.Parent: expired frame")
+	assert(ui.ui_frame_phase(builder.frame_ticket) == .Build, "Fit.Parent: invalid phase")
 	assert(parent.identity != ui.WIDGET_ID_NONE, "Fit.Parent: invalid identity")
 	index := i32(parent.handle)
 	assert(index >= 0 && index < builder.inner.prepared.count, "Fit.Parent: invalid handle")
 	return builder
+}
+
+Debug_Frame_Access_Get :: proc(builder: ^Builder) -> Debug_Frame_Access {
+	assert(builder != nil && builder.bound, "Fit.Debug_Frame_Access_Get: builder not bound")
+	assert(
+		ui.ui_frame_ticket_valid(builder.frame_ticket),
+		"Fit.Debug_Frame_Access_Get: expired frame",
+	)
+	return {builder = builder, generation = builder.generation, frame = builder.frame_ticket}
+}
+
+Debug_Frame_Access_Valid :: proc(access: Debug_Frame_Access) -> bool {
+	return(
+		access.builder != nil &&
+		access.builder.bound &&
+		access.generation != 0 &&
+		access.builder.generation == access.generation &&
+		ui.ui_frame_ticket_valid(access.frame) \
+	)
+}
+
+Debug_Async_Begin :: proc(builder: ^Builder) -> (Debug_Async_Ticket, bool) {
+	assert(builder != nil && builder.owner.alive, "Fit.Debug_Async_Begin: retired owner")
+	if builder.owner.outstanding == max(u32) do return {}, false
+	builder.owner.outstanding += 1
+	return {owner = &builder.owner, epoch = builder.owner.epoch}, true
+}
+
+Debug_Async_Complete :: proc(ticket: Debug_Async_Ticket) {
+	assert(ticket.owner != nil, "Fit.Debug_Async_Complete: nil owner")
+	assert(
+		ticket.owner.alive && ticket.owner.epoch == ticket.epoch,
+		"Fit.Debug_Async_Complete: completion into destroyed owner",
+	)
+	assert(ticket.owner.outstanding > 0, "Fit.Debug_Async_Complete: duplicate completion")
+	ticket.owner.outstanding -= 1
+}
+
+@(private = "package")
+debug_owner_assert_quiescent :: proc(builder: ^Builder) {
+	assert(builder != nil && builder.owner.alive, "fit debug owner: invalid owner")
+	assert(builder.owner.outstanding == 0, "fit debug owner: callbacks outstanding")
+}
+
+@(private = "package")
+debug_owner_retire :: proc(builder: ^Builder) {
+	assert(builder != nil, "fit debug owner: nil builder")
+	if !builder.owner.alive {
+		assert(builder.owner.outstanding == 0, "fit debug owner: invalid retired owner")
+		return
+	}
+	debug_owner_assert_quiescent(builder)
+	builder.owner.alive = false
+}
+
+@(private = "package")
+debug_owner_prepare :: proc(builder: ^Builder) {
+	assert(builder != nil, "fit debug owner: nil builder")
+	if builder.owner.alive do return
+	assert(builder.owner.epoch < max(u64), "fit debug owner: epoch exhausted")
+	builder.owner.epoch += 1
+	builder.owner.alive = true
 }
 
 @(private = "file")
@@ -535,6 +599,8 @@ custom_render_bridge :: proc(root: ^ui.Ui, rect: ui.Rect_I32, userdata: rawptr) 
 builder_open :: proc(builder: ^Builder, frame: ^ui.Ui_Frame, rect: Rect) {
 	assert(builder != nil && !builder.bound, "fit builder: already bound")
 	assert(frame != nil && frame.open, "fit builder: frame not open")
+	debug_owner_prepare(builder)
+	builder.frame_ticket = ui.ui_frame_ticket(frame)
 	ui.begin(&builder.root, frame, to_rect(rect))
 	builder.bound = true
 	Begin(builder)
@@ -546,4 +612,5 @@ builder_close :: proc(builder: ^Builder) {
 	assert(builder.root.open, "fit builder: root not open")
 	ui.end(&builder.root)
 	builder.bound = false
+	builder.frame_ticket = {}
 }

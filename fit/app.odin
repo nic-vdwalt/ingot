@@ -62,6 +62,7 @@ app_init_finish :: proc(
 	app.shutdown = callbacks.shutdown
 	app.user_data = user_data
 	assert(app.draw != nil, "Fit app init: draw callback not bound")
+	debug_owner_prepare(&app.builder)
 	return true
 }
 
@@ -84,7 +85,10 @@ Stop :: proc(app: ^App) -> bool {
 // ui_gfx.app_destroy. Retry before releasing the app or its context storage.
 Destroy :: proc(app: ^App) -> bool {
 	assert(app != nil, "Fit.Destroy: nil app")
-	return ui_gfx.app_destroy(&app.inner)
+	debug_owner_assert_quiescent(&app.builder)
+	if !ui_gfx.app_destroy(&app.inner) do return false
+	debug_owner_retire(&app.builder)
+	return true
 }
 
 Run :: proc(app: ^App, config: Config, draw: Draw_Proc, user_data: rawptr = nil) -> bool {
@@ -172,6 +176,8 @@ app_draw :: proc(inner: ^ui_gfx.App, root: ^ui.Ui, userdata: rawptr) {
 	app := cast(^App)userdata
 	assert(app.draw != nil, "fit app: nil draw callback")
 	assert(!app.builder.bound, "fit app: builder already bound")
+	debug_owner_prepare(&app.builder)
+	app.builder.frame_ticket = ui.ui_frame_ticket(root.frame)
 	app.builder.root = root^
 	app.builder.bound = true
 	Begin(&app.builder)
@@ -180,6 +186,7 @@ app_draw :: proc(inner: ^ui_gfx.App, root: ^ui.Ui, userdata: rawptr) {
 	if !app.builder.inner.prepared.rendered do _ = Render(&app.builder)
 	root^ = app.builder.root
 	app.builder.bound = false
+	app.builder.frame_ticket = {}
 }
 
 @(private = "file")

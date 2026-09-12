@@ -40,6 +40,26 @@ input_clip_utf8_preserves_rune_boundaries :: proc(t: ^testing.T) {
 }
 
 @(test)
+ui_frame_ticket_expires_on_release_and_next_generation :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	first := ui_frame_ticket(&frame)
+	testing.expect(t, ui_frame_ticket_valid(first))
+	testing.expect_value(t, ui_frame_phase(first), Ui_Frame_Phase.Build)
+	ui_frame_end(&frame)
+	testing.expect(t, !ui_frame_ticket_valid(first))
+	ui_frame_begin(&frame, &runtime)
+	second := ui_frame_ticket(&frame)
+	testing.expect(t, second.generation > first.generation)
+	testing.expect(t, ui_frame_ticket_valid(second))
+	ui_frame_end(&frame)
+	ui_frame_destroy(&frame)
+}
+
+@(test)
 ui_frame_style_matches_individual_accessors :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
