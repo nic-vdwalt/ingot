@@ -27,6 +27,50 @@ Transition_Rect_State :: struct {
 	initialized: bool,
 }
 
+CONTROL_FEEDBACK_SPEED :: 14.0
+CONTROL_SELECTION_SPEED :: 10.0
+
+Control_Motion_State :: struct {
+	hover:     Transition_F32_State,
+	press:     Transition_F32_State,
+	value:     Transition_F32_State,
+	indicator: Transition_Rect_State,
+	identity:  u64,
+}
+
+control_motion_fraction :: proc(
+	frame: ^Ui_Frame,
+	state: ^Transition_F32_State,
+	target: f32,
+	speed: f32 = CONTROL_FEEDBACK_SPEED,
+	snap: bool = false,
+) -> f32 {
+	assert(frame != nil && frame.open, "control motion: invalid frame")
+	assert(target >= 0 && target <= 1, "control motion: invalid target")
+	if state == nil do return target
+	if snap || !ui_frame_theme(frame).tactile_controls {
+		transition_f32_reset(state, target)
+		return target
+	}
+	return clamp(transition_f32(frame, state, target, {speed = speed}), 0, 1)
+}
+
+control_motion_indicator :: proc(
+	frame: ^Ui_Frame,
+	state: ^Transition_Rect_State,
+	target: Rect_I32,
+	snap: bool = false,
+) -> Rect_I32 {
+	assert(frame != nil && frame.open, "control indicator: invalid frame")
+	assert(target.w >= 0 && target.h >= 0, "control indicator: negative extent")
+	if state == nil do return target
+	if snap || !ui_frame_theme(frame).tactile_controls {
+		transition_rect_reset(state, target)
+		return target
+	}
+	return transition_rect(frame, state, target, {speed = CONTROL_SELECTION_SPEED})
+}
+
 transition_f32_reset :: proc(state: ^Transition_F32_State, value: f32) {
 	assert(state != nil, "transition_f32_reset: nil state")
 	assert(transition_value_finite(value), "transition_f32_reset: non-finite value")

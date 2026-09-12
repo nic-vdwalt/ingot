@@ -710,6 +710,7 @@ Button_Options :: struct {
 	style:       Btn_Style,
 	disabled:    bool,
 	web_form_id: string,
+	motion:      ^Control_Motion_State,
 }
 
 Button_Spec :: struct {
@@ -751,6 +752,7 @@ button_spec_at :: proc(u: ^Ui, spec: Button_Spec, rect: Rect_I32) -> bool {
 		web_form_id = spec.options.web_form_id,
 		focus = fo,
 		widget = spec.id,
+		motion = spec.options.motion,
 	)
 }
 
@@ -761,6 +763,7 @@ Button_At_Options :: struct {
 	web_form_id: string,
 	focus:       Focus_Opt,
 	widget:      Widget_Id,
+	motion:      ^Control_Motion_State,
 }
 
 // Unified button. Returns true if clicked this frame. Hover eases in/out via
@@ -817,7 +820,11 @@ button_u64 :: proc(
 
 @(private = "package")
 button_id_options :: proc(u: ^Ui, id: Widget_Id, label: string, options: Button_Options) -> bool {
-	return button_id(u, id, label, options.style, !options.disabled, options.web_form_id)
+	assert(u != nil && u.open, "button options: invalid UI")
+	assert(id != WIDGET_ID_NONE && label != "", "button options: invalid identity")
+	spec := button_spec(u, id, label, options)
+	size := button_spec_size(u, spec)
+	return button_spec_at(u, spec, slot_next_px(u, size.w, size.h))
 }
 
 @(private = "package")
@@ -917,6 +924,7 @@ button_at :: proc(
 	web_form_id: string = "",
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(frame != nil, "button_at: nil frame")
 	// Why assert: a nameless control is invisible to assistive tech.
@@ -942,8 +950,25 @@ button_at :: proc(
 	// culled button keeps its identity, tab order, and screen-reader record.
 	// The scissor would discard this geometry at raster time anyway - the
 	// saving is in never building, copying, and uploading it.
-	if !rect_culled_frame(frame, rect) {
-		t: f32 = 1 if hovered else 0
+	culled := rect_culled_frame(frame, rect)
+	hover_channel, press_channel: ^Transition_F32_State
+	if motion != nil {
+		hover_channel, press_channel = &motion.hover, &motion.press
+	}
+	t := control_motion_fraction(
+		frame,
+		hover_channel,
+		1 if hovered else 0,
+		snap = culled || !enabled,
+	)
+	pressed := hovered && is_mouse_button_down(frame, .LEFT)
+	press := control_motion_fraction(
+		frame,
+		press_channel,
+		1 if pressed else 0,
+		snap = culled || !enabled,
+	)
+	if !culled {
 		bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style_theme, style)
 		bg := color_mix(bg0, bg1, t)
 		fg := color_mix(fg0, fg1, t)
@@ -963,9 +988,7 @@ button_at :: proc(
 			border = {}
 		}
 
-		draw_rounded_fill(frame, rrect, .MD, bg)
-		if style == .Primary && enabled do btn_gloss(frame, style_theme, rrect)
-		draw_rounded_border(frame, rrect, .MD, .Hairline, border)
+		button_surface_paint(frame, rrect, style, enabled, bg, border, press)
 		if enabled && focus_opt_focused(focus) {
 			draw_focus_ring(frame, x, y, w, h)
 		}
@@ -978,6 +1001,24 @@ button_at :: proc(
 	if !enabled do sem += {.Disabled}
 	semantic_push(frame, .Button, rect, label, sem, focus, widget = widget)
 	return clicked && enabled
+}
+
+button_surface_paint :: proc(
+	frame: ^Ui_Frame,
+	rect: Rectangle,
+	style: Btn_Style,
+	enabled: bool,
+	background, border: Color,
+	press: f32,
+) {
+	assert(frame != nil && frame.open, "button surface: invalid frame")
+	assert(press >= 0 && press <= 1, "button surface: invalid press")
+	if enabled && (style == .Primary || style == .Secondary) {
+		draw_control_shadow(frame, rect, .MD, press)
+	}
+	draw_surface_colors(frame, rect, {bg = background}, border = .None)
+	if style == .Primary && enabled do btn_gloss(frame, ui_frame_theme(frame), rect)
+	draw_surface_colors(frame, rect, {border = border})
 }
 
 button_with_options_at :: proc(
@@ -997,6 +1038,7 @@ button_with_options_at :: proc(
 		options.web_form_id,
 		options.focus,
 		options.widget,
+		options.motion,
 	)
 }
 
@@ -1012,6 +1054,7 @@ button_at_state :: proc(
 	web_form_id: string = "",
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(state != nil, "button_at_state: nil state")
 	assert(label != "", "button_at_state: empty accessible label")
@@ -1030,7 +1073,22 @@ button_at_state :: proc(
 	clicked =
 		clicked || btn_sync_web_submit(frame, web_form_id, label, x, y, w, h, style, fs, enabled)
 	if hovered do request_cursor(frame, .POINTING_HAND)
-	t := hover_anim_frac(frame, state, hovered) if enabled else 0
+	culled := rect_culled_frame(frame, rect)
+	if culled || !enabled do state.hover = 1 if hovered else 0
+	t: f32
+	press: f32 = 1 if hovered && is_mouse_button_down(frame, .LEFT) else 0
+	if motion != nil {
+		t = control_motion_fraction(
+			frame,
+			&motion.hover,
+			1 if hovered else 0,
+			snap = culled || !enabled,
+		)
+		press = control_motion_fraction(frame, &motion.press, press, snap = culled || !enabled)
+		state.hover = t
+	} else {
+		t = hover_anim_frac(frame, state, hovered) if enabled && !culled else 0
+	}
 	bg0, bg1, fg0, fg1, bd0, bd1 := btn_palette(style_theme, style)
 	bg := color_mix(bg0, bg1, t)
 	fg := color_mix(fg0, fg1, t)
@@ -1047,12 +1105,12 @@ button_at_state :: proc(
 		fg = style_theme.fg_disabled
 		border = {}
 	}
-	draw_rounded_fill(frame, rrect, .MD, bg)
-	if style == .Primary && enabled do btn_gloss(frame, style_theme, rrect)
-	draw_rounded_border(frame, rrect, .MD, .Hairline, border)
-	if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
-	label_s, text_w := btn_label_fit(frame, label, w, fs)
-	draw_text_string_frame(frame, label_s, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+	if !culled {
+		button_surface_paint(frame, rrect, style, enabled, bg, border, press)
+		if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
+		label_s, text_w := btn_label_fit(frame, label, w, fs)
+		draw_text_string_frame(frame, label_s, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+	}
 	if semantic_will_emit(frame) {
 		sem: Sem_State
 		if !enabled do sem += {.Disabled}

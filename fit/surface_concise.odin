@@ -78,6 +78,14 @@ Text_Wrapped :: proc(
 	Surface_Text_Wrapped(surface, text, x, y, width, color, font_size, line_height)
 }
 
+Text_Wrapped_Height :: proc(
+	surface: ^Surface,
+	text: string,
+	width, font_size, line_height: i32,
+) -> i32 {
+	return Surface_Text_Wrapped_Height(surface, text, width, font_size, line_height)
+}
+
 fill_rect_i32 :: proc(surface: ^Surface, rect: Rect, color: Color) {
 	Surface_Fill_Rect(surface, rect, color)
 }

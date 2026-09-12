@@ -317,6 +317,17 @@ Surface_Text_Wrapped :: proc(
 	ui.draw_text_wrapped_frame(u.frame, x, y, width, text, ui.Color(color), font_size, line_height)
 }
 
+Surface_Text_Wrapped_Height :: proc(
+	surface: ^Surface,
+	text: string,
+	width, font_size, line_height: i32,
+) -> i32 {
+	assert(surface != nil)
+	assert(width > 0 && font_size > 0 && line_height > 0)
+	u := surface_ui(surface)
+	return ui.wrapped_height_px_frame(u.frame, text, width, font_size, line_height)
+}
+
 Surface_Truncate_Path :: proc(surface: ^Surface, path: string, width, font_size: i32) -> string {
 	u := surface_ui(surface)
 	return ui.truncate_path_middle_frame(u.frame, path, width, font_size)

@@ -4,6 +4,225 @@ package ui
 import "core:testing"
 
 @(test)
+control_motion_does_not_delay_values_or_semantics :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	theme := theme_dark()
+	theme.tactile_controls = true
+	ui_runtime_set_theme(&runtime, theme)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	sem_enable(&runtime, true)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	input := Ui_Input {
+		frame_time = 1.0 / 60.0,
+	}
+	toggle_motion, slider_motion: Control_Motion_State
+	checked := false
+	value: f32 = 0
+	ui_frame_begin(&frame, &runtime, &input)
+	_ = toggle_at(&frame, {20, 20, 160, 30}, "Toggle", &checked, motion = &toggle_motion)
+	_ = slider_at(
+		&frame,
+		{20, 70, 160, 30},
+		&value,
+		0,
+		100,
+		a11y_label = "Slider",
+		motion = &slider_motion,
+	)
+	ui_frame_end(&frame)
+	checked = true
+	input = slider_test_input({100, 80}, pressed = true, down = true)
+	input.frame_time = 1.0 / 60.0
+	ui_frame_begin(&frame, &runtime, &input)
+	_ = toggle_at(&frame, {20, 20, 160, 30}, "Toggle", &checked, motion = &toggle_motion)
+	testing.expect(
+		t,
+		checked && toggle_motion.value.current > 0 && toggle_motion.value.current < 1,
+	)
+	testing.expect(t, .Checked in frame.semantics.cur.nodes[0].state)
+	_ = slider_at(
+		&frame,
+		{20, 70, 160, 30},
+		&value,
+		0,
+		100,
+		a11y_label = "Slider",
+		motion = &slider_motion,
+	)
+	testing.expect_value(t, value, f32(50))
+	testing.expect_value(t, frame.semantics.cur.nodes[1].value, value)
+	testing.expect_value(t, frame.semantics.cur.nodes[1].rect, Rect_I32{20, 70, 160, 30})
+	testing.expect(t, slider_motion.hover.current > 0 && slider_motion.hover.current < 1)
+	knob_seen := false
+	for command in output.main.commands[:output.main.count] {
+		if command.kind == .Circle && command.p0.y == 85 {
+			knob_seen = true
+			testing.expect_value(t, command.p0.x, f32(100))
+		}
+	}
+	testing.expect(t, knob_seen)
+	ui_frame_end(&frame)
+	input = {}
+	input.frame_time = 1.0 / 60.0
+	ui_frame_begin(&frame, &runtime, &input)
+	frame.text_cull_top, frame.text_cull_bottom = 200, 300
+	_ = toggle_at(&frame, {20, 20, 160, 30}, "Toggle", &checked, motion = &toggle_motion)
+	_ = slider_at(
+		&frame,
+		{20, 70, 160, 30},
+		&value,
+		0,
+		100,
+		a11y_label = "Slider",
+		motion = &slider_motion,
+	)
+	testing.expect_value(t, output.main.count, 0)
+	testing.expect(t, !output.platform.request_redraw)
+	testing.expect_value(t, toggle_motion.value.current, f32(1))
+	testing.expect_value(t, slider_motion.hover.current, f32(0))
+	testing.expect_value(t, frame.semantics.cur.count, 2)
+	ui_frame_end(&frame)
+}
+
+@(test)
+toggle_keyboard_updates_semantics_before_motion_settles :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	theme := theme_dark()
+	theme.tactile_controls = true
+	ui_runtime_set_theme(&runtime, theme)
+	sem_enable(&runtime, true)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	motion: Control_Motion_State
+	transition_f32_reset(&motion.value, 0)
+	checked := false
+	slot: int = 1
+	input := Ui_Input {
+		frame_time = 1.0 / 60.0,
+	}
+	input.keys_pressed[input_key_index(.SPACE)] = true
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(
+		t,
+		toggle_at(
+			&frame,
+			{20, 20, 160, 30},
+			"Enabled",
+			&checked,
+			{&slot, 1},
+			Widget_Id(93),
+			&motion,
+		),
+	)
+	testing.expect(t, checked)
+	testing.expect(t, motion.value.current > 0 && motion.value.current < 1)
+	testing.expect(t, .Checked in frame.semantics.cur.nodes[0].state)
+	ui_frame_end(&frame)
+	theme.reduced_motion = true
+	ui_runtime_set_theme(&runtime, theme)
+	input.keys_pressed[input_key_index(.SPACE)] = false
+	ui_frame_begin(&frame, &runtime, &input)
+	_ = toggle_at(
+		&frame,
+		{20, 20, 160, 30},
+		"Enabled",
+		&checked,
+		{&slot, 1},
+		Widget_Id(93),
+		&motion,
+	)
+	testing.expect_value(t, motion.value.current, f32(1))
+	testing.expect(t, !output.platform.request_redraw)
+	ui_frame_end(&frame)
+}
+
+@(test)
+slider_motion_keeps_keyboard_and_accessibility_immediate :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	theme := theme_dark()
+	theme.tactile_controls = true
+	ui_runtime_set_theme(&runtime, theme)
+	sem_enable(&runtime, true)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	motion: Control_Motion_State
+	transition_f32_reset(&motion.hover, 0)
+	value: f32 = 40
+	slot: int = 1
+	focus := Focus_Opt{&slot, 1}
+	input := Ui_Input {
+		frame_time = 1.0 / 60.0,
+	}
+	input.keys_pressed[input_key_index(.RIGHT)] = true
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(
+		t,
+		slider_at(
+			&frame,
+			{20, 20, 160, 30},
+			&value,
+			0,
+			100,
+			5,
+			focus,
+			"Volume",
+			Widget_Id(91),
+			&motion,
+		),
+	)
+	testing.expect_value(t, value, f32(45))
+	testing.expect_value(t, frame.semantics.cur.nodes[0].value, value)
+	testing.expect(t, motion.hover.current > 0 && motion.hover.current < 1)
+	a11y_apply_action(&frame, {.Increment, frame.semantics.cur.nodes[0].id})
+	ui_frame_end(&frame)
+	input.keys_pressed[input_key_index(.RIGHT)] = false
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(
+		t,
+		slider_at(
+			&frame,
+			{20, 20, 160, 30},
+			&value,
+			0,
+			100,
+			5,
+			focus,
+			"Volume",
+			Widget_Id(91),
+			&motion,
+		),
+	)
+	testing.expect_value(t, value, f32(50))
+	testing.expect_value(t, frame.semantics.cur.nodes[0].value, value)
+	ui_frame_end(&frame)
+}
+
+@(test)
 geometry_tokens_follow_mid_frame_scale_change :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
@@ -134,6 +353,11 @@ slider_state_drag_uses_pane_local_coordinates :: proc(t: ^testing.T) {
 	defer ui_frame_destroy(&frame)
 	frame.output = output
 	state: Slider_State
+	motion: Control_Motion_State
+	theme := theme_dark()
+	theme.tactile_controls = true
+	ui_runtime_set_theme(&runtime, theme)
+	transition_f32_reset(&motion.hover, 0)
 	value: f32 = 0
 	rect := Rect_I32{20, 10, 200, 24}
 	origin := Vector2{100, 50}
@@ -145,25 +369,27 @@ slider_state_drag_uses_pane_local_coordinates :: proc(t: ^testing.T) {
 	input := slider_test_input({track_x, mouse_y}, pressed = true, down = true)
 	ui_frame_begin(&frame, &runtime, &input)
 	ui_frame_pane_push(&frame, origin)
-	_ = slider_at_state(&frame, &state, rect, &value, 0, 10)
+	_ = slider_at_state(&frame, &state, rect, &value, 0, 10, motion = &motion)
 	ui_frame_pane_pop(&frame)
 	ui_frame_end(&frame)
 	testing.expect(t, state.dragging, "translated slider did not begin dragging")
 	testing.expect_value(t, value, f32(0))
 
 	input = slider_test_input({track_x + track_w / 2, mouse_y}, down = true)
+	input.frame_time = 1.0 / 60.0
 	ui_frame_begin(&frame, &runtime, &input)
 	ui_frame_pane_push(&frame, origin)
-	changed := slider_at_state(&frame, &state, rect, &value, 0, 10)
+	changed := slider_at_state(&frame, &state, rect, &value, 0, 10, motion = &motion)
 	ui_frame_pane_pop(&frame)
 	ui_frame_end(&frame)
 	testing.expect(t, changed, "translated slider drag did not change value")
 	testing.expect_value(t, value, f32(5))
+	testing.expect(t, motion.hover.current > 0 && motion.hover.current < 1)
 
 	input = slider_test_input({track_x + track_w, mouse_y}, released = true)
 	ui_frame_begin(&frame, &runtime, &input)
 	ui_frame_pane_push(&frame, origin)
-	_ = slider_at_state(&frame, &state, rect, &value, 0, 10)
+	_ = slider_at_state(&frame, &state, rect, &value, 0, 10, motion = &motion)
 	ui_frame_pane_pop(&frame)
 	ui_frame_end(&frame)
 	testing.expect(t, !state.dragging, "translated slider remained latched after release")

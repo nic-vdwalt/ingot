@@ -62,6 +62,7 @@ PACKED_SCALAR_MAX = 2.0
 LOD_POLICIES = {
     "none": (1.0,),
     "grass_2": (1.0, 0.25),
+    "grass_blades_2": (1.0, 0.25),
     "structure_3": (1.0, 0.5, 0.2),
     "tree_4": (1.0, 0.5, 0.25, 0.08),
 }
@@ -602,7 +603,267 @@ class Lod:
         self.threshold = threshold
 
 
-def build_lod_chain(vertices, indices, policy, label):
+BLADE_MAX_COUNT = 256
+BLADE_MAX_TRIANGLES = 128
+
+
+def _blade_boundary(triangles, label):
+    edges = {}
+    for triangle in triangles:
+        for start, end in zip(triangle, triangle[1:] + triangle[:1]):
+            edge = (start, end)
+            edges[edge] = edges.get(edge, 0) + 1
+            if edges[edge] > 1:
+                fail(f"{label}: overlapping or nonmanifold blade faces")
+    boundary = {edge for edge in edges if (edge[1], edge[0]) not in edges}
+    if not boundary:
+        fail(f"{label}: empty blade patch boundary")
+    outgoing = {}
+    incoming = {}
+    for start, end in boundary:
+        if start in outgoing or end in incoming:
+            fail(f"{label}: ambiguous blade patch boundary")
+        outgoing[start] = end
+        incoming[end] = start
+    if set(outgoing) != set(incoming):
+        fail(f"{label}: open blade patch boundary")
+    start = min(outgoing)
+    cursor = start
+    visited = set()
+    for _ in range(len(boundary)):
+        if cursor in visited:
+            fail(f"{label}: disconnected blade patch")
+        visited.add(cursor)
+        cursor = outgoing[cursor]
+    if cursor != start:
+        fail(f"{label}: invalid blade patch cycle")
+    return boundary
+
+
+def _validate_patch_outline(boundary, triangles, label):
+    normal, _ = _blade_patch_geometry(triangles[0], label)
+    drop = max(range(3), key=lambda axis: abs(normal[axis]))
+    axes = [axis for axis in range(3) if axis != drop]
+    edges = sorted(boundary)
+    def orientation(start, end, point):
+        return ((end[axes[0]] - start[axes[0]]) * (point[axes[1]] - start[axes[1]]) -
+                (end[axes[1]] - start[axes[1]]) * (point[axes[0]] - start[axes[0]]))
+    for index, (start, end) in enumerate(edges):
+        for other_start, other_end in edges[index + 1:]:
+            if {start, end} & {other_start, other_end}:
+                continue
+            first = orientation(start, end, other_start)
+            second = orientation(start, end, other_end)
+            third = orientation(other_start, other_end, start)
+            fourth = orientation(other_start, other_end, end)
+            if first * second <= 0 and third * fourth <= 0:
+                minimum = [max(min(start[axis], end[axis]),
+                               min(other_start[axis], other_end[axis])) for axis in axes]
+                maximum = [min(max(start[axis], end[axis]),
+                               max(other_start[axis], other_end[axis])) for axis in axes]
+                if all(low <= high for low, high in zip(minimum, maximum)):
+                    fail(f"{label}: self-intersecting blade patch")
+    signed_area = sum(start[axes[0]] * end[axes[1]] - end[axes[0]] * start[axes[1]]
+                      for start, end in edges)
+    triangle_area = sum(orientation(*triangle) for triangle in triangles)
+    if abs(signed_area - triangle_area) > max(abs(signed_area) * 1e-7, 1e-12):
+        fail(f"{label}: overlapping blade patch coverage")
+
+
+def _blade_patch_geometry(triangle, label):
+    origin, second, third = triangle
+    delta = tuple(second[axis] - origin[axis] for axis in range(3))
+    other = tuple(third[axis] - origin[axis] for axis in range(3))
+    cross = (delta[1] * other[2] - delta[2] * other[1],
+             delta[2] * other[0] - delta[0] * other[2],
+             delta[0] * other[1] - delta[1] * other[0])
+    magnitude = math.sqrt(sum(value * value for value in cross))
+    if not math.isfinite(magnitude) or magnitude <= 1e-14:
+        fail(f"{label}: degenerate blade triangle")
+    normal = tuple(value / magnitude for value in cross)
+    return normal, magnitude
+
+
+def _validate_blade_faces(triangles, label):
+    patches = []
+    for triangle in triangles:
+        normal, area = _blade_patch_geometry(triangle, label)
+        matches = []
+        for index, patch in enumerate(patches):
+            reference, origin, _, _ = patch
+            alignment = sum(normal[axis] * reference[axis] for axis in range(3))
+            distance = max(abs(sum(reference[axis] * (point[axis] - origin[axis])
+                                   for axis in range(3))) for point in triangle)
+            if abs(alignment) > 1 - 1e-7 and distance <= 1e-7:
+                matches.append((index, alignment))
+        if len(matches) > 1:
+            fail(f"{label}: ambiguous coplanar blade patches")
+        if not matches:
+            patches.append((normal, triangle[0], [triangle], [area]))
+        else:
+            index, alignment = matches[0]
+            patches[index][2].append(triangle)
+            patches[index][3].append(area if alignment > 0 else -area)
+    patch_edges = {}
+    for patch_index, (_, _, faces, areas) in enumerate(patches):
+        front = [face for face, area in zip(faces, areas) if area > 0]
+        for start, end in _blade_boundary(front, label):
+            edge = tuple(sorted((start, end)))
+            owners = patch_edges.setdefault(edge, set())
+            owners.add(patch_index)
+            if len(owners) > 2:
+                fail(f"{label}: nonmanifold blade segment junction")
+    connected = {0}
+    adjacency = [set() for _ in patches]
+    for owners in patch_edges.values():
+        for owner in owners:
+            adjacency[owner].update(owners - {owner})
+    for _ in range(len(patches)):
+        expanded = connected | {neighbor for owner in connected for neighbor in adjacency[owner]}
+        if expanded == connected:
+            break
+        connected = expanded
+    if len(connected) != len(patches):
+        fail(f"{label}: disconnected blade segments")
+    for _, _, faces, areas in patches:
+        front = [face for face, area in zip(faces, areas) if area > 0]
+        back = [face for face, area in zip(faces, areas) if area < 0]
+        if not front or not back:
+            fail(f"{label}: missing opposite blade faces")
+        boundary = _blade_boundary(front, label)
+        opposite = _blade_boundary(back, label)
+        _validate_patch_outline(boundary, front, label)
+        _validate_patch_outline(opposite, back, label)
+        if boundary != {(end, start) for start, end in opposite}:
+            fail(f"{label}: opposite blade coverage differs")
+        if abs(sum(areas)) > max(1e-12, sum(abs(area) for area in areas) * 1e-7):
+            fail(f"{label}: opposite blade areas differ")
+
+
+def _blade_components(vertices, indices, blade_ids, tolerance, label):
+    components = {}
+    if len(indices) > BLADE_MAX_COUNT * BLADE_MAX_TRIANGLES * 3:
+        fail(f"{label}: whole-blade triangle limit exceeded")
+    for offset, blade_id in enumerate(blade_ids):
+        component = components.setdefault(blade_id, [])
+        component.extend(indices[offset * 3:offset * 3 + 3])
+        if len(component) > BLADE_MAX_TRIANGLES * 3 or len(components) > BLADE_MAX_COUNT:
+            fail(f"{label}: whole-blade component limit exceeded")
+    if len(components) < 2:
+        fail(f"{label}: whole-blade reduction requires at least two blades")
+    descriptors = {}
+    for blade_id in sorted(components):
+        selected = components[blade_id]
+        blade_label = f"{label}: blade {blade_id}"
+        validate_ground(vertices, selected, tolerance, blade_label)
+        points = sorted({tuple(vertices[index][:3]) for index in selected})
+        if max(point[2] for point in points) <= tolerance:
+            fail(f"{blade_label}: zero-height blade")
+        if any(abs(vertices[index][SCALAR] - 1.5) > 1e-6 for index in selected):
+            fail(f"{blade_label}: expected grass scalar")
+        triangles = [tuple(tuple(vertices[selected[offset + corner]][:3])
+                           for corner in range(3)) for offset in range(0, len(selected), 3)]
+        _validate_blade_faces(triangles, blade_label)
+        roots = [point for point in points if abs(point[2]) <= tolerance]
+        descriptors[blade_id] = (sum(point[0] for point in roots) / len(roots),
+                                sum(point[1] for point in roots) / len(roots),
+                                max(point[2] for point in points))
+    return components, descriptors
+
+
+def _select_blades(components, descriptors, target):
+    ids = sorted(components)
+    minimum = [min(descriptors[key][axis] for key in ids) for axis in range(3)]
+    spans = [max(max(descriptors[key][axis] for key in ids) - minimum[axis], 1e-9)
+             for axis in range(3)]
+    normalized = {key: tuple((descriptors[key][axis] - minimum[axis]) / spans[axis]
+                            for axis in range(3)) for key in ids}
+    first = max(ids, key=lambda key: (normalized[key][2] +
+                sum((normalized[key][axis] - 0.5) ** 2 for axis in range(2)), -key))
+    order = [first]
+    remaining = set(ids) - {first}
+    distances = {key: float("inf") for key in remaining}
+    while remaining:
+        latest = normalized[order[-1]]
+        for key in sorted(remaining):
+            distance = sum((normalized[key][axis] - latest[axis]) ** 2 for axis in range(3))
+            distances[key] = min(distances[key], distance)
+        chosen = max(sorted(remaining), key=lambda key: (distances[key], -key))
+        order.append(chosen)
+        remaining.remove(chosen)
+    cost = 0
+    candidates = []
+    for count, key in enumerate(order[:-1], 1):
+        cost += len(components[key])
+        candidates.append((abs(cost - target), cost, count))
+    count = min(candidates)[2]
+    return order[:count]
+
+
+def _omitted_blade_error(vertices, components, selected):
+    representatives = []
+    for key in selected:
+        points = sorted({tuple(vertices[index][:3]) for index in components[key]})
+        representatives.extend((min(points, key=lambda point: (point[2], point)),
+                                max(points, key=lambda point: (point[2], point))))
+    error = 0.0
+    for key in sorted(components):
+        if key in selected:
+            continue
+        points = [vertices[index][:3] for index in components[key]]
+        center = tuple(sum(point[axis] for point in points) / len(points) for axis in range(3))
+        representative = min(representatives, key=lambda point:
+                             (sum((point[axis] - center[axis]) ** 2 for axis in range(3)), point))
+        error = max(error, max(math.dist(point, representative) for point in points))
+    if not math.isfinite(error):
+        fail("whole-blade reduction produced nonfinite error")
+    return max(error, CLUSTER_ERROR_STEP)
+
+
+def _build_blade_chain(vertices, indices, blade_ids, tolerance, label):
+    components, descriptors = _blade_components(vertices, indices, blade_ids, tolerance, label)
+    selected = _select_blades(components, descriptors,
+                             len(indices) * LOD_POLICIES["grass_blades_2"][1])
+    coarse_indices = [index for key in sorted(selected) for index in components[key]]
+    if not 0 < len(coarse_indices) < len(indices):
+        fail(f"{label}: whole-blade target cannot produce a cheaper level")
+    base_vertices, base_indices = optimize(vertices, indices)
+    reduced, reduced_indices = optimize(vertices, coarse_indices)
+    validate_ground(reduced, reduced_indices, tolerance, f"{label}: whole-blade level 1")
+    error = _omitted_blade_error(vertices, components, selected)
+    return [Lod(base_vertices, base_indices, 0.0, LOD_SCREEN_BASE),
+            Lod(reduced, reduced_indices, error, LOD_SCREEN_BASE / LOD_SCREEN_FALLOFF)]
+
+
+def validate_ground(vertices, indices, tolerance, label):
+    if not math.isfinite(tolerance) or tolerance < 0:
+        fail(f"{label}: ground tolerance must be finite and nonnegative")
+    if not indices:
+        fail(f"{label}: grounded geometry is empty")
+    minimum = min(vertices[index][2] for index in indices)
+    if abs(minimum) > tolerance:
+        fail(f"{label}: grounded geometry has minimum Z {minimum}")
+
+
+def validate_cook_constraints(vertices, indices, grounded, ground_tolerance, blade_ids, label,
+                              policy="none"):
+    if not math.isfinite(ground_tolerance) or ground_tolerance < 0:
+        fail(f"{label}: ground tolerance must be finite and nonnegative")
+    if blade_ids is not None:
+        if len(blade_ids) != len(indices) // 3 or any(
+            type(blade_id) is not int or blade_id < 0 for blade_id in blade_ids
+        ):
+            fail(f"{label}: blade IDs must be nonnegative integers, one per triangle")
+        if policy != "grass_blades_2":
+            fail(f"{label}: blade metadata requires a whole-blade policy")
+    elif policy == "grass_blades_2":
+        fail(f"{label}: whole-blade policy requires blade IDs")
+    if grounded:
+        validate_ground(vertices, indices, ground_tolerance, label)
+
+
+def build_lod_chain(vertices, indices, policy, label, *, grounded=False,
+                    ground_tolerance=0.0001, blade_ids=None):
     """Produce the LOD chain a policy asks for.
 
     Level 0 is the cleaned source at whatever density it arrived with. Coarser
@@ -616,7 +877,14 @@ def build_lod_chain(vertices, indices, policy, label):
     if len(ratios) > MAX_MESH_LODS:
         fail(f"{label}: policy {policy!r} exceeds {MAX_MESH_LODS} levels")
     validate_mesh(vertices, indices, label)
+    validate_cook_constraints(vertices, indices, grounded, ground_tolerance, blade_ids, label,
+                              policy)
+    if policy == "grass_blades_2":
+        return _build_blade_chain(vertices, indices, blade_ids, ground_tolerance, label)
     base_vertices, base_indices = optimize(vertices, indices)
+    root_mask = None
+    if grounded:
+        root_mask = [abs(vertex[2]) <= ground_tolerance for vertex in base_vertices]
     chain = [Lod(base_vertices, base_indices, 0.0, LOD_SCREEN_BASE)]
     for level, ratio in enumerate(ratios[1:], start=1):
         target = max(3, int(len(base_indices) * ratio) // 3 * 3)
@@ -624,10 +892,14 @@ def build_lod_chain(vertices, indices, policy, label):
             # Nothing left to remove at this ratio; a shorter chain is valid and
             # honest, where a duplicated level would be neither.
             break
-        reduced, reduced_indices, error = simplify(base_vertices, base_indices, target)
+        reduced, reduced_indices, error = simplify(
+            base_vertices, base_indices, target, locked=root_mask
+        )
         if not reduced_indices or len(reduced_indices) >= len(chain[-1].indices):
             break
         reduced, reduced_indices = optimize(reduced, reduced_indices)
+        if grounded:
+            validate_ground(reduced, reduced_indices, ground_tolerance, f"{label}: level {level}")
         error = max(error, chain[-1].error + CLUSTER_ERROR_STEP)
         threshold = LOD_SCREEN_BASE / (LOD_SCREEN_FALLOFF ** level)
         if threshold >= chain[-1].threshold:
@@ -944,7 +1216,8 @@ class CookedMesh:
         self.uv_bounds = uv_bounds_of(vertices)
 
 
-def cook_mesh(mesh_id, vertices, indices, policy="none", clustered=False, label=None):
+def cook_mesh(mesh_id, vertices, indices, policy="none", clustered=False, label=None, *,
+              grounded=False, ground_tolerance=0.0001, blade_ids=None):
     """Turn one source mesh into a cooked chain, optionally with a cluster DAG.
 
     A DAG and a discrete chain are alternatives, not companions: the DAG already
@@ -952,7 +1225,12 @@ def cook_mesh(mesh_id, vertices, indices, policy="none", clustered=False, label=
     triangles twice.
     """
     label = label or f"mesh {mesh_id}"
+    validate_mesh(vertices, indices, label)
+    validate_cook_constraints(vertices, indices, grounded, ground_tolerance, blade_ids, label,
+                              policy)
     if clustered:
+        if policy == "grass_blades_2":
+            fail(f"{label}: whole-blade policy does not support clustered cooking")
         dag = build_cluster_dag(vertices, indices, label)
         lods = []
         for first_vertex, vertex_count, first_index, index_count, error in dag.levels:
@@ -976,8 +1254,15 @@ def cook_mesh(mesh_id, vertices, indices, policy="none", clustered=False, label=
                 )
             )
         _force_monotonic(lods, label)
+        if grounded:
+            for level, lod in enumerate(lods):
+                validate_ground(lod.vertices, lod.indices, ground_tolerance,
+                                f"{label}: clustered level {level}")
         return CookedMesh(mesh_id, lods, dag)
-    return CookedMesh(mesh_id, build_lod_chain(vertices, indices, policy, label))
+    return CookedMesh(mesh_id, build_lod_chain(
+        vertices, indices, policy, label, grounded=grounded,
+        ground_tolerance=ground_tolerance, blade_ids=blade_ids
+    ))
 
 
 def _force_monotonic(lods, label):

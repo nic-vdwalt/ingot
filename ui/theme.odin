@@ -157,6 +157,7 @@ Theme :: struct {
 	// Accessibility. reduced_motion snaps animations (hover ease, caret
 	// blink) to their final state for vestibular/motion-sensitive users.
 	reduced_motion:             bool,
+	tactile_controls:           bool,
 }
 
 // Substrate_Kind names the page texture drawn behind a surface.

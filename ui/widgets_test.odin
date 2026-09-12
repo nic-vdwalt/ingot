@@ -18,6 +18,77 @@ w_mono :: proc(text: cstring, size: i32) -> i32 {
 }
 
 @(test)
+tactile_widgets_keep_interaction_geometry :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	sem_enable(&runtime, true)
+	theme := theme_dark()
+	theme.tactile_controls = true
+	ui_runtime_set_theme(&runtime, theme)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	motion: Control_Motion_State
+	rect := Rect_I32{20, 20, 100, 30}
+	input := Ui_Input {
+		frame_time = 1.0 / 60.0,
+	}
+	ui_frame_begin(&frame, &runtime, &input)
+	_ = button_at(&frame, rect, "Save", motion = &motion)
+	ui_frame_end(&frame)
+	input.mouse_position = {50, 30}
+	input.mouse_pressed[input_mouse_index(.LEFT)] = true
+	input.mouse_down[input_mouse_index(.LEFT)] = true
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(t, !button_at(&frame, rect, "Save", motion = &motion))
+	testing.expect(t, motion.press.current > 0 && motion.press.current < 1)
+	ui_frame_end(&frame)
+	input.mouse_pressed[input_mouse_index(.LEFT)] = false
+	input.mouse_down[input_mouse_index(.LEFT)] = false
+	input.mouse_released[input_mouse_index(.LEFT)] = true
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(t, button_at(&frame, rect, "Save", motion = &motion))
+	testing.expect(t, motion.press.current > 0)
+	testing.expect_value(t, frame.semantics.cur.count, 1)
+	ui_frame_end(&frame)
+	ui_frame_begin(&frame, &runtime, &input)
+	testing.expect(t, !button_at(&frame, rect, "Save", enabled = false, motion = &motion))
+	testing.expect_value(t, motion.press.current, f32(0))
+	testing.expect(t, !output.platform.request_redraw)
+	testing.expect(t, .Disabled in frame.semantics.cur.nodes[0].state)
+	ui_frame_end(&frame)
+	ui_frame_begin(&frame, &runtime, &input)
+	frame.text_cull_top, frame.text_cull_bottom = 100, 200
+	transition_f32_reset(&motion.hover, 0)
+	_ = button_at(&frame, rect, "Save", motion = &motion)
+	testing.expect_value(t, output.main.count, 0)
+	testing.expect(t, !output.platform.request_redraw)
+	testing.expect_value(t, frame.semantics.cur.count, 1)
+	ui_frame_end(&frame)
+	legacy: Button_State
+	ui_frame_begin(&frame, &runtime, &input)
+	transition_f32_reset(&motion.hover, 0)
+	_ = button_at_state(&frame, &legacy, rect, "Save", motion = &motion)
+	testing.expect_value(t, legacy.hover, motion.hover.current)
+	testing.expect(t, legacy.hover > 0 && legacy.hover < 1)
+	ui_frame_end(&frame)
+	ui_frame_begin(&frame, &runtime, &input)
+	frame.text_cull_top, frame.text_cull_bottom = 100, 200
+	_ = button_at_state(&frame, &legacy, rect, "Save", motion = &motion)
+	testing.expect_value(t, output.main.count, 0)
+	testing.expect(t, !output.platform.request_redraw)
+	ui_frame_end(&frame)
+}
+
+@(test)
 button_spec_and_facade_share_geometry :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
@@ -44,9 +115,73 @@ button_spec_and_facade_share_geometry :: proc(t: ^testing.T) {
 	before := remaining_rect(&u)
 	_ = button(&u, "legacy", "Save")
 	after := remaining_rect(&u)
+	motion: Control_Motion_State
+	_ = button(&u, "animated", "Save", Button_Options{motion = &motion})
+	testing.expect(t, motion.hover.initialized && motion.press.initialized)
 	end(&u)
 	testing.expect_value(t, size.w, button_fit_w_frame(&frame, "Save"))
 	testing.expect_value(t, after.y - before.y, size.h)
+}
+
+@(test)
+button_surface_preserves_palettes_and_gloss :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	for theme in ([?]Theme {
+			theme_dark(),
+			theme_light(),
+			theme_high_contrast(),
+			theme_retro_orange(),
+		}) {
+		ui_runtime_set_theme(&runtime, theme)
+		ui_frame_begin(&frame, &runtime)
+		for style in Btn_Style {
+			for enabled in ([?]bool{false, true}) {
+				for hovered in ([?]bool{false, true}) {
+					bg0, bg1, _, _, bd0, bd1 := btn_palette(ui_frame_theme(&frame), style)
+					background := bg1 if hovered else bg0
+					border := bd1 if hovered else bd0
+					if !enabled {
+						background = theme.button_disabled_bg
+						border = {}
+					}
+					rect := Rectangle{20, 20, 100, 30}
+					output.main.count = 0
+					draw_rounded_fill(&frame, rect, .MD, background)
+					if style == .Primary && enabled && theme.button_primary_grad_top.a > 0 {
+						inset := i32(radius_pixels(&frame, .MD, 30)) + 1
+						draw_rectangle_gradient_v(
+							&frame,
+							20 + inset,
+							21,
+							100 - inset * 2,
+							15,
+							theme.button_primary_grad_top,
+							theme.button_primary_grad_bottom,
+						)
+					}
+					draw_rounded_border(&frame, rect, .MD, .Hairline, border)
+					count := output.main.count
+					expected: [4]Paint_Command
+					testing.expect(t, count <= len(expected))
+					copy(expected[:], output.main.commands[:count])
+					output.main.count = 0
+					button_surface_paint(&frame, rect, style, enabled, background, border, 0)
+					testing.expect_value(t, output.main.count, count)
+					for index in 0 ..< count {
+						testing.expect_value(t, output.main.commands[index], expected[index])
+					}
+				}
+			}
+		}
+		ui_frame_end(&frame)
+	}
 }
 
 @(test)

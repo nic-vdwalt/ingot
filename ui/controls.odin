@@ -17,6 +17,7 @@ Toggle_Spec :: struct {
 	id:      Widget_Id,
 	label:   string,
 	checked: ^bool,
+	motion:  ^Control_Motion_State,
 }
 
 checkbox_spec_size :: proc(u: ^Ui, spec: Checkbox_Spec) -> Intrinsic_Size {
@@ -46,7 +47,7 @@ toggle_spec_at :: proc(u: ^Ui, spec: Toggle_Spec, rect: Rect_I32) -> bool {
 	assert(u != nil && u.open, "toggle_spec_at: frame not open")
 	assert(spec.id != WIDGET_ID_NONE && spec.label != "" && spec.checked != nil)
 	fo := focus(u, spec.id) if slot_visible(rect) else Focus_Opt{}
-	return toggle_at(u.frame, rect, spec.label, spec.checked, fo, spec.id)
+	return toggle_at(u.frame, rect, spec.label, spec.checked, fo, spec.id, spec.motion)
 }
 
 toggle_at :: proc(
@@ -56,6 +57,7 @@ toggle_at :: proc(
 	checked: ^bool,
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(frame != nil && frame.open && checked != nil, "toggle_at: invalid argument")
 	assert(label != "", "toggle_at: empty accessible label")
@@ -65,7 +67,17 @@ toggle_at :: proc(
 	if it.hovered do request_cursor(frame, .POINTING_HAND)
 	changed := it.clicked || focus_opt_activated(frame, focus, .Checkbox, widget)
 	if changed do checked^ = !checked^
-	toggle_draw(frame, rect, label, checked^, it.hovered, focus)
+	culled := rect_culled_frame(frame, rect)
+	channel: ^Transition_F32_State
+	if motion != nil do channel = &motion.value
+	fraction := control_motion_fraction(
+		frame,
+		channel,
+		1 if checked^ else 0,
+		CONTROL_SELECTION_SPEED,
+		culled,
+	)
+	if !culled do toggle_draw_fraction(frame, rect, label, fraction, it.hovered, focus)
 	sem: Sem_State
 	if checked^ do sem += {.Checked}
 	semantic_push(frame, .Checkbox, rect, label, sem, focus, widget = widget)
@@ -80,20 +92,40 @@ toggle_draw :: proc(
 	focus: Focus_Opt,
 ) {
 	assert(frame != nil && frame.open && label != "", "toggle_draw: invalid argument")
+	toggle_draw_fraction(frame, rect, label, 1 if checked else 0, hovered, focus)
+}
+
+toggle_draw_fraction :: proc(
+	frame: ^Ui_Frame,
+	rect: Rect_I32,
+	label: string,
+	fraction: f32,
+	hovered: bool,
+	focus: Focus_Opt,
+) {
+	assert(frame != nil && frame.open && label != "", "toggle paint: invalid argument")
+	assert(fraction >= 0 && fraction <= 1, "toggle paint: invalid fraction")
 	metrics := ui_frame_metrics(frame)
 	track_h := metrics.CONTROL_BOX
 	track_w := track_h * 2
 	track := Rect_I32{rect.x, rect.y + (rect.h - track_h) / 2, track_w, track_h}
 	style := ui_frame_theme(frame)
-	background := style.fg_accent if checked else style.bg_input
+	background := color_mix(style.bg_input, style.fg_accent, fraction)
 	track_rect := rect_f32(track)
 	track_round := radius_ratio(frame, .Pill, track_rect)
 	track_segments := radius_segments(radius_pixels(frame, .Pill, f32(track_h)))
 	draw_rectangle_rounded(frame, track_rect, track_round, track_segments, background)
 	knob_r := f32(max(track_h / 2 - ui_frame_sc(frame, 2), 1))
 	knob_x := f32(track.x) + knob_r + f32(ui_frame_sc(frame, 2))
-	if checked do knob_x = f32(track.x + track.w) - knob_r - f32(ui_frame_sc(frame, 2))
-	knob := style.button_text if checked else style.fg_secondary
+	knob_end := f32(track.x + track.w) - knob_r - f32(ui_frame_sc(frame, 2))
+	knob_x += (knob_end - knob_x) * fraction
+	knob := color_mix(style.fg_secondary, style.button_text, fraction)
+	draw_control_shadow(
+		frame,
+		{knob_x - knob_r, f32(track.y) + f32(track.h) / 2 - knob_r, knob_r * 2, knob_r * 2},
+		.Pill,
+		0,
+	)
 	draw_circle_v(frame, {knob_x, f32(track.y) + f32(track.h) / 2}, knob_r, knob)
 	if hovered || focus_opt_focused(focus) {
 		draw_focus_ring(frame, track.x, track.y, track.w, track.h)
@@ -408,6 +440,7 @@ Slider_Spec :: struct {
 	maximum:    f32,
 	step:       f32,
 	a11y_label: string,
+	motion:     ^Control_Motion_State,
 }
 
 slider_spec_size :: proc(u: ^Ui, spec: Slider_Spec) -> Intrinsic_Size {
@@ -433,6 +466,7 @@ slider_spec_at :: proc(u: ^Ui, spec: Slider_Spec, rect: Rect_I32) -> bool {
 		fo,
 		spec.a11y_label,
 		spec.id,
+		spec.motion,
 	)
 }
 
@@ -499,6 +533,7 @@ slider_at :: proc(
 	focus: Focus_Opt = {},
 	a11y_label: string = "",
 	widget: Widget_Id = WIDGET_ID_NONE,
+	motion: ^Control_Motion_State = nil,
 ) -> (
 	changed: bool,
 ) {
@@ -528,6 +563,7 @@ slider_at :: proc(
 		it.pressed || dragging,
 		mouse.x,
 		hovered || focus_opt_focused(focus),
+		motion,
 	)
 }
 
@@ -541,6 +577,7 @@ slider_at_state :: proc(
 	focus: Focus_Opt = {},
 	a11y_label: string = "",
 	widget: Widget_Id = WIDGET_ID_NONE,
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(state != nil && value != nil, "slider_at_state: nil state or value")
 	if ui_frame_drop_degenerate(frame, hi <= lo || rect.w <= 0 || rect.h <= 0) do return false
@@ -562,6 +599,7 @@ slider_at_state :: proc(
 		it.held,
 		mouse.x,
 		it.hovered || state.dragging || focus_opt_focused(focus),
+		motion,
 	)
 }
 
@@ -582,6 +620,7 @@ slider_resolve_and_paint :: proc(
 	apply_pointer: bool,
 	mouse_x: f32,
 	knob_active: bool,
+	motion: ^Control_Motion_State = nil,
 ) -> (
 	changed: bool,
 ) {
@@ -616,8 +655,12 @@ slider_resolve_and_paint :: proc(
 		}
 	}
 	value^ = clamp(value^, lo, hi)
+	culled := rect_culled_frame(frame, rect)
+	channel: ^Transition_F32_State
+	if motion != nil do channel = &motion.hover
+	emphasis := control_motion_fraction(frame, channel, 1 if knob_active else 0, snap = culled)
 
-	if !rect_culled_frame(frame, rect) {
+	if !culled {
 		// Track + fill + knob.
 		cy := f32(rect.y) + f32(rect.h) / 2
 		th := f32(metrics.SLIDER_TRACK_H)
@@ -628,7 +671,13 @@ slider_resolve_and_paint :: proc(
 			draw_rounded_fill(frame, {track_x, cy - th / 2, fill_w, th}, .Pill, style.fg_accent)
 		}
 		knob_x := track_x + track_w * frac
-		knob_col := style.fg_accent if knob_active else style.fg_secondary
+		knob_col := color_mix(style.fg_secondary, style.fg_accent, emphasis)
+		draw_control_shadow(
+			frame,
+			{knob_x - knob_r, cy - knob_r, knob_r * 2, knob_r * 2},
+			.Pill,
+			1 if apply_pointer else 0,
+		)
 		draw_circle_v(frame, {knob_x, cy}, knob_r, style.bg_input)
 		draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
 		draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)

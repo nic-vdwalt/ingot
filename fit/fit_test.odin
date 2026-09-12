@@ -61,6 +61,11 @@ Fit_Test_Wheel_State :: struct {
 	dominant: f32,
 }
 
+Fit_Test_Wrapped_Height_State :: struct {
+	matched: bool,
+	cases:   i32,
+}
+
 fit_test_icon_render :: proc(surface: ^Surface, _: Rect, _: rawptr) -> bool {
 	_ = Surface_Icon_Button(surface, Widget_Id(1), .Settings, "Settings", {10, 10, 28, 28})
 	return false
@@ -79,6 +84,49 @@ fit_test_wheel_render :: proc(surface: ^Surface, _: Rect, userdata: rawptr) -> b
 
 fit_test_wheel_draw :: proc(builder: ^Builder, userdata: rawptr) {
 	Canvas(builder, fit_test_wheel_render, userdata)
+}
+
+fit_test_wrapped_height_render :: proc(surface: ^Surface, _: Rect, userdata: rawptr) -> bool {
+	assert(surface != nil)
+	assert(userdata != nil)
+	state := cast(^Fit_Test_Wrapped_Height_State)userdata
+	widget := surface_ui(surface)
+	font_size := Surface_Text_Size(surface, .Label)
+	line_height := Surface_Text_Line_Height(surface, .Label)
+	texts := [?]string {
+		"alpha beta gamma",
+		"alpha\nbeta",
+		"longunbrokenidentifier",
+		"héllo 世界",
+	}
+	widths := [?]i32{48, 200, 32, 40}
+	state.matched = true
+	for text, index in texts {
+		measured := Surface_Text_Wrapped_Height(
+			surface,
+			text,
+			widths[index],
+			font_size,
+			line_height,
+		)
+		drawn := ui.draw_text_wrapped_frame(
+			widget.frame,
+			0,
+			i32(index) * line_height * 4,
+			widths[index],
+			text,
+			ui.Color{255, 255, 255, 255},
+			font_size,
+			line_height,
+		)
+		state.matched = state.matched && measured == drawn && measured >= line_height
+		state.cases += 1
+	}
+	return false
+}
+
+fit_test_wrapped_height_draw :: proc(builder: ^Builder, userdata: rawptr) {
+	Canvas(builder, fit_test_wrapped_height_render, userdata)
 }
 
 fit_test_noop_render :: proc(_: ^Surface, _: Rect, _: rawptr) -> bool {
@@ -158,6 +206,17 @@ fit_surface_wheel_preserves_both_axes :: proc(t: ^testing.T) {
 		expected_dominant *= 5
 	}
 	testing.expect_value(t, state.dominant, expected_dominant)
+}
+
+@(test)
+fit_surface_wrapped_height_matches_rendering :: proc(t: ^testing.T) {
+	driver: Test_Driver
+	Test_Driver_Init(&driver)
+	defer Test_Driver_Destroy(&driver)
+	state: Fit_Test_Wrapped_Height_State
+	testing.expect(t, Test_Driver_Frame(&driver, {}, fit_test_wrapped_height_draw, &state))
+	testing.expect(t, state.matched)
+	testing.expect_value(t, state.cases, i32(4))
 }
 
 @(test)

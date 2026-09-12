@@ -83,6 +83,19 @@ draw_surface :: proc(
 	assert(frame != nil, "draw_surface: nil frame")
 	if rect.width <= 0 || rect.height <= 0 do return
 	colors := surface_colors(frame, surface, state)
+	draw_surface_colors(frame, rect, colors, radius, border, elevation)
+}
+
+draw_surface_colors :: proc(
+	frame: ^Ui_Frame,
+	rect: Rectangle,
+	colors: Surface_Colors,
+	radius: Radius = .MD,
+	border: Border = .Hairline,
+	elevation: Elevation = .Flat,
+) {
+	assert(frame != nil, "draw_surface_colors: nil frame")
+	if rect.width <= 0 || rect.height <= 0 do return
 	ratio := radius_ratio(frame, radius, rect)
 	segments := radius_segments(radius_pixels(frame, radius, min(rect.width, rect.height)))
 
@@ -170,12 +183,17 @@ overlay_rounded_border :: proc(
 	)
 }
 
-// draw_shadow_hard offsets one rounded rect behind a surface.
-//
-// It replaces draw_shadow_rounded's four expanding translucent rings. That
-// procedure had no callers inside this package, so nothing had to be migrated
-// to change the model, and its downward bias was a raw +3 that did not scale -
-// at 3x UI scale its shadow sat a third as far from the card as at 1x.
+draw_control_shadow :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius, press: f32) {
+	assert(frame != nil && frame.open, "control shadow: invalid frame")
+	assert(press >= 0 && press <= 1, "control shadow: invalid press")
+	if !ui_frame_theme(frame).tactile_controls || rect.width <= 0 || rect.height <= 0 do return
+	base := ui_frame_theme(frame).shadow_color
+	offset := elevation_offset(frame, .Lifted) * (1 - press)
+	if base.a == 0 || offset == 0 do return
+	shifted := Rectangle{rect.x + offset, rect.y + offset, rect.width, rect.height}
+	draw_rounded_fill(frame, shifted, radius, base)
+}
+
 draw_shadow_hard :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius, elevation: Elevation) {
 	assert(frame != nil, "draw_shadow_hard: nil frame")
 	assert(rect.width > 0 && rect.height > 0, "draw_shadow_hard: empty rect")

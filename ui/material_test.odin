@@ -14,6 +14,77 @@ package ui
 
 import "core:testing"
 
+@(test)
+tactile_surfaces_preserve_palette_and_bound_paint :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	frame := Ui_Frame {
+		output = output,
+	}
+	input: Ui_Input
+	for theme in ([?]Theme {
+			theme_dark(),
+			theme_light(),
+			theme_high_contrast(),
+			theme_retro_ingot(),
+			theme_retro_ingot_dark(),
+			theme_terra(),
+		}) {
+		ui_runtime_set_theme(&runtime, theme)
+		ui_frame_begin(&frame, &runtime, &input)
+		for surface in Surface {
+			for state in Visual_State {
+				output.main.count = 0
+				rect := Rectangle{10, 10, 80, 30}
+				colors := surface_colors(&frame, surface, state)
+				if colors.bg.a > 0 do draw_rounded_fill(&frame, rect, .MD, colors.bg)
+				if colors.border.a > 0 {
+					draw_rounded_border(&frame, rect, .MD, .Hairline, colors.border)
+				}
+				count := output.main.count
+				testing.expect(t, count <= 2)
+				expected: [3]Paint_Command
+				copy(expected[:], output.main.commands[:count])
+				output.main.count = 0
+				draw_surface_colors(&frame, rect, surface_colors(&frame, surface, state))
+				testing.expect_value(t, output.main.count, count)
+				for index in 0 ..< count {
+					testing.expect_value(t, output.main.commands[index], expected[index])
+				}
+				output.main.count = 0
+				draw_surface(&frame, rect, surface, state)
+				testing.expect_value(t, output.main.count, count)
+				for index in 0 ..< count {
+					testing.expect_value(t, output.main.commands[index], expected[index])
+				}
+			}
+		}
+		output.main.count = 0
+		draw_surface_colors(&frame, {0, 0, 1, 1}, {})
+		draw_surface_colors(&frame, {}, {bg = {255, 255, 255, 255}})
+		testing.expect_value(t, output.main.count, 0)
+		testing.expect_value(t, output.main.dropped_commands, 0)
+		ui_frame_end(&frame)
+		for enabled in ([?]bool{false, true}) {
+			tactile := theme
+			tactile.tactile_controls = enabled
+			ui_runtime_set_theme(&runtime, tactile)
+			ui_frame_begin(&frame, &runtime, &input)
+			draw_control_shadow(&frame, {10, 10, 1, 1}, .MD, 0)
+			expected := 1 if enabled && theme.shadow_color.a > 0 else 0
+			testing.expect_value(t, output.main.count, expected)
+			draw_control_shadow(&frame, {10, 10, 80, 30}, .MD, 1)
+			draw_control_shadow(&frame, {}, .MD, 0)
+			testing.expect_value(t, output.main.count, expected)
+			testing.expect_value(t, output.main.dropped_commands, 0)
+			ui_frame_end(&frame)
+		}
+	}
+}
+
 // The largest viewport the bounds are sized against, in screen-space pixels.
 @(private = "file")
 VIEWPORT_4K_W :: f32(3840)

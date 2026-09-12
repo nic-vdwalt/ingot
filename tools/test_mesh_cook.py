@@ -12,6 +12,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -205,6 +206,131 @@ class SimplifyTest(unittest.TestCase):
 
 
 class LodChainTest(unittest.TestCase):
+    def test_grounded_chain_preserves_all_root_positions(self):
+        vertices, indices = grid(12)
+        vertices = [(vertex[0], 0.0, vertex[1]) + vertex[3:] for vertex in vertices]
+        roots = {vertex[:3] for vertex in vertices if vertex[2] == 0}
+        chain = cook.build_lod_chain(vertices, indices, "tree_4", "rooted", grounded=True)
+        self.assertGreater(len(chain), 1)
+        for lod in chain:
+            referenced = {lod.vertices[index][:3] for index in lod.indices}
+            self.assertTrue(roots <= referenced)
+            self.assertEqual(min(position[2] for position in referenced), 0)
+        first = cook.cook_mesh(1, vertices, indices, "tree_4", grounded=True)
+        second = cook.cook_mesh(1, vertices, indices, "tree_4", grounded=True)
+        self.assertEqual(cook.serialize([first]), cook.serialize([second]))
+
+    def test_grounded_split_corner_attributes_keep_root_positions(self):
+        vertices, indices = grid(8)
+        corners = []
+        for corner, index in enumerate(indices):
+            source = vertices[index]
+            corners.append((source[0], 0.0, source[1], 0.0,
+                            1.0 if corner % 2 else -1.0, 0.0,
+                            source[6], float(corner % 3), float(corner % 2)))
+        roots = {vertex[:3] for vertex in corners if vertex[2] == 0}
+        chain = cook.build_lod_chain(corners, list(range(len(corners))),
+                                    "tree_4", "split roots", grounded=True)
+        self.assertGreater(len(chain), 1)
+        for lod in chain:
+            self.assertTrue(roots <= {lod.vertices[index][:3] for index in lod.indices})
+
+    def test_grounded_roots_survive_packed_and_unpacked_storage(self):
+        vertices, indices = grid(12)
+        vertices = [(vertex[0], 0.0, vertex[1]) + vertex[3:] for vertex in vertices]
+        mesh = cook.cook_mesh(1, vertices, indices, "tree_4", grounded=True)
+        for packed in (False, True):
+            data = cook.serialize([mesh], packed=packed)
+            header = struct.unpack_from("<8s10I", data)
+            self.assertEqual(header[:3], (cook.MAGIC, cook.VERSION, 1))
+            vertex_start = cook.HEADER_SIZE + cook.RECORD_SIZE + header[3] * cook.LOD_SIZE
+            stride = 16 if packed else 36
+            for level in range(header[3]):
+                offset = cook.HEADER_SIZE + cook.RECORD_SIZE + level * cook.LOD_SIZE
+                first, count, _, _, _, _ = struct.unpack_from("<4I2f", data, offset)
+                heights = []
+                for index in range(first, first + count):
+                    address = vertex_start + index * stride
+                    if packed:
+                        quantized = struct.unpack_from("<3H", data, address)[2]
+                        minimum, maximum = mesh.bounds
+                        height = minimum[2] + quantized / 65535 * (maximum[2] - minimum[2])
+                    else:
+                        height = struct.unpack_from("<3f", data, address)[2]
+                    heights.append(height)
+                self.assertEqual(min(heights), 0.0)
+
+    def test_grounded_rejects_floating_and_invalid_tolerances(self):
+        vertices, indices = grid(4)
+        floating = [vertex[:2] + (1.0,) + vertex[3:] for vertex in vertices]
+        with self.assertRaisesRegex(cook.CookError, "minimum Z"):
+            cook.cook_mesh(1, floating, indices, grounded=True)
+        for tolerance in (-1, float("nan"), float("inf")):
+            with self.assertRaisesRegex(cook.CookError, "tolerance"):
+                cook.build_lod_chain(vertices, indices, "none", "test",
+                                     ground_tolerance=tolerance)
+
+    def test_grounding_uses_referenced_vertices_and_tolerance(self):
+        vertices, indices = grid(4)
+        floating = [vertex[:2] + (0.5,) + vertex[3:] for vertex in vertices]
+        floating.append(vertices[0])
+        with self.assertRaisesRegex(cook.CookError, "minimum Z"):
+            cook.build_lod_chain(floating, indices, "none", "unused root", grounded=True)
+        for height in (-0.00005, 0.00005):
+            shifted = [vertex[:2] + (height,) + vertex[3:] for vertex in vertices]
+            mesh = cook.cook_mesh(1, shifted, indices, grounded=True)
+            self.assertEqual(min(vertex[2] for vertex in mesh.lods[0].vertices), height)
+        below = [vertex[:2] + (-0.5,) + vertex[3:] for vertex in vertices]
+        with self.assertRaisesRegex(cook.CookError, "minimum Z"):
+            cook.cook_mesh(1, below, indices, grounded=True)
+
+    def test_grounded_unreducible_surface_keeps_single_level(self):
+        vertices, indices = grid(4)
+        chain = cook.build_lod_chain(vertices, indices, "tree_4", "flat", grounded=True)
+        self.assertEqual(len(chain), 1)
+        self.assertEqual(len(chain[0].indices), len(indices))
+
+    def test_grounded_cluster_levels_are_validated(self):
+        vertices, indices = grid(12)
+        mesh = cook.cook_mesh(1, vertices, indices, clustered=True, grounded=True)
+        for lod in mesh.lods:
+            self.assertEqual(min(lod.vertices[index][2] for index in lod.indices), 0)
+
+    def test_grounded_rejects_detached_cluster_level(self):
+        vertices, indices = grid(12)
+        dag = cook.build_cluster_dag(vertices, indices, "fixture")
+        first_vertex, vertex_count, _, _, _ = dag.levels[-1]
+        for index in range(first_vertex, first_vertex + vertex_count):
+            vertex = dag.vertices[index]
+            dag.vertices[index] = vertex[:2] + (1.0,) + vertex[3:]
+        with mock.patch.object(cook, "build_cluster_dag", return_value=dag):
+            with self.assertRaisesRegex(cook.CookError, "clustered level.*minimum Z"):
+                cook.cook_mesh(1, vertices, indices, clustered=True, grounded=True)
+
+    def test_grounded_rejects_detached_discrete_result(self):
+        vertices, indices = grid(4)
+        floating = [vertex[:2] + (1.0,) + vertex[3:] for vertex in vertices]
+        with mock.patch.object(cook, "simplify", return_value=(floating, indices[:3], 0)):
+            with self.assertRaisesRegex(cook.CookError, "level 1.*minimum Z"):
+                cook.build_lod_chain(vertices, indices, "tree_4", "fixture", grounded=True)
+
+    def test_explicit_default_constraints_preserve_legacy_bytes(self):
+        vertices, indices = grid(8, ripple=0.2)
+        legacy = cook.cook_mesh(1, vertices, indices, "tree_4")
+        explicit = cook.cook_mesh(1, vertices, indices, "tree_4", grounded=False,
+                                  ground_tolerance=0.0001, blade_ids=None)
+        for packed in (False, True):
+            self.assertEqual(cook.serialize([legacy], packed=packed),
+                             cook.serialize([explicit], packed=packed))
+
+    def test_unrecognized_blade_metadata_is_rejected(self):
+        vertices, indices = grid(4)
+        for blade_ids in ([0], [True] * (len(indices) // 3), [-1] * (len(indices) // 3)):
+            with self.assertRaisesRegex(cook.CookError, "blade IDs"):
+                cook.cook_mesh(1, vertices, indices, blade_ids=blade_ids)
+        with self.assertRaisesRegex(cook.CookError, "whole-blade policy"):
+            cook.cook_mesh(1, vertices, indices, blade_ids=[0] * (len(indices) // 3))
+
     def test_chain_is_strictly_monotonic(self):
         vertices, indices = grid(24, ripple=0.3)
         chain = cook.build_lod_chain(vertices, indices, "tree_4", "test")
@@ -278,6 +404,174 @@ class ClusterTest(unittest.TestCase):
                 self.assertEqual(child.group, index)
                 self.assertEqual(child.level + 1, group.level)
                 self.assertEqual(child.parent_error, group.error)
+
+
+def blade_fixture(count=8, alternate=True):
+    vertices, indices, ids = [], [], []
+    for blade in range(count):
+        base = blade * 0.17
+        height = 0.7 + blade * 0.08
+        points = [(base, 0.0, 0.0), (base + 0.1, 0.0, 0.0),
+                  (base + 0.08, 0.0, height), (base + 0.03, 0.0, height)]
+        triangles = [(0, 1, 2), (0, 2, 3)]
+        triangles += [(3, 2, 1), (3, 1, 0)] if alternate else [(2, 1, 0), (3, 2, 0)]
+        for face, triangle in enumerate(triangles):
+            for corner in triangle:
+                indices.append(len(vertices))
+                vertices.append(points[corner] + (0.0, -1.0 if face < 2 else 1.0,
+                                0.0, 1.5, float(corner % 2), float(face % 2)))
+            ids.append(blade)
+    return vertices, indices, ids
+
+
+class WholeBladeTest(unittest.TestCase):
+    def test_complete_blades_and_opposite_diagonals(self):
+        for alternate in (False, True):
+            vertices, indices, ids = blade_fixture(alternate=alternate)
+            mesh = cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+            self.assertEqual([len(lod.indices) for lod in mesh.lods], [96, 24])
+            self.assertGreater(mesh.lods[1].error, 0)
+            self.assertLess(mesh.lods[1].threshold, mesh.lods[0].threshold)
+            self.assertTrue(set(mesh.lods[1].vertices) <= set(vertices))
+            for blade in range(8):
+                source = {vertices[index] for index in indices[blade * 12:blade * 12 + 12]}
+                present = source & set(mesh.lods[1].vertices)
+                self.assertTrue(not present or present == source)
+            repeated = cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+            for packed in (False, True):
+                self.assertEqual(cook.serialize([mesh], packed=packed),
+                                 cook.serialize([repeated], packed=packed))
+
+    def test_missing_sides_and_duplicate_faces_fail(self):
+        vertices, indices, ids = blade_fixture()
+        for bad_indices, bad_ids in ((indices[3:], ids[1:]),
+                                     (indices + indices[:3], ids + ids[:1])):
+            with self.assertRaises(cook.CookError):
+                cook.build_lod_chain(vertices, bad_indices, "grass_blades_2", "bad",
+                                     blade_ids=bad_ids)
+
+    def test_invalid_metadata_and_clustered_policy_fail(self):
+        vertices, indices, ids = blade_fixture()
+        for metadata in (None, ids[:-1], [True] * len(ids), [-1] * len(ids)):
+            with self.assertRaises(cook.CookError):
+                cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=metadata)
+        with self.assertRaisesRegex(cook.CookError, "clustered"):
+            cook.cook_mesh(4, vertices, indices, "grass_blades_2", clustered=True, blade_ids=ids)
+        vertices, indices, ids = blade_fixture(1)
+        with self.assertRaisesRegex(cook.CookError, "at least two"):
+            cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+
+    def test_floating_and_non_grass_components_fail(self):
+        vertices, indices, ids = blade_fixture()
+        floating = [vertex[:2] + (vertex[2] + 0.3,) + vertex[3:] for vertex in vertices]
+        wrong_scalar = [vertex[:6] + (0.0,) + vertex[7:] for vertex in vertices]
+        for invalid in (floating, wrong_scalar):
+            with self.assertRaises(cook.CookError):
+                cook.cook_mesh(4, invalid, indices, "grass_blades_2", blade_ids=ids)
+
+    def test_touching_components_keep_independent_identity(self):
+        vertices, indices, ids = blade_fixture(2)
+        vertices[12:] = [vertex[:3] + vertex[3:6] + (1.5, vertex[7] + 2, vertex[8])
+                         for vertex in vertices[:12]]
+        mesh = cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+        self.assertEqual(len(mesh.lods[1].indices), 12)
+        self.assertEqual(set(mesh.lods[1].vertices), set(vertices[:12]))
+
+    def test_unequal_costs_choose_nearest_progressive_budget(self):
+        components = {0: [0] * 12, 1: [0] * 24, 2: [0] * 48}
+        descriptors = {0: (0, 0, 3), 1: (1, 0, 1), 2: (0, 1, 2)}
+        for target in (1, 12, 24, 50, 100):
+            selected = cook._select_blades(components, descriptors, target)
+            self.assertGreaterEqual(len(selected), 1)
+            self.assertLess(len(selected), len(components))
+            self.assertEqual(selected, cook._select_blades(components, descriptors, target))
+        self.assertEqual(cook._select_blades(components, descriptors, 1), [0])
+
+    def test_degenerate_and_zero_height_blades_fail(self):
+        vertices, indices, ids = blade_fixture()
+        flattened = [vertex[:2] + (0.0,) + vertex[3:] for vertex in vertices]
+        with self.assertRaisesRegex(cook.CookError, "zero-height"):
+            cook.cook_mesh(4, flattened, indices, "grass_blades_2", blade_ids=ids)
+        indices[1] = indices[0]
+        with self.assertRaisesRegex(cook.CookError, "degenerate"):
+            cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+
+    def test_segmented_blades_preserve_both_sides(self):
+        vertices, indices, ids = [], [], []
+        for blade in range(4):
+            rings = [((blade * 0.3, 0.05 * height * height, height),
+                      (blade * 0.3 + 0.1, 0.05 * height * height, height))
+                     for height in (0.0, 0.4, 0.8, 1.2)]
+            for segment in range(3):
+                points = (rings[segment][0], rings[segment][1],
+                          rings[segment + 1][1], rings[segment + 1][0])
+                for triangle in ((0, 1, 2), (0, 2, 3), (3, 2, 1), (3, 1, 0)):
+                    for corner in triangle:
+                        indices.append(len(vertices))
+                        vertices.append(points[corner] + (0.0, 1.0, 0.0, 1.5, 0.0, 0.0))
+                    ids.append(blade)
+        mesh = cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+        self.assertEqual([len(lod.indices) for lod in mesh.lods], [144, 36])
+        self.assertEqual(min(vertex[2] for vertex in mesh.lods[1].vertices), 0)
+        self.assertEqual(max(vertex[2] for vertex in mesh.lods[1].vertices), 1.2)
+
+    def test_disconnected_segments_and_crossing_boundaries_fail(self):
+        first = ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0))
+        second = tuple((point[0] + 4, point[1] + 1, point[2]) for point in first)
+        with self.assertRaisesRegex(cook.CookError, "disconnected"):
+            cook._validate_blade_faces([first, first[::-1], second, second[::-1]], "test")
+        points = ((0.0, 0.0, 0.0), (1.0, 0.0, 1.0),
+                  (0.0, 0.0, 1.0), (1.0, 0.0, 0.0))
+        boundary = {(points[index], points[(index + 1) % 4]) for index in range(4)}
+        with self.assertRaisesRegex(cook.CookError, "self-intersecting"):
+            cook._validate_patch_outline(boundary, [first], "test")
+
+    def test_component_limits_fail_before_expensive_validation(self):
+        vertices, indices, ids = blade_fixture()
+        with mock.patch.object(cook, "BLADE_MAX_COUNT", 2):
+            with self.assertRaisesRegex(cook.CookError, "limit"):
+                cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+        with mock.patch.object(cook, "BLADE_MAX_TRIANGLES", 3):
+            with self.assertRaisesRegex(cook.CookError, "limit"):
+                cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+
+    def test_triangle_reordering_preserves_selected_blades(self):
+        vertices, indices, ids = blade_fixture()
+        mesh = cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+        order = list(reversed(range(len(ids))))
+        reordered = [index for triangle in order for index in indices[triangle * 3:triangle * 3 + 3]]
+        other = cook.cook_mesh(4, vertices, reordered, "grass_blades_2",
+                               blade_ids=[ids[triangle] for triangle in order])
+        self.assertEqual(set(mesh.lods[1].vertices), set(other.lods[1].vertices))
+        self.assertAlmostEqual(mesh.lods[1].error, other.lods[1].error)
+
+    def test_coarse_blade_roots_round_trip(self):
+        vertices, indices, ids = blade_fixture()
+        mesh = cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+        for packed in (False, True):
+            data = cook.serialize([mesh], packed=packed)
+            header = struct.unpack_from("<8s10I", data)
+            self.assertEqual(header[:4], (cook.MAGIC, cook.VERSION, 1, 2))
+            start = cook.HEADER_SIZE + cook.RECORD_SIZE
+            vertex_start = start + 2 * cook.LOD_SIZE
+            stride = 16 if packed else 36
+            for level in range(2):
+                first, count, _, _, _, _ = struct.unpack_from("<4I2f", data,
+                                                             start + level * cook.LOD_SIZE)
+                heights = [struct.unpack_from("<3H" if packed else "<3f", data,
+                                             vertex_start + index * stride)[2]
+                           for index in range(first, first + count)]
+                self.assertEqual(min(heights), 0)
+
+    def test_error_bounds_every_omitted_triangle(self):
+        vertices, indices, ids = blade_fixture()
+        mesh = cook.cook_mesh(4, vertices, indices, "grass_blades_2", blade_ids=ids)
+        retained = {vertex[:3] for vertex in mesh.lods[1].vertices}
+        for offset in range(0, len(indices), 3):
+            points = [vertices[index][:3] for index in indices[offset:offset + 3]]
+            centroid = tuple(sum(point[axis] for point in points) / 3 for axis in range(3))
+            self.assertLessEqual(min(math.dist(centroid, point) for point in retained),
+                                 mesh.lods[1].error)
 
 
 class PackTest(unittest.TestCase):
