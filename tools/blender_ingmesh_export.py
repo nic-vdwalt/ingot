@@ -174,7 +174,8 @@ def evaluated_mesh(obj, require_blades=False):
             attribute = blade_attribute(mesh, obj.name)
             for polygon in mesh.polygons:
                 blade_id = attribute.data[polygon.index].value
-                expected_counts[blade_id] = expected_counts.get(blade_id, 0) + len(polygon.vertices) - 2
+                triangle_count = len(polygon.vertices) - 2
+                expected_counts[blade_id] = expected_counts.get(blade_id, 0) + triangle_count
         triangulated.from_mesh(mesh)
         bmesh.ops.triangulate(triangulated, faces=triangulated.faces[:])
         triangulated.to_mesh(mesh)

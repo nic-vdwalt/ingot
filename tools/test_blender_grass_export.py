@@ -1,4 +1,7 @@
+import json
 import os
+import pathlib
+import tempfile
 import struct
 import sys
 import unittest

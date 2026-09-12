@@ -521,6 +521,7 @@ slider_state :: proc(
 	step: f32 = 0,
 	w: i32 = 0,
 	a11y_label: string = "",
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(u != nil && u.open, "slider_state: frame not open")
 	assert(id != WIDGET_ID_NONE, "slider_state: zero stable id")
@@ -528,7 +529,7 @@ slider_state :: proc(
 	assert(a11y_label != "", "slider_state: empty accessible label")
 	r := slider_slot_px(u, w)
 	fo := focus(u, id) if slot_visible(r) else Focus_Opt{}
-	return slider_at_state(u.frame, state, r, value, lo, hi, step, fo, a11y_label, id)
+	return slider_at_state(u.frame, state, r, value, lo, hi, step, fo, a11y_label, id, motion)
 }
 
 slider_at :: proc(

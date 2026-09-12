@@ -925,20 +925,23 @@ button_at :: proc(
 	focus: Focus_Opt = {},
 	widget: Widget_Id = WIDGET_ID_NONE,
 	motion: ^Control_Motion_State = nil,
+	interaction_rect: ^Rect_I32 = nil,
 ) -> bool {
 	assert(frame != nil, "button_at: nil frame")
 	// Why assert: a nameless control is invisible to assistive tech.
 	assert(label != "", "button_at: empty accessible label")
 	x, y, w, h := rect.x, rect.y, rect.w, rect.h
+	hit := rect
+	if interaction_rect != nil do hit = interaction_rect^
 	metrics := ui_frame_metrics(frame)
 	fs := font_size if font_size > 0 else metrics.FONT_SIZE_LABEL
 	style_theme := ui_frame_theme(frame)
 	rrect := rect_f32(rect)
-	it := interact(frame, rrect)
+	it := interact(frame, rect_f32(hit))
 	hovered := enabled && it.hovered
 	clicked := enabled && it.clicked
 	if enabled {
-		focus_opt_click(frame, focus, x, y, w, h)
+		focus_opt_click(frame, focus, hit.x, hit.y, hit.w, hit.h)
 		clicked = clicked || focus_opt_activated(frame, focus, .Button, widget)
 	}
 	clicked =

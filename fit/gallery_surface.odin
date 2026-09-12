@@ -5,6 +5,7 @@ import "ingot:ui"
 Collapsible_Options :: struct {
 	icon:        rune,
 	right_label: string,
+	motion:      ^Control_Motion_State,
 }
 
 Spinner_Style :: ui.Spinner_Style
@@ -389,7 +390,7 @@ Region_Collapsible_Header_Id :: proc(
 		ui.Widget_Id(widget),
 		label,
 		open,
-		{icon = options.icon, right_label = options.right_label},
+		{icon = options.icon, right_label = options.right_label, motion = options.motion},
 	)
 }
 
@@ -426,6 +427,7 @@ Region_Slider_Id :: proc(
 	minimum, maximum, step: f32,
 	width: i32,
 	label: string,
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open && state != nil, "Fit.Region_Slider: invalid state")
 	return ui.slider_state(
@@ -438,6 +440,7 @@ Region_Slider_Id :: proc(
 		step,
 		width,
 		label,
+		motion,
 	)
 }
 
@@ -449,6 +452,7 @@ Region_Slider_String :: proc(
 	minimum, maximum, step: f32,
 	width: i32,
 	label: string,
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	return Region_Slider_Id(
 		region,
@@ -460,6 +464,7 @@ Region_Slider_String :: proc(
 		step,
 		width,
 		label,
+		motion,
 	)
 }
 
@@ -471,6 +476,7 @@ Region_Slider_U64 :: proc(
 	minimum, maximum, step: f32,
 	width: i32,
 	label: string,
+	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	return Region_Slider_Id(
 		region,
@@ -482,6 +488,7 @@ Region_Slider_U64 :: proc(
 		step,
 		width,
 		label,
+		motion,
 	)
 }
 

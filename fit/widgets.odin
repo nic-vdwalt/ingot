@@ -569,6 +569,10 @@ Theme_Set_Reduced_Motion :: proc(theme: ^Theme, enabled: bool) {
 	assert(theme != nil, "Fit.Theme_Set_Reduced_Motion: nil theme")
 	theme.inner.reduced_motion = enabled
 }
+Theme_Set_Tactile_Controls :: proc(theme: ^Theme, enabled: bool) {
+	assert(theme != nil, "Fit.Theme_Set_Tactile_Controls: nil theme")
+	theme.inner.tactile_controls = enabled
+}
 Theme_Background :: proc(theme: Theme) -> Color {return Color(theme.inner.bg_app)}
 Color_Tinted :: proc(color: Color, tint: Tint) -> Color {
 	return Color(ui.color_tinted(ui.Color(color), tint))
