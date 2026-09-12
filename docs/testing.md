@@ -112,6 +112,13 @@ concurrency only; it does not provide a timeout, output bound, or descendant
 cleanup. Dedicated long-running fuzz targets should normally use `fuzz/run.sh`
 rather than weakening the standard package-test limits.
 
+Lifecycle contract tests exercise generation-bearing frame access, read-only
+measurement/render phases, and asynchronous owner tickets. Expected-assert tests
+pin duplicate completion, completion into a retired owner, mutation outside the
+build phase, and teardown with outstanding work. Non-crashing tests verify that
+frame access expires at release and that the next frame receives a newer
+generation.
+
 Run the strict project gate:
 
 ```sh
