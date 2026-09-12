@@ -56,6 +56,18 @@ foreach ($TestName in $Manifest.windows_ui_expected_assert_tests) {
     ) + $OdinFlags
     Invoke-Supervised $Label $Command
 }
+foreach ($TestName in $Manifest.windows_fit_expected_assert_tests) {
+    Write-Host "== testing isolated $TestName =="
+    $Label = "fit-expected-assert-" + $TestName.Replace("fit.", "").Replace("_", "-")
+    $Command = @(
+        "odin", "test", "$Root/fit", $Collection, $Guard,
+        "-define:INGOT_FIT_EXPECTED_ASSERTS=true",
+        "-define:ODIN_TEST_NAMES=$TestName",
+        "-define:ODIN_TEST_THREADS=1",
+        "-define:ODIN_TEST_FAIL_ON_EMPTY=true"
+    ) + $OdinFlags
+    Invoke-Supervised $Label $Command
+}
 foreach ($Example in $Manifest.test_examples) {
     Write-Host "== testing examples/$Example =="
     $Label = $Example.Replace("_", "-") + "-example"

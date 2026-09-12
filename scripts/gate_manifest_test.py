@@ -36,6 +36,7 @@ class GateManifestTest(unittest.TestCase):
         expected_assert_suites = {
             "windows_gfx_expected_assert_tests": "gfx",
             "windows_ui_expected_assert_tests": "ui",
+            "windows_fit_expected_assert_tests": "fit",
         }
         for key, package in expected_assert_suites.items():
             for test_name in MANIFEST[key]:

@@ -6,6 +6,8 @@ import "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
+INGOT_FIT_EXPECTED_ASSERTS :: #config(INGOT_FIT_EXPECTED_ASSERTS, false)
+
 @(test)
 fit_configured_session_installs_hooks :: proc(t: ^testing.T) {
 	graphics := new(gfx.Context)
@@ -98,57 +100,62 @@ fit_async_ticket_completes_once_before_owner_teardown :: proc(t: ^testing.T) {
 	testing.expect(t, !builder.owner.alive)
 }
 
-@(test)
-fit_async_duplicate_completion_is_rejected :: proc(t: ^testing.T) {
-	builder: Builder
-	debug_owner_prepare(&builder)
-	ticket, ok := Debug_Async_Begin(&builder)
-	testing.expect(t, ok)
-	Debug_Async_Complete(ticket)
-	testing.expect_assert_message(t, "Fit.Debug_Async_Complete: duplicate completion")
-	Debug_Async_Complete(ticket)
-}
-
-@(test)
-fit_owner_teardown_with_async_completion_is_rejected :: proc(t: ^testing.T) {
-	builder: Builder
-	debug_owner_prepare(&builder)
-	_, ok := Debug_Async_Begin(&builder)
-	testing.expect(t, ok)
-	testing.expect_assert_message(t, "fit debug owner: callbacks outstanding")
-	debug_owner_retire(&builder)
-}
-
-@(test)
-fit_async_completion_into_retired_owner_is_rejected :: proc(t: ^testing.T) {
-	builder: Builder
-	debug_owner_prepare(&builder)
-	ticket, ok := Debug_Async_Begin(&builder)
-	testing.expect(t, ok)
-	builder.owner.outstanding = 0
-	debug_owner_retire(&builder)
-	testing.expect_assert_message(t, "Fit.Debug_Async_Complete: completion into destroyed owner")
-	Debug_Async_Complete(ticket)
-}
-
-@(test)
-fit_parent_mutation_outside_build_phase_is_rejected :: proc(t: ^testing.T) {
-	frame := ui.Ui_Frame {
-		generation = 1,
-		phase      = .Measure,
-		open       = true,
+when ODIN_OS != .Windows || INGOT_FIT_EXPECTED_ASSERTS {
+	@(test)
+	fit_async_duplicate_completion_is_rejected :: proc(t: ^testing.T) {
+		builder: Builder
+		debug_owner_prepare(&builder)
+		ticket, ok := Debug_Async_Begin(&builder)
+		testing.expect(t, ok)
+		Debug_Async_Complete(ticket)
+		testing.expect_assert_message(t, "Fit.Debug_Async_Complete: duplicate completion")
+		Debug_Async_Complete(ticket)
 	}
-	builder := Builder {
-		generation = 1,
-		frame_ticket = {frame = &frame, generation = 1},
-		bound = true,
+
+	@(test)
+	fit_owner_teardown_with_async_completion_is_rejected :: proc(t: ^testing.T) {
+		builder: Builder
+		debug_owner_prepare(&builder)
+		_, ok := Debug_Async_Begin(&builder)
+		testing.expect(t, ok)
+		testing.expect_assert_message(t, "fit debug owner: callbacks outstanding")
+		debug_owner_retire(&builder)
 	}
-	root := Parent {
-		builder    = &builder,
-		generation = 1,
-		handle     = 0,
-		identity   = ui.Widget_Id(1),
+
+	@(test)
+	fit_async_completion_into_retired_owner_is_rejected :: proc(t: ^testing.T) {
+		builder: Builder
+		debug_owner_prepare(&builder)
+		ticket, ok := Debug_Async_Begin(&builder)
+		testing.expect(t, ok)
+		builder.owner.outstanding = 0
+		debug_owner_retire(&builder)
+		testing.expect_assert_message(
+			t,
+			"Fit.Debug_Async_Complete: completion into destroyed owner",
+		)
+		Debug_Async_Complete(ticket)
 	}
-	testing.expect_assert_message(t, "Fit.Parent: invalid phase")
-	Label(root, "Invalid")
+
+	@(test)
+	fit_parent_mutation_outside_build_phase_is_rejected :: proc(t: ^testing.T) {
+		frame := ui.Ui_Frame {
+			generation = 1,
+			phase      = .Measure,
+			open       = true,
+		}
+		builder := Builder {
+			generation = 1,
+			frame_ticket = {frame = &frame, generation = 1},
+			bound = true,
+		}
+		root := Parent {
+			builder    = &builder,
+			generation = 1,
+			handle     = 0,
+			identity   = ui.Widget_Id(1),
+		}
+		testing.expect_assert_message(t, "Fit.Parent: invalid phase")
+		Label(root, "Invalid")
+	}
 }

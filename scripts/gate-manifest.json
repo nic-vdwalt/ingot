@@ -66,6 +66,12 @@
     "ui.focus_duplicate_reports_registration_indices",
     "ui.prepared_capacity_reports_parent_and_limit"
   ],
+  "windows_fit_expected_assert_tests": [
+    "fit.fit_async_duplicate_completion_is_rejected",
+    "fit.fit_owner_teardown_with_async_completion_is_rejected",
+    "fit.fit_async_completion_into_retired_owner_is_rejected",
+    "fit.fit_parent_mutation_outside_build_phase_is_rejected"
+  ],
   "examples": [
     "advanced_ui",
     "builder_controls",
