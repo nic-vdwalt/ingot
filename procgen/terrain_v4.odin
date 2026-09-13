@@ -387,8 +387,23 @@ terrain_density_prevalidated_v4 :: proc(
 	direction := position / radial_distance
 	terms, ok := terrain_height_terms_prevalidated_v4(recipe, direction)
 	if !ok do return 0, false
+	return terrain_density_surface_prevalidated_v4(
+		recipe, position, recipe.parameters.radius + terms.height,
+	)
+}
+
+terrain_density_surface_prevalidated_v4 :: proc(
+	recipe: ^Terrain_Recipe_V4,
+	position: [3]f32,
+	surface_radius: f32,
+) -> (f32, bool) {
+	assert(recipe != nil, "terrain_density_surface_prevalidated_v4: nil recipe")
+	length_squared := _terrain_dot_v4(position, position)
+	if !_terrain_finite_v2(length_squared) || length_squared <= 0 do return 0, false
+	if !_terrain_finite_v2(surface_radius) || surface_radius <= 0 do return 0, false
+	radial_distance := math.sqrt(length_squared)
+	direction := position / radial_distance
 	p := recipe.parameters
-	surface_radius := p.radius + terms.height
 	density := surface_radius - radial_distance
 	radial_offset := radial_distance - p.radius
 	if p.cave_strength > 0 &&

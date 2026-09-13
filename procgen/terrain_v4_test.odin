@@ -19,6 +19,26 @@ terrain_v4_presets_are_valid_and_reject_bad_ranges :: proc(t: ^testing.T) {
 }
 
 @(test)
+terrain_v4_effective_surface_precedes_fissure_carving :: proc(t: ^testing.T) {
+	recipe := terrain_normal_recipe_v4(41)
+	recipe.parameters.cave_strength = 0
+	recipe.parameters.fissure_strength = 0
+	radius := recipe.parameters.radius
+	position := [3]f32{radius, 0, 0}
+	density, valid := terrain_density_surface_prevalidated_v4(&recipe, position, radius + 8)
+	testing.expect(t, valid)
+	testing.expect_value(t, density, f32(8))
+	recipe.parameters.fissure_strength = 10
+	recipe.parameters.fissure_threshold = -2
+	recipe.parameters.fissure_radial_depth = 16
+	carved, carved_ok := terrain_density_surface_prevalidated_v4(&recipe, position, radius + 8)
+	testing.expect(t, carved_ok && carved < density)
+	outside, outside_ok := terrain_density_surface_prevalidated_v4(&recipe, position, radius - 8)
+	testing.expect(t, outside_ok)
+	testing.expect_value(t, outside, f32(-8))
+}
+
+@(test)
 terrain_v4_face_parameterisation_round_trips :: proc(t: ^testing.T) {
 	for face in Terrain_Face_V4 {
 		for row in -7 ..= 7 {
