@@ -53,6 +53,11 @@ Terrain_Shell_Request_V4 :: struct {
 	radial_step:  f32,
 }
 
+Terrain_Shell_Volume_V4 :: struct {
+	positions: [][3]f32,
+	density:   []f32,
+}
+
 Terrain_Height_Terms_V4 :: struct {
 	height:          f32,
 	landform:        f32,
@@ -400,6 +405,38 @@ terrain_density_prevalidated_v4 :: proc(
 		}
 	}
 	return density, true
+}
+
+terrain_shell_volume_requirements_v4 :: proc(request: Terrain_Shell_Request_V4) -> (int, bool) {
+	if request.u_cells <= 0 || request.v_cells <= 0 || request.radial_cells <= 0 do return 0, false
+	count :=
+		(int(request.u_cells) + 1) * (int(request.v_cells) + 1) * (int(request.radial_cells) + 1)
+	return count, count > 0 && count <= TERRAIN_SHELL_MAX_SAMPLES_V4
+}
+
+terrain_shell_volume_sample_v4 :: proc(
+	recipe: ^Terrain_Recipe_V4,
+	request: Terrain_Shell_Request_V4,
+	volume: ^Terrain_Shell_Volume_V4,
+) -> bool {
+	if volume == nil || !terrain_recipe_validate_v4(recipe) do return false
+	count, valid := terrain_shell_volume_requirements_v4(request)
+	if !valid || len(volume.positions) < count || len(volume.density) < count do return false
+	if !terrain_shell_sample_v4(recipe, request, volume.density) do return false
+	cursor := 0
+	for radial_index in 0 ..= int(request.radial_cells) {
+		radial :=
+			recipe.parameters.radius + request.radial_min + f32(radial_index) * request.radial_step
+		for v_index in 0 ..= int(request.v_cells) {
+			v := request.v_min + f32(v_index) * request.v_step
+			for u_index in 0 ..= int(request.u_cells) {
+				u := request.u_min + f32(u_index) * request.u_step
+				volume.positions[cursor] = terrain_face_direction_v4(request.face, u, v) * radial
+				cursor += 1
+			}
+		}
+	}
+	return true
 }
 
 terrain_shell_sample_v4 :: proc(

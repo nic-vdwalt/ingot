@@ -71,6 +71,61 @@ The only accepted materials are `TF_Bark`, `TF_Foliage`, `TF_Grass`, `TF_Rock`,
 and `TF_Dry`. Objects require applied scale, an active UV layer, and minimum
 local Z at ground level.
 
+## Grounded LODs and whole-blade grass
+
+For version 2 export, `grounded: true` now protects referenced root vertices
+within the exporter's ground tolerance during discrete simplification. Every
+emitted discrete or clustered level is checked for grounding, including its
+packed or float32 stored positions. Cluster topology is unchanged; a detached
+cluster level fails cooking. Targets yield to constraints: a generic chain may
+contain fewer levels rather than duplicate geometry or lose its roots. Existing
+Python callers default to `grounded=False`; vertex layouts and INGMESH2 are unchanged.
+
+Use `"lod_policy": "grass_blades_2"` for explicitly authored independent blades.
+Each source polygon must have an integer FACE attribute named `ingot_blade_id`.
+Assign the same nonnegative ID to every segment and both sides of one blade.
+IDs need not be contiguous. Evaluated mesh triangulation carries these IDs to
+triangles; split normals and UVs never determine blade identity. Missing, malformed
+or lost metadata is an error, not an implicit fallback to `grass_2`.
+
+The policy retains complete blades near a 25% index target, selected deterministically
+for root distribution, height and root extent. It keeps at least one blade and
+requires a strictly cheaper second level. Unequal blade costs can miss the nominal
+target; ties favor lower total cost. A single-blade asset cannot use this policy.
+The fine level retains all geometry. Coarse vertices, normals, scalar values, UVs
+and triangle winding are checked against the selected source triangles.
+
+Every blade must be grounded, have nonzero height, use grass scalar 1.5, and have
+paired opposite coverage. Coplanar patch boundaries are compared after internal
+edges cancel, permitting opposite quad triangulation diagonals. Degenerate faces,
+missing sides, disconnected segments, crossing boundaries and nonmanifold junctions
+fail with a mesh/blade diagnostic. Exact source positions identify geometric edges;
+near-but-not-equal positions are not silently welded. Validation uses a 1e-7 plane
+and normal-alignment tolerance and a 1e-14 cross-product magnitude floor.
+
+Limits are 256 blades per mesh and 128 triangles per blade. Progressive selection
+and representative-distance work are bounded by O(B² + T); per-component geometric
+checks have a fixed 128-triangle ceiling. Omitted-geometry error is a conservative
+bound to retained root/tip representatives, not QEM collapse error, and can be
+larger than perceived silhouette change. Inspect coarse previews before approval.
+
+`grass_blades_2` cannot be combined with clustered cooking or version 1 output.
+Legacy `grass_2` remains available. No runtime metadata or Odin simplifier changes
+are required. Regenerate opted-in bundles and measure decoder capacities; ground
+locks can change level counts for non-grass meshes too.
+
+From the workspace root, run the dependency-free and Blender integration tests:
+
+```sh
+python3 -m unittest discover ingot/tools
+tools/blender-5.2.0/Blender.app/Contents/MacOS/Blender --background \
+  --python-exit-code 1 --python ingot/tools/test_blender_grass_export.py
+```
+
+The Blender tests cover saved-scene export, triangulation identity, both diagonal
+conventions, missing metadata, stored grounding, format rejection and freshness.
+Their temporary files remain inside the workspace and are removed after testing.
+
 ## Non-goals
 
 Version 1 does not contain textures, PBR materials, tangents, UV1, vertex

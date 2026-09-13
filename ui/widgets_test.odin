@@ -101,10 +101,14 @@ button_interaction_rect_preserves_visual_geometry :: proc(t: ^testing.T) {
 	sem_enable(&runtime, true)
 	output := new(Ui_Output)
 	defer free(output)
-	frame := Ui_Frame{output = output}
+	frame := Ui_Frame {
+		output = output,
+	}
 	visual := Rect_I32{20, 20, 100, 30}
 	hit := Rect_I32{20, 30, 100, 20}
-	input := Ui_Input{mouse_position = {50, 25}}
+	input := Ui_Input {
+		mouse_position = {50, 25},
+	}
 	input.mouse_pressed[input_mouse_index(.LEFT)] = true
 	input.mouse_down[input_mouse_index(.LEFT)] = true
 	ui_frame_begin(&frame, &runtime, &input)

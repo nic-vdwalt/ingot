@@ -738,7 +738,7 @@ fit_controls_forward_caller_owned_motion :: proc(t: ^testing.T) {
 	input := ui.Ui_Input {
 		frame_time = 1.0 / 60.0,
 	}
-	for iteration in 0 ..< 2 {
+	for iteration in 0 ..< 240 {
 		if iteration == 1 {
 			checked = true
 			active = 1
@@ -747,14 +747,22 @@ fit_controls_forward_caller_owned_motion :: proc(t: ^testing.T) {
 		builder: Builder
 		builder_open(&builder, &frame, {0, 0, 600, 300})
 		root := Column(&builder)
-		before := toggle_motion
+		before := [4]Control_Motion_State{button_motion, toggle_motion, slider_motion, tabs_motion}
 		Button(root, "button", "Button", Button_Options{motion = &button_motion})
 		Toggle(root, "toggle", "Toggle", &checked, {motion = &toggle_motion})
 		Slider(root, "slider", &value, 0, 100, 5, "Value", {motion = &slider_motion})
 		Tabs(root, "tabs", labels, &active, options = {motion = &tabs_motion})
-		testing.expect_value(t, toggle_motion, before)
+		testing.expect_value(
+			t,
+			[4]Control_Motion_State{button_motion, toggle_motion, slider_motion, tabs_motion},
+			before,
+		)
 		_ = Measure(&builder)
-		testing.expect_value(t, toggle_motion, before)
+		testing.expect_value(
+			t,
+			[4]Control_Motion_State{button_motion, toggle_motion, slider_motion, tabs_motion},
+			before,
+		)
 		_ = Render(&builder)
 		builder_close(&builder)
 		testing.expect(t, button_motion.hover.initialized && slider_motion.hover.initialized)
@@ -764,6 +772,12 @@ fit_controls_forward_caller_owned_motion :: proc(t: ^testing.T) {
 			testing.expect(t, tabs_motion.indicator.current != tabs_motion.indicator.target)
 		}
 		testing.expect_value(t, value, f32(40))
+		testing.expect_value(t, output.main.dropped_commands, 0)
+		if iteration == 239 {
+			testing.expect_value(t, toggle_motion.value.current, f32(1))
+			testing.expect(t, tabs_motion.indicator.current == tabs_motion.indicator.target)
+			testing.expect(t, !output.platform.request_redraw)
+		}
 		ui.ui_frame_end(&frame)
 	}
 }
@@ -801,6 +815,9 @@ fit_regions_forward_caller_owned_motion :: proc(t: ^testing.T) {
 		ui.begin(&region.inner, &frame, {0, 0, 600, 300})
 		_ = Region_Button(&region, "button", "Button", motion = &button_motion)
 		_ = Region_Toggle(&region, "toggle", "Toggle", &checked, &toggle_motion)
+		numeric_motion: Control_Motion_State
+		_ = Region_Toggle(&region, u64(77), "Numeric", &checked, &numeric_motion)
+		testing.expect(t, numeric_motion.value.initialized)
 		_ = Region_Slider(
 			&region,
 			"slider",

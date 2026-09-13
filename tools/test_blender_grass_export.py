@@ -61,8 +61,8 @@ class BlenderGrassExportTest(unittest.TestCase):
                                  {0: 4, 1: 4, 2: 4, 3: 4})
                 for triangle, blade_id in enumerate(ids):
                     for index in indices[triangle * 3:triangle * 3 + 3]:
-                        self.assertGreaterEqual(vertices[index][0], blade_id * 0.3 - 1e-6)
-                        self.assertLessEqual(vertices[index][0], blade_id * 0.3 + 0.1 + 1e-6)
+                        self.assertGreaterEqual(-vertices[index][1], blade_id * 0.3 - 1e-6)
+                        self.assertLessEqual(-vertices[index][1], blade_id * 0.3 + 0.1 + 1e-6)
                 self.assertEqual(minimum[2], 0)
                 self.assertEqual(maximum[2], 1)
                 self.assertGreater(len({vertex[3:6] for vertex in vertices}), 1)

@@ -193,6 +193,10 @@ def _has_loose_rect(parameters: str) -> bool:
     )
 
 
+def _explicit_rect_count(parameters: str) -> int:
+    return len(re.findall(r"(?<!\^)\bRect_I32\b", parameters))
+
+
 def violations(source: str) -> list[tuple[int, str]]:
     found: list[tuple[int, str]] = []
     for declaration in declarations(source):
@@ -212,7 +216,7 @@ def violations(source: str) -> list[tuple[int, str]]:
         if name in EXPLICIT_LEAVES:
             if not name.endswith("_at") and not name.endswith("_at_state"):
                 found.append((declaration.line, f"explicit leaf must end in _at: {name}"))
-            if parameters.count("Rect_I32") != 1:
+            if _explicit_rect_count(parameters) != 1:
                 found.append((declaration.line, f"explicit leaf needs one Rect_I32: {name}"))
             if _has_loose_rect(parameters):
                 found.append((declaration.line, f"explicit leaf uses loose x/y/w/h: {name}"))

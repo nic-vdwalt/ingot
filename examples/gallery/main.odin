@@ -137,6 +137,7 @@ PALETTE_NAMES := [Palette]string {
 
 palette := Palette.Ingot
 reduced_motion := false
+tactile_controls := true
 initial_theme_pending := false
 section := Section.Buttons
 debug_on := false
@@ -204,6 +205,8 @@ content_pane: fit.Pane_State
 buttons_region: fit.Region
 click_count := 0
 headers_open := [3]bool{true, false, false}
+header_motion: [3]fit.Control_Motion_State
+button_motion: [4]fit.Control_Motion_State
 
 Input_State :: struct {
 	name:           fit.Input_Box,
@@ -260,6 +263,10 @@ Widget_State :: struct {
 	list_activated: int,
 	tab_active:     i32,
 	table_sort:     fit.Table_Sort,
+	toggle:         bool,
+	toggle_motion:  fit.Control_Motion_State,
+	slider_motion:  fit.Control_Motion_State,
+	tabs_motion:    fit.Control_Motion_State,
 }
 
 widget_state := Widget_State {
@@ -460,6 +467,7 @@ nav_uses_strip :: proc(surface: ^fit.Surface, width, available_height: i32) -> b
 Nav_Control :: enum {
 	Theme,
 	Motion,
+	Tactile,
 	Scale,
 }
 
@@ -487,6 +495,8 @@ nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
 	case .Motion:
 		if compact do return "Motion"
 		return "Motion: reduced" if reduced_motion else "Motion: full"
+	case .Tactile:
+		return "Tactile: on" if tactile_controls else "Tactile: off"
 	case .Scale:
 		if compact do return "Scale\u2026"
 		return "UI scale\u2026"
@@ -506,6 +516,9 @@ nav_control_activate :: proc(control: Nav_Control, surface: ^fit.Surface) {
 		apply_gallery_theme(surface)
 	case .Motion:
 		reduced_motion = !reduced_motion
+		apply_gallery_theme(surface)
+	case .Tactile:
+		tactile_controls = !tactile_controls
 		apply_gallery_theme(surface)
 	case .Scale:
 		settings_open = true
@@ -556,9 +569,10 @@ draw_nav :: proc(surface: ^fit.Surface, top, sw, sh: i32, narrow: bool) -> i32 {
 // Stable widget identities for the shared controls. Derived from the enum so a
 // new control cannot be added without one.
 NAV_CONTROL_IDS := [Nav_Control]string {
-	.Theme  = "theme",
-	.Motion = "motion",
-	.Scale  = "scale",
+	.Theme   = "theme",
+	.Motion  = "motion",
+	.Tactile = "tactile",
+	.Scale   = "scale",
 }
 
 // draw_nav_strip is the narrow-viewport nav: wrapped rows of section buttons
@@ -624,6 +638,7 @@ apply_gallery_theme :: proc(surface: ^fit.Surface = nil) {
 	// both must be able to have both.
 	t := palette_theme(palette)
 	fit.Theme_Set_Reduced_Motion(&t, reduced_motion)
+	fit.Theme_Set_Tactile_Controls(&t, tactile_controls)
 	when CAPTURE {
 		fit.Session_Set_Theme(&capture_session, t)
 	} else {
@@ -757,12 +772,16 @@ draw_buttons :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	)
 	fit.Region_Section_Header(u, "BUTTON STYLES")
 	fit.Region_Row_Begin(u, 32, gap = .SM)
-	if fit.Region_Button(u, "primary", "Primary", .Primary) do click_count += 1
-	if fit.Region_Button(u, "secondary", "Secondary", .Secondary) {
+	if fit.Region_Button(u, "primary", "Primary", .Primary, motion = &button_motion[0]) {
 		click_count += 1
 	}
-	if fit.Region_Button(u, "danger", "Danger", .Danger) do click_count += 1
-	if fit.Region_Button(u, "ghost", "Ghost", .Ghost) do click_count += 1
+	if fit.Region_Button(u, "secondary", "Secondary", .Secondary, motion = &button_motion[1]) {
+		click_count += 1
+	}
+	if fit.Region_Button(u, "danger", "Danger", .Danger, motion = &button_motion[2]) {
+		click_count += 1
+	}
+	if fit.Region_Button(u, "ghost", "Ghost", .Ghost, motion = &button_motion[3]) do click_count += 1
 	fit.Region_Row_End(u)
 	fit.Region_Row_Begin(u, 32, gap = .SM)
 	_ = fit.Region_Button(u, "disabled", "Disabled", .Primary, false)
@@ -787,7 +806,7 @@ draw_buttons :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 			fmt.tprintf("header:%d", i),
 			label,
 			&headers_open[i],
-			{icon = 0x25C6, right_label = "Details"},
+			{icon = 0x25C6, right_label = "Details", motion = &header_motion[i]},
 		)
 		if headers_open[i] {
 			fit.Region_Label(u, "Collapsed state is caller-owned.", .Body, .Secondary)
@@ -895,6 +914,7 @@ draw_widget_choices :: proc(u: ^fit.Region, state: ^Widget_State) {
 	fit.Region_Checkbox(u, "enable", "Enable widgets", &state.check_a)
 	fit.Region_Checkbox(u, "verbose", "Verbose logs", &state.check_b)
 	fit.Region_Row_End(u)
+	_ = fit.Region_Toggle(u, "toggle", "Live preview", &state.toggle, &state.toggle_motion)
 	fit.Region_Row_Begin(u, 32, gap = .SM)
 	fit.Region_Radio(u, "small", "Small", &state.radio_choice, 0)
 	fit.Region_Radio(u, "medium", "Medium", &state.radio_choice, 1)
@@ -907,7 +927,18 @@ draw_widget_volume :: proc(u: ^fit.Region, surface: ^fit.Surface, state: ^Widget
 	assert(surface != nil, "draw_widget_volume: nil surface")
 	assert(state != nil, "draw_widget_volume: nil state")
 	fit.Region_Row_Begin(u, 32, gap = .SM)
-	_ = fit.Region_Slider(u, "volume", &state.slider, &state.volume, 0, 100, 5, 240, "Volume")
+	_ = fit.Region_Slider(
+		u,
+		"volume",
+		&state.slider,
+		&state.volume,
+		0,
+		100,
+		5,
+		240,
+		"Volume",
+		&state.slider_motion,
+	)
 	fit.Region_Label(u, fmt.tprintf("%.0f%%", state.volume), fit.Text_Role.Body, fit.Ink.Secondary)
 	fit.Region_Row_End(u)
 }
@@ -1165,7 +1196,7 @@ draw_widget_tabs_table :: proc(surface: ^fit.Surface, x, y0, w: i32, state: ^Wid
 
 	fit.Region_Section_Header(u, "TAB BAR")
 	tabs := []string{"Overview", "Details", "Logs"}
-	_ = fit.Region_Tab_Bar(u, "tabs", tabs, &state.tab_active)
+	_ = fit.Region_Tab_Bar(u, "tabs", tabs, &state.tab_active, &state.tabs_motion)
 	fit.Region_Label(
 		u,
 		fmt.tprintf("active tab: %s \u00b7 state is one caller-owned i32", tabs[state.tab_active]),

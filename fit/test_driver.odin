@@ -53,6 +53,13 @@ Test_Driver_Set_Storage :: proc(driver: ^Test_Driver, storage: Storage) {
 	Set_Storage(&impl.builder, storage)
 }
 
+Test_Driver_Set_Theme :: proc(driver: ^Test_Driver, theme: Theme) {
+	assert(driver != nil && driver.inner != nil, "Fit test theme: invalid driver")
+	impl := cast(^Test_Driver_Impl)driver.inner
+	assert(!impl.builder.bound, "Fit test theme: frame open")
+	ui.ui_runtime_set_theme(&impl.runtime, theme.inner)
+}
+
 Test_Driver_Set_Semantics :: proc(driver: ^Test_Driver, enabled: bool) {
 	assert(driver != nil && driver.inner != nil, "Fit.Test_Driver_Set_Semantics: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner

@@ -355,7 +355,9 @@ control_interaction_rect_preserves_visual_geometry :: proc(t: ^testing.T) {
 	sem_enable(&runtime, true)
 	output := new(Ui_Output)
 	defer free(output)
-	frame := Ui_Frame{output = output}
+	frame := Ui_Frame {
+		output = output,
+	}
 	visual := Rect_I32{20, 20, 200, 30}
 	hit := Rect_I32{20, 30, 200, 20}
 	checked := false

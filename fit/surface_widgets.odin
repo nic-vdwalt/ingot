@@ -498,8 +498,21 @@ Region_Toggle_String :: proc(
 	return Region_Toggle_Id(region, Widget_Id(ui.id(&region.inner, key)), label, value, motion)
 }
 
+Region_Toggle_U64 :: proc(
+	region: ^Region,
+	key: u64,
+	label: string,
+	value: ^bool,
+	motion: ^Control_Motion_State = nil,
+) -> bool {
+	assert(region != nil && region.inner.open, "Fit.Region_Toggle: region not open")
+	assert(value != nil && label != "", "Fit.Region_Toggle: invalid value")
+	return Region_Toggle_Id(region, Widget_Id(ui.id(&region.inner, key)), label, value, motion)
+}
+
 Region_Toggle :: proc {
 	Region_Toggle_String,
+	Region_Toggle_U64,
 	Region_Toggle_Id,
 }
 
