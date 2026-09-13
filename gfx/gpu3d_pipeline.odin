@@ -1380,6 +1380,18 @@ create_plane_mesh :: proc(extent: f32, cells: u32) -> (Gpu_Mesh, bool) {
 	return context_create_plane_mesh(default_context(), extent, cells)
 }
 
+context_gpu_mesh_available_slots :: proc(ctx: ^Context) -> int {
+	assert(ctx != nil, "context_gpu_mesh_available_slots: nil context")
+	if !ctx.initialized do return 0
+	count := int(ctx.resources.gpu_3d.mesh_count)
+	assert(count >= 0 && count <= GPU_3D_MAX_MESHES, "GPU mesh count out of range")
+	return GPU_3D_MAX_MESHES - count
+}
+
+gpu_mesh_available_slots :: proc() -> int {
+	return context_gpu_mesh_available_slots(default_context())
+}
+
 context_create_gpu_mesh :: proc(
 	ctx: ^Context,
 	vertices: []Gpu_3D_Vertex,
