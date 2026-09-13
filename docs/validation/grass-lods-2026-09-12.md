@@ -89,3 +89,25 @@ Blender integration and determinism evidence are preserved; those latter checks 
 in this resume attempt. Step 5 remains blocked on the sibling flora asset/scatter contracts.
 Resolution requires separate authorization to change those contracts or an externally supplied fix;
 resuming this prerequisite plan alone does not authorize that scope expansion.
+
+## Authorized compatibility corrections — 2026-09-13
+
+The user subsequently authorized correcting the sibling failures. Shared bundle tests now validate
+all shipped contiguous IDs within the supported 8–12 range rather than requiring the maximum
+storage capacity. Recipe derivation tests use the same extracted `_flora_asset_resolve` helper
+as production upload, preserving existing tree, tuft and shrub fallback geometry and scales.
+The scatter test checks full-scale grass in both demos, requiring lineage only when the demo
+actually enables ecology. TerraForger deliberately disables ecology; zero lineage is expected.
+No authored assets or scatter production behavior were changed.
+
+PlanetForger check and all four focused flora tests pass after these corrections. A direct full
+client run passes all 574 tests. Its aggregate suite still has an unrelated shared failure in
+`clear_resource_nodes_preserves_players_and_linked_buildings` and timed out after 600 seconds;
+the client compatibility affected here is fully verified.
+
+The user authorized continuing, so TerraForger's stale ForgeCore pin was aligned from
+`bf1f62d45b378efe70c0b7351dd5efb192e1c7fe` to the same tested ForgeCore revision PlanetForger
+already uses, `53e18e2ddf3220b79a28fd8af94df1ee14ba3d28`. TerraForger check passes, followed by all
+91 shared, 261 client and eight host tests. Ingot's pinned-toolchain check and complete native test
+gate pass. Together with the previously verified previews, Blender tests, deterministic recooking
+and Python cooker tests, repository compatibility for this prerequisite repair is complete.
