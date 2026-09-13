@@ -17,7 +17,9 @@ terrain_volume_requirements_v4 :: proc(
 	ok: bool,
 ) {
 	cells := [3]int{int(request.u_cells), int(request.v_cells), int(request.radial_cells)}
-	for count in cells do if count < 1 || count > TERRAIN_VOLUME_MAX_EDGE_V3 do return 0, 0, 0, 0, false
+	for count in cells {
+		if count < 1 || count > TERRAIN_VOLUME_MAX_EDGE_V3 do return 0, 0, 0, 0, false
+	}
 	samples = (cells.x + 1) * (cells.y + 1) * (cells.z + 1)
 	if samples > TERRAIN_VOLUME_MAX_SAMPLES_V3 do return 0, 0, 0, 0, false
 	cell_count := cells.x * cells.y * cells.z
@@ -38,7 +40,9 @@ terrain_generate_volume_v4 :: proc(
 ) {
 	if recipe == nil || buffer == nil do return {}, false
 	samples, _, _, _, valid := terrain_volume_requirements_v4(request)
-	if !valid || len(buffer.positions) < samples || len(buffer.density) < samples ||
+	if !valid ||
+	   len(buffer.positions) < samples ||
+	   len(buffer.density) < samples ||
 	   len(buffer.normals) < samples {
 		return {}, false
 	}
@@ -62,7 +66,11 @@ _terrain_volume_normals_v4 :: proc(
 	request: Terrain_Shell_Request_V4,
 	positions, normals: []asset.Vec3,
 ) {
-	counts := [3]int{int(request.u_cells) + 1, int(request.v_cells) + 1, int(request.radial_cells) + 1}
+	counts := [3]int {
+		int(request.u_cells) + 1,
+		int(request.v_cells) + 1,
+		int(request.radial_cells) + 1,
+	}
 	assert(len(positions) == counts.x * counts.y * counts.z)
 	assert(len(normals) == len(positions))
 	for z in 0 ..< counts.z {
@@ -70,7 +78,9 @@ _terrain_volume_normals_v4 :: proc(
 			for x in 0 ..< counts.x {
 				index := (z * counts.y + y) * counts.x + x
 				position := positions[index]
-				length := math.sqrt(position.x * position.x + position.y * position.y + position.z * position.z)
+				length := math.sqrt(
+					position.x * position.x + position.y * position.y + position.z * position.z,
+				)
 				assert(length > 0)
 				normals[index] = position / length
 			}

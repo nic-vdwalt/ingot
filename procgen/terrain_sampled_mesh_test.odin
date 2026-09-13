@@ -1,3 +1,4 @@
+#+build !js
 package procgen
 
 import "core:testing"
@@ -76,13 +77,19 @@ _terrain_sampled_test_field :: proc(storage: ^Terrain_Sampled_Test_Storage) {
 }
 
 @(private)
-_terrain_sampled_test_lattice :: proc(storage: ^Terrain_Sampled_Test_Storage) -> Terrain_Sampled_Lattice {
+_terrain_sampled_test_lattice :: proc(
+	storage: ^Terrain_Sampled_Test_Storage,
+) -> Terrain_Sampled_Lattice {
 	assert(storage != nil)
 	return {
-		cells     = {TERRAIN_SAMPLED_TEST_CELLS, TERRAIN_SAMPLED_TEST_CELLS, TERRAIN_SAMPLED_TEST_CELLS},
+		cells = {
+			TERRAIN_SAMPLED_TEST_CELLS,
+			TERRAIN_SAMPLED_TEST_CELLS,
+			TERRAIN_SAMPLED_TEST_CELLS,
+		},
 		positions = storage.positions[:],
-		density   = storage.density[:],
-		normals   = storage.normals[:],
+		density = storage.density[:],
+		normals = storage.normals[:],
 	}
 }
 
@@ -93,12 +100,12 @@ _terrain_sampled_test_buffer :: proc(
 ) -> Terrain_Volume_Buffer_V3 {
 	assert(storage != nil)
 	return {
-		weld_keys   = storage.weld_keys[:],
+		weld_keys = storage.weld_keys[:],
 		weld_values = storage.weld_values[:],
-		mesh         = {
-			id        = asset.Mesh_Id(id),
-			vertices  = storage.vertices[:],
-			indices   = storage.indices[:],
+		mesh = {
+			id = asset.Mesh_Id(id),
+			vertices = storage.vertices[:],
+			indices = storage.indices[:],
 			primitive = .Triangles,
 		},
 	}

@@ -91,11 +91,14 @@ _terrain_sampled_valid :: proc(lattice: Terrain_Sampled_Lattice) -> bool {
 	}
 	required := (lattice.cells.x + 1) * (lattice.cells.y + 1) * (lattice.cells.z + 1)
 	if required > TERRAIN_VOLUME_MAX_SAMPLES_V3 do return false
-	if len(lattice.positions) != required || len(lattice.density) != required || len(lattice.normals) != required {
+	if len(lattice.positions) != required ||
+	   len(lattice.density) != required ||
+	   len(lattice.normals) != required {
 		return false
 	}
 	for index in 0 ..< required {
-		position, normal, density := lattice.positions[index], lattice.normals[index], lattice.density[index]
+		position, normal, density :=
+			lattice.positions[index], lattice.normals[index], lattice.density[index]
 		for value in position do if math.is_nan(value) || math.is_inf(value, 0) do return false
 		for value in normal do if math.is_nan(value) || math.is_inf(value, 0) do return false
 		if math.is_nan(density) || math.is_inf(density, 0) do return false

@@ -31,6 +31,163 @@ Tex_Entry :: struct {
 	usage:        wg.TextureUsageFlags,
 }
 
+TEXTURE_MIP_LEVEL_MAX :: 14
+
+Texture_Mip_Data :: struct {
+	width, height: i32,
+	pixels:        rawptr,
+	byte_count:    u64,
+	format:        PixelFormat,
+}
+
+Texture_Sampling :: struct {
+	filter:     TextureFilter,
+	anisotropy: u16,
+}
+
+texture_sampling_descriptor :: proc(
+	sampling: Texture_Sampling,
+	mip_count: u32,
+) -> (
+	wg.SamplerDescriptor,
+	bool,
+) {
+	if mip_count == 0 || mip_count > TEXTURE_MIP_LEVEL_MAX do return {}, false
+	if sampling.anisotropy != 1 &&
+	   sampling.anisotropy != 2 &&
+	   sampling.anisotropy != 4 &&
+	   sampling.anisotropy != 8 &&
+	   sampling.anisotropy != 16 {
+		return {}, false
+	}
+	if sampling.filter != .POINT && sampling.filter != .BILINEAR && sampling.filter != .TRILINEAR {
+		return {}, false
+	}
+	if sampling.anisotropy > 1 && sampling.filter != .TRILINEAR do return {}, false
+	return {
+			magFilter = sampling.filter == .POINT ? .Nearest : .Linear,
+			minFilter = sampling.filter == .POINT ? .Nearest : .Linear,
+			mipmapFilter = sampling.filter == .TRILINEAR ? .Linear : .Nearest,
+			addressModeU = .ClampToEdge,
+			addressModeV = .ClampToEdge,
+			addressModeW = .ClampToEdge,
+			lodMaxClamp = f32(mip_count - 1),
+			maxAnisotropy = sampling.anisotropy,
+		},
+		true
+}
+
+context_set_texture_sampling_checked :: proc(
+	ctx: ^Context,
+	texture: Texture2D,
+	sampling: Texture_Sampling,
+) -> bool {
+	assert(ctx != nil)
+	entry := context_get_texture(ctx, texture.id)
+	if entry == nil || ctx.device == nil || entry.view == nil do return false
+	if entry.wgformat != .RGBA8Unorm || .TextureBinding not_in entry.usage do return false
+	desc, valid := texture_sampling_descriptor(sampling, entry.mip_count)
+	if !valid do return false
+	sampler := wg.DeviceCreateSampler(ctx.device, &desc)
+	if sampler == nil do return false
+	entries := [2]wg.BindGroupEntry {
+		{binding = 0, textureView = entry.view},
+		{binding = 1, sampler = sampler},
+	}
+	bind := wg.DeviceCreateBindGroup(
+		ctx.device,
+		&{layout = ctx.rend.tex_layout, entryCount = 2, entries = raw_data(entries[:])},
+	)
+	if bind == nil {
+		wg.SamplerRelease(sampler)
+		return false
+	}
+	if entry.bind != nil || entry.sampler != nil {
+		if ctx.frame.has_frame && len(ctx.resources.retire) >= MAX_RETIRED_PER_FRAME {
+			wg.BindGroupRelease(bind)
+			wg.SamplerRelease(sampler)
+			return false
+		}
+		_retire_texture(ctx, entry.bind, entry.sampler, nil, nil)
+	}
+	entry.bind = bind
+	entry.sampler = sampler
+	entry.filter = sampling.filter
+	return true
+}
+
+SetTextureSamplingChecked :: proc(texture: Texture2D, sampling: Texture_Sampling) -> bool {
+	return context_set_texture_sampling_checked(default_context(), texture, sampling)
+}
+
+context_load_texture_mips_checked :: proc(
+	ctx: ^Context,
+	levels: []Texture_Mip_Data,
+	sampling: Texture_Sampling,
+) -> Texture2D {
+	assert(ctx != nil)
+	if !ctx.initialized || ctx.device == nil || ctx.queue == nil do return {}
+	if !texture_mip_chain_valid(levels, u32(len(levels))) do return {}
+	_, valid := texture_sampling_descriptor(sampling, u32(len(levels)))
+	if !valid do return {}
+	handle := context_create_gpu_texture(
+		ctx,
+		{
+			width = u32(levels[0].width),
+			height = u32(levels[0].height),
+			layers = 1,
+			mip_count = u32(len(levels)),
+			sample_count = 1,
+			format = .RGBA8Unorm,
+			usage = {.TextureBinding, .CopyDst},
+		},
+	)
+	if handle.id == 0 do return {}
+	texture := Texture2D {
+		id      = handle.id,
+		width   = levels[0].width,
+		height  = levels[0].height,
+		mipmaps = i32(len(levels)),
+		format  = .UNCOMPRESSED_R8G8B8A8,
+	}
+	if !context_set_texture_sampling_checked(ctx, texture, sampling) ||
+	   !context_update_texture_mips_checked(ctx, texture, levels) {
+		context_unload_texture(ctx, texture)
+		return {}
+	}
+	return texture
+}
+
+LoadTextureMipsChecked :: proc(
+	levels: []Texture_Mip_Data,
+	sampling: Texture_Sampling,
+) -> Texture2D {
+	return context_load_texture_mips_checked(default_context(), levels, sampling)
+}
+
+texture_mip_chain_valid :: proc(levels: []Texture_Mip_Data, expected_count: u32) -> bool {
+	if len(levels) == 0 || len(levels) > TEXTURE_MIP_LEVEL_MAX do return false
+	if u32(len(levels)) != expected_count do return false
+	base := levels[0]
+	if !image_decode_dimensions_valid(base.width, base.height) do return false
+	width, height := base.width, base.height
+	for level, index in levels {
+		if index > 0 &&
+		   width == 1 &&
+		   height == 1 &&
+		   levels[index - 1].width == 1 &&
+		   levels[index - 1].height == 1 {
+			return false
+		}
+		if level.width != width || level.height != height do return false
+		if level.pixels == nil || level.format != .UNCOMPRESSED_R8G8B8A8 do return false
+		if level.byte_count != u64(width) * u64(height) * 4 do return false
+		width = max(width / 2, 1)
+		height = max(height / 2, 1)
+	}
+	return true
+}
+
 Gpu_Buffer :: struct {
 	id: u32,
 }
@@ -205,6 +362,8 @@ _new_rt_color :: proc(ctx: ^Context, w, h: i32, format: wg.TextureFormat) -> Tex
 	e.filter = .BILINEAR
 	e.wgformat = format
 	e.sample_count = 1
+	e.mip_count = 1
+	e.usage = {.RenderAttachment, .TextureBinding, .CopyDst, .CopySrc}
 	// CopySrc is what makes SaveRenderTexturePng (screenshot.odin) possible: the
 	// swapchain is configured RenderAttachment-only (context.odin), so every
 	// readback must route through a render target. The flag is free on an
@@ -252,6 +411,8 @@ _new_rt_attachment :: proc(
 	entry.height = h
 	entry.wgformat = format
 	entry.sample_count = sample_count
+	entry.mip_count = 1
+	entry.usage = {.RenderAttachment}
 	entry.tex = wg.DeviceCreateTexture(
 		ctx.device,
 		&{
@@ -304,6 +465,8 @@ _new_rt_depth :: proc(ctx: ^Context, w, h: i32) -> Texture2D {
 	e.height = h
 	e.wgformat = .Depth24Plus
 	e.sample_count = 1
+	e.mip_count = 1
+	e.usage = {.RenderAttachment, .TextureBinding, .CopySrc, .CopyDst}
 	e.tex = wg.DeviceCreateTexture(
 		ctx.device,
 		&{
@@ -346,6 +509,8 @@ context_load_texture_from_image :: proc(ctx: ^Context, image: Image) -> Texture2
 	e.filter = .BILINEAR
 	e.wgformat = .RGBA8Unorm
 	e.sample_count = 1
+	e.mip_count = 1
+	e.usage = {.TextureBinding, .CopyDst}
 	e.tex = wg.DeviceCreateTexture(
 		ctx.device,
 		&{
@@ -458,6 +623,36 @@ context_update_texture_checked :: proc(
 		&{u32(e.width), u32(e.height), 1},
 	)
 	return true
+}
+
+context_update_texture_mips_checked :: proc(
+	ctx: ^Context,
+	texture: Texture2D,
+	levels: []Texture_Mip_Data,
+) -> bool {
+	assert(ctx != nil, "context_update_texture_mips_checked: nil context")
+	entry := context_get_texture(ctx, texture.id)
+	if entry == nil || entry.tex == nil || ctx.queue == nil do return false
+	if entry.wgformat != .RGBA8Unorm || entry.sample_count != 1 do return false
+	if .CopyDst not_in entry.usage do return false
+	if !texture_mip_chain_valid(levels, entry.mip_count) do return false
+	if levels[0].width != entry.width || levels[0].height != entry.height do return false
+	assert(len(levels) <= TEXTURE_MIP_LEVEL_MAX)
+	for level, index in levels {
+		wg.QueueWriteTexture(
+			ctx.queue,
+			&{texture = entry.tex, mipLevel = u32(index)},
+			level.pixels,
+			uint(level.byte_count),
+			&{bytesPerRow = u32(level.width) * 4, rowsPerImage = u32(level.height)},
+			&{u32(level.width), u32(level.height), 1},
+		)
+	}
+	return true
+}
+
+UpdateTextureMipsChecked :: proc(texture: Texture2D, levels: []Texture_Mip_Data) -> bool {
+	return context_update_texture_mips_checked(default_context(), texture, levels)
 }
 
 UpdateTextureChecked :: proc(
