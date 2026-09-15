@@ -28,8 +28,11 @@ terrain_sampled_work_matches_whole_lattice_across_yields :: proc(t: ^testing.T) 
 	testing.expect(t, valid)
 	buffers: [2]Terrain_Volume_Buffer_V3
 	for &buffer in buffers {
-		buffer.mesh = {id = 1, vertices = make([]asset.Vertex, capacity),
-			indices = make([]u32, count)}
+		buffer.mesh = {
+			id       = 1,
+			vertices = make([]asset.Vertex, capacity),
+			indices  = make([]u32, count),
+		}
 		buffer.weld_keys = make([]u64, slots)
 		buffer.weld_values = make([]u32, slots)
 	}

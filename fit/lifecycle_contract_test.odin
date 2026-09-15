@@ -3,7 +3,7 @@ package fit
 
 import "core:testing"
 import "ingot:gfx"
-import "ingot:ui"
+@(require) import "ingot:ui"
 import "ingot:ui_gfx"
 
 INGOT_FIT_EXPECTED_ASSERTS :: #config(INGOT_FIT_EXPECTED_ASSERTS, false)
