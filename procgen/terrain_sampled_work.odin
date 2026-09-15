@@ -63,7 +63,9 @@ terrain_sampled_work_emit :: proc(
 ) -> (Terrain_Volume_Result_V3, bool) {
 	assert(work != nil)
 	if buffer == nil || !work.counted || uv_scale <= 0 ||
-		math.is_nan(uv_scale) || math.is_inf(uv_scale, 0) do return {}, false
+		math.is_nan(uv_scale) || math.is_inf(uv_scale, 0) {
+		return {}, false
+	}
 	if work.complete do return {}, false
 	if work.index_count == 0 {
 		asset.mesh_reset(&buffer.mesh)
@@ -73,7 +75,9 @@ terrain_sampled_work_emit :: proc(
 	if len(buffer.mesh.vertices) < work.vertex_capacity ||
 		len(buffer.mesh.indices) < work.index_count ||
 		len(buffer.weld_keys) < work.weld_slots ||
-		len(buffer.weld_values) < work.weld_slots do return {}, false
+		len(buffer.weld_values) < work.weld_slots {
+		return {}, false
+	}
 	if !work.emitting {
 		asset.mesh_reset(&buffer.mesh)
 		for slot in 0 ..< work.weld_slots do buffer.weld_keys[slot] = TERRAIN_VOLUME_WELD_EMPTY_V3
