@@ -57,7 +57,7 @@ echo "== widget capabilities =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_widget_capabilities_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_widget_capabilities.py"
 
-echo "== package boundaries =="}]}},{
+echo "== package boundaries =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check-package-boundaries.py"
 
 # Design tokens: raw color literals, unscaled border widths, and numeric corner
