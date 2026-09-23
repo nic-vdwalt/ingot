@@ -173,6 +173,10 @@ Gpu_3D_Pass :: struct {
 	epoch:                     u64,
 	encoder:                   wg.CommandEncoder,
 	timing:                    Gpu_Timing_Token,
+	// Query written by the render pass's own end-of-pass timestamp; spans
+	// encoded after the pass on the same encoder are anchored to it.
+	pass_end_query:            u32,
+	pass_timed:                bool,
 	pass:                      wg.RenderPassEncoder,
 	target:                    ^Gpu_3D_Target,
 	view_projection:           Matrix,
@@ -1690,6 +1694,8 @@ context_begin_gpu_3d_named :: proc(
 		epoch                     = ctx.epoch,
 		encoder                   = encoder,
 		timing                    = {},
+		pass_end_query            = writes.endOfPassWriteIndex,
+		pass_timed                = writes.querySet != nil,
 		pass                      = pass,
 		target                    = target,
 		light                     = GPU_3D_DEFAULT_LIGHT,
@@ -2322,6 +2328,11 @@ end_gpu_3d_and_copy_target_named :: proc(
 	wg.RenderPassEncoderEnd(pass.pass)
 	wg.RenderPassEncoderRelease(pass.pass)
 	timing := _gpu_timing_encoder_begin(ctx, pass.encoder, name)
+	// An encoder-level timestamp is not ordered after the render pass on tiled
+	// GPUs (Metal samples it at an encoder boundary that can begin while the
+	// pass still executes), so the copy would otherwise report the whole pass
+	// again. Measure it from the pass's own end-of-pass timestamp instead.
+	if pass.pass_timed do _gpu_timing_span_anchor(&ctx.gpu_timing, timing, pass.pass_end_query)
 	_gpu_3d_target_copy_encode(pass.encoder, copy)
 	_gpu_timing_encoder_end(ctx, pass.encoder, timing)
 	_gpu_3d_pass_submit(pass)

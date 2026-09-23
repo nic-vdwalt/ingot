@@ -121,6 +121,9 @@ Gpu_Timing_Slot :: struct {
 	frame_index:   u64,
 	query_count:   u32,
 	labels:        [GPU_TIMING_MAX_SPANS]Gpu_Timing_Label,
+	// anchors[span] is 1 + the query whose tick bounds the span's start from
+	// below, or 0 when the span's own begin timestamp stands alone.
+	anchors:       [GPU_TIMING_MAX_SPANS]u32,
 	ticks:         [GPU_TIMING_QUERY_COUNT]u64,
 	sample_status: wg.QueueWorkDoneStatus,
 	map_status:    wg.MapAsyncStatus,
@@ -410,8 +413,26 @@ _gpu_timing_pair_reserve :: proc(
 		valid       = true,
 	}
 	slot.labels[slot.query_count / 2] = _gpu_timing_label(name)
+	slot.anchors[slot.query_count / 2] = 0
 	slot.query_count += 2
 	return token
+}
+
+// _gpu_timing_span_anchor makes `after_query` a lower bound for the span's
+// start: the span then reports only time past that earlier timestamp. It is
+// for encoder-level spans that follow a timed pass on the same encoder, where
+// the backend may sample the span's begin before the pass has finished.
+_gpu_timing_span_anchor :: proc(
+	state: ^Gpu_Timing_State,
+	token: Gpu_Timing_Token,
+	after_query: u32,
+) {
+	if state == nil || !token.valid do return
+	if state.active_slot < 0 || state.active_slot >= GPU_TIMING_FRAME_SLOTS do return
+	slot := &state.slots[state.active_slot]
+	if slot.phase != .Recording do return
+	if after_query >= token.query_begin || token.query_end >= slot.query_count do return
+	slot.anchors[token.query_begin / 2] = after_query + 1
 }
 
 _gpu_timing_pass_writes :: proc(state: ^Gpu_Timing_State, name: string) -> wg.PassTimestampWrites {
@@ -618,14 +639,31 @@ _gpu_timing_invalid_pair :: proc(ticks: []u64, span_count: u32) -> (u32, bool) {
 	return 0, false
 }
 
-_gpu_timing_seconds :: proc(ticks: []u64, span_count: u32, period_ns: f64) -> (f64, bool) {
+// _gpu_timing_span_ticks is the span's duration, starting no earlier than its
+// anchor's tick when it has one. An anchor past the span's end yields zero.
+_gpu_timing_span_ticks :: proc(ticks: []u64, anchors: []u32, span: int) -> u64 {
+	begin := ticks[span * 2]
+	end := ticks[span * 2 + 1]
+	if span < len(anchors) && anchors[span] > 0 && int(anchors[span] - 1) < len(ticks) {
+		begin = max(begin, ticks[anchors[span] - 1])
+	}
+	return end - begin if end > begin else 0
+}
+
+_gpu_timing_seconds :: proc(
+	ticks: []u64,
+	span_count: u32,
+	period_ns: f64,
+	anchors: []u32 = nil,
+) -> (
+	f64,
+	bool,
+) {
 	if period_ns <= 0 || span_count == 0 || int(span_count) * 2 > len(ticks) do return 0, false
 	if _, invalid := _gpu_timing_invalid_pair(ticks, span_count); invalid do return 0, false
 	total: u64
 	for span in 0 ..< int(span_count) {
-		begin := ticks[span * 2]
-		end := ticks[span * 2 + 1]
-		total += end - begin
+		total += _gpu_timing_span_ticks(ticks, anchors, span)
 	}
 	return f64(total) * period_ns * 1e-9, true
 }
@@ -635,11 +673,12 @@ _gpu_timing_detail :: proc(
 	labels: []Gpu_Timing_Label,
 	span_count: u32,
 	period_ns: f64,
+	anchors: []u32 = nil,
 ) -> (
 	Gpu_Frame_Timing_Detail,
 	bool,
 ) {
-	seconds, ok := _gpu_timing_seconds(ticks, span_count, period_ns)
+	seconds, ok := _gpu_timing_seconds(ticks, span_count, period_ns, anchors)
 	if !ok || int(span_count) > len(labels) do return {}, false
 	result := Gpu_Frame_Timing_Detail {
 		seconds = seconds,
@@ -663,7 +702,7 @@ _gpu_timing_detail :: proc(
 			result.groups[group_index].label = label
 			result.group_count += 1
 		}
-		delta := ticks[span * 2 + 1] - ticks[span * 2]
+		delta := _gpu_timing_span_ticks(ticks, anchors, span)
 		result.groups[group_index].seconds += f64(delta) * period_ns * 1e-9
 		result.groups[group_index].count += 1
 	}
@@ -748,6 +787,7 @@ _gpu_timing_collect_map :: proc(ctx: ^Context, slot: ^Gpu_Timing_Slot, slot_inde
 			slot.labels[:],
 			slot.query_count / 2,
 			ctx.gpu_timing.timestamp_period,
+			slot.anchors[:],
 		)
 		if ok {
 			detail.frame_index = slot.frame_index

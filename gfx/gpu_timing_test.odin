@@ -727,6 +727,48 @@ gpu_timing_detail_aggregates_repeated_labels :: proc(t: ^testing.T) {
 	testing.expect_value(t, detail.seconds, f64(160e-9))
 }
 
+// Metal samples an encoder-level begin timestamp before the preceding render
+// pass on the same encoder has finished, so an unanchored copy span repeats
+// the pass. Anchored to the pass's end it reports only the copy.
+@(test)
+gpu_timing_anchored_span_excludes_preceding_pass :: proc(t: ^testing.T) {
+	ticks := [4]u64{100, 200, 101, 215}
+	labels := [2]Gpu_Timing_Label {
+		_gpu_timing_label("world.opaque"),
+		_gpu_timing_label("world.scene-copy"),
+	}
+	anchors := [2]u32{0, 2}
+	detail, ok := _gpu_timing_detail(ticks[:], labels[:], 2, 1, anchors[:])
+	testing.expect(t, ok)
+	testing.expect(t, abs(detail.groups[0].seconds - 100e-9) < 1e-15)
+	testing.expect(t, abs(detail.groups[1].seconds - 15e-9) < 1e-15)
+	testing.expect(t, abs(detail.seconds - 115e-9) < 1e-15)
+	unanchored, unanchored_ok := _gpu_timing_detail(ticks[:], labels[:], 2, 1)
+	testing.expect(t, unanchored_ok)
+	testing.expect(t, abs(unanchored.groups[1].seconds - 114e-9) < 1e-15)
+	late := [4]u64{100, 200, 150, 190}
+	clamped, clamped_ok := _gpu_timing_detail(late[:], labels[:], 2, 1, anchors[:])
+	testing.expect(t, clamped_ok)
+	testing.expect(t, abs(clamped.groups[1].seconds - 0) < 1e-15)
+}
+
+@(test)
+gpu_timing_span_anchor_requires_an_earlier_query :: proc(t: ^testing.T) {
+	state: Gpu_Timing_State
+	state.available = true
+	state.active_slot = 0
+	state.slots[0].phase = .Recording
+	pass := _gpu_timing_pair_reserve(&state, "world.opaque")
+	copy_span := _gpu_timing_pair_reserve(&state, "world.scene-copy")
+	testing.expect(t, pass.valid && copy_span.valid)
+	_gpu_timing_span_anchor(&state, copy_span, copy_span.query_begin)
+	testing.expect_value(t, state.slots[0].anchors[1], u32(0))
+	_gpu_timing_span_anchor(&state, copy_span, pass.query_end)
+	testing.expect_value(t, state.slots[0].anchors[1], pass.query_end + 1)
+	again := _gpu_timing_pair_reserve(&state, "reuse")
+	testing.expect_value(t, state.slots[0].anchors[again.query_begin / 2], u32(0))
+}
+
 // A frame that never reaches submit (the surface was unavailable, so
 // context_end_drawing took the no-frame branch) must not strand its slot in
 // Recording; the v9 game build lost every slot within eight frames that way.
