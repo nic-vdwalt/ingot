@@ -25,6 +25,23 @@ _darwin_activate_application :: proc(application: ^NS.Application) {
 	}
 }
 
+// A key window whose first responder is the window itself routes keystrokes to
+// -[NSWindow noResponderFor:], which beeps. setStyleMask: and content-view
+// swaps can leave it there, so hand input back to the backend's view.
+@(private = "file")
+_darwin_repair_first_responder :: proc(ctx: ^Context, window: ^Focus_NS_Window) {
+	assert(ctx != nil, "_darwin_repair_first_responder: nil context")
+	if window == nil || ctx.activation_view == nil do return
+	responder := intrinsics.objc_send(rawptr, window, "firstResponder")
+	if responder != nil && responder != rawptr(window) do return
+	repaired := intrinsics.objc_send(NS.BOOL, window, "makeFirstResponder:", ctx.activation_view)
+	when INGOT_FOCUS_TRACE {
+		fmt.eprintfln("[ingot focus] first responder repaired=%v", bool(repaired))
+	} else {
+		_ = repaired
+	}
+}
+
 @(private = "file")
 _darwin_activate_window :: proc(ctx: ^Context) {
 	assert(ctx != nil, "_darwin_activate_window: nil context")
@@ -35,14 +52,7 @@ _darwin_activate_window :: proc(ctx: ^Context) {
 	_ = NS.Application_setActivationPolicy(application, .Regular)
 	_darwin_activate_application(application)
 	intrinsics.objc_send(nil, window, "makeKeyAndOrderFront:", rawptr(nil))
-	// A key window whose first responder is the window itself routes keystrokes
-	// nowhere; hand them back to the backend's content view.
-	if ctx.activation_view != nil {
-		responder := intrinsics.objc_send(rawptr, window, "firstResponder")
-		if responder == nil || responder == rawptr(window) {
-			_ = intrinsics.objc_send(NS.BOOL, window, "makeFirstResponder:", ctx.activation_view)
-		}
-	}
+	_darwin_repair_first_responder(ctx, window)
 	when INGOT_FOCUS_TRACE {
 		fmt.eprintfln(
 			"[ingot focus] activate: app_active=%v key_window=%p is_key=%v first_responder=%p pending=%d",
@@ -103,7 +113,11 @@ _platform_activation_poll :: proc(ctx: ^Context) {
 	)
 	ctx.activation_retries_pending = next
 	ctx.activation_next_at = next_at
-	if retry do _darwin_activate_window(ctx)
+	if retry {
+		_darwin_activate_window(ctx)
+	} else if known && focused {
+		_darwin_repair_first_responder(ctx, cast(^Focus_NS_Window)context_get_window_handle(ctx))
+	}
 	assert(ctx.activation_retries_pending <= ACTIVATION_RETRY_LIMIT)
 	assert(!(known && focused) || ctx.activation_retries_pending == 0)
 }
