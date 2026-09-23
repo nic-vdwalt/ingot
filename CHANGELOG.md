@@ -9,6 +9,11 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+## [0.3.0] - 2026-09-23
+
+This is a source-only release; no binaries, installers, or web bundles are attached.
+It contains breaking changes; read **Changed** and **Removed** before upgrading.
+
 ### Added
 
 - `http_url_parse` and `ws_url_parse` take an optional `allocator` (default
@@ -31,6 +36,19 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - `scripts/check.sh` and `scripts/check.ps1` vet `net` with
   `-define:INGOT_WS_SIM=true`, so imports used only by the real transport cannot
   hide behind the default build.
+- `scripts/check-cross.sh` vets every gated package, the bindings and the SDL3
+  graphics backend for Windows x64, Linux x64 and Linux arm64 from any host.
+  `scripts/provision-cross-vendor.sh` installs the stb, miniaudio and
+  wgpu-native libraries those targets need into the active toolchain, from the
+  same release assets CI uses.
+- `scripts/check-web.sh` vets every web-capable package (`web_vet_packages` in
+  `scripts/gate-manifest.json`) for `js_wasm32`, and `scripts/check.sh` /
+  `check.ps1` vet `ui_gfx` with `-define:INGOT_ACCESSKIT=false`, so imports used
+  only inside native or AccessKit `when` blocks fail the gate.
+- `scripts/sanitizer-toolchain.sh`: `fuzz/run.sh` and forgecore's
+  `worldgen-fuzz` use it to link sanitized macOS builds with the Homebrew
+  `llvm@<N>` clang matching Odin's LLVM. Override with
+  `INGOT_SANITIZER_CLANG_DIR`.
 
 ### Changed
 
@@ -53,17 +71,19 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - The mesh pipeline documentation moved to `docs/mesh-pipeline.md`; the
   world-generation half of `docs/procedural-generation.md` moved to
   `forgecore/worldgen/README.md`.
-- README pins now name `0.2.1`, the latest source tag.
+- README pins now name `0.3.0`.
 
-### Deprecated
+### Removed
 
-- Ingot-only PascalCase procedures in `ingot:gfx` are renamed to snake_case.
-  PascalCase is now reserved for names `vendor:raylib` declares, and
-  `scripts/check_gfx_context.py` enforces it against the pinned toolchain. The
-  old names remain as `@(deprecated)` forwarders for one release and will be
-  removed in the next minor release:
+- **Breaking:** Ingot-only PascalCase procedures in `ingot:gfx` are renamed to
+  snake_case, with no deprecated forwarders. PascalCase is now reserved for
+  names `vendor:raylib` declares, and `scripts/check_gfx_context.py` enforces it
+  against the pinned toolchain. The usual one-release compatibility window is
+  skipped: every known consumer was migrated in step with this release, and
+  forwarders would have kept a second PascalCase vocabulary alive for the very
+  names the rule removes. Rename each call site:
 
-  | Deprecated | Replacement |
+  | Removed | Replacement |
   |---|---|
   | `BeginMode3DPro` | `begin_mode_3d_pro` |
   | `CloseAccessibility` | `close_accessibility` |
@@ -134,8 +154,6 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   | `UpdateTextureMipsChecked` | `update_texture_mips_checked` |
   | `WorldToScreenVisible` | `world_to_screen_visible` |
 
-### Removed
-
 - `examples/procgen_world`, `fuzz/procgen` and `benchmarks/procgen`. The fuzzer
   and benchmark moved to forgecore as `bash build.sh worldgen-fuzz` and
   `bash build.sh worldgen-bench`; `fuzz/run.sh procgen` no longer exists.
@@ -149,7 +167,11 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - `frame_draw_*` is no longer reported as a retired graphics API by
   `scripts/check_ui_api_layers.py`. It is the owner-bound Frame layer that
   `ui_gfx` and multi-context hosts draw through.
-
+- `ui_gfx` vets cleanly for `js_wasm32` and with AccessKit disabled; its
+  `base:runtime` and `core:c` imports are used only by the AccessKit bridge.
+- `fuzz/run.sh` with `SAN=address` or `SAN=thread`, and its `tsan` phase, link
+  on macOS again. Apple clang's sanitizer runtime rejected Odin's LLVM 20
+  instrumentation (`___asan_version_mismatch_check_v8`).
 - `Web_Socket` now owns its request path and `ca_file`. A query-only URL's path
   was previously borrowed from the caller's temp allocator and `ca_file` from
   the caller's string, so the connect worker could read freed memory during the
@@ -956,7 +978,8 @@ Not validated:
 - Prevented a libvterm UTF-8 decode buffer overflow.
 - Validated `LoadFontFromMemory`'s caller-supplied buffer.
 
-[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.2.1...HEAD
+[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.3.0...HEAD
+[0.3.0]: https://github.com/Nic-vdwalt/ingot/compare/0.2.1...0.3.0
 [0.2.1]: https://github.com/Nic-vdwalt/ingot/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/Nic-vdwalt/ingot/compare/0.1.9...0.2.0
 [0.1.7]: https://github.com/Nic-vdwalt/ingot/compare/0.1.5...0.1.7

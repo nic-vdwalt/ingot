@@ -43,11 +43,6 @@ when INGOT_INPUT_SIM {
 		context_sim_begin_frame(default_context())
 	}
 
-	@(deprecated = "use sim_begin_frame")
-	SimBeginFrame :: proc() {
-		sim_begin_frame()
-	}
-
 	context_sim_pointer :: proc(ctx: ^Context, event: Pointer_Event) -> bool {
 		assert(ctx != nil, "context_sim_pointer: nil context")
 		assert(pointer_event_valid(event), "context_sim_pointer: invalid event")
@@ -68,11 +63,6 @@ when INGOT_INPUT_SIM {
 		return context_sim_pointer(default_context(), event)
 	}
 
-	@(deprecated = "use sim_pointer")
-	SimPointer :: proc(event: Pointer_Event) -> bool {
-		return sim_pointer(event)
-	}
-
 	context_sim_mouse :: proc(ctx: ^Context, x, y: f32) {
 		assert(ctx != nil, "context_sim_mouse: nil context")
 		ctx.inp.mouse_delta.x += x - ctx.inp.mouse.x
@@ -82,11 +72,6 @@ when INGOT_INPUT_SIM {
 
 	sim_mouse :: proc(x, y: f32) {
 		context_sim_mouse(default_context(), x, y)
-	}
-
-	@(deprecated = "use sim_mouse")
-	SimMouse :: proc(x, y: f32) {
-		sim_mouse(x, y)
 	}
 
 	context_sim_button :: proc(ctx: ^Context, button: MouseButton, down: bool) {
@@ -100,11 +85,6 @@ when INGOT_INPUT_SIM {
 
 	sim_button :: proc(button: MouseButton, down: bool) {
 		context_sim_button(default_context(), button, down)
-	}
-
-	@(deprecated = "use sim_button")
-	SimButton :: proc(button: MouseButton, down: bool) {
-		sim_button(button, down)
 	}
 
 	context_sim_key :: proc(ctx: ^Context, key: KeyboardKey, down: bool, repeat := false) {
@@ -124,11 +104,6 @@ when INGOT_INPUT_SIM {
 		context_sim_key(default_context(), key, down, repeat)
 	}
 
-	@(deprecated = "use sim_key")
-	SimKey :: proc(key: KeyboardKey, down: bool, repeat := false) {
-		sim_key(key, down, repeat)
-	}
-
 	context_sim_char :: proc(ctx: ^Context, r: rune) {
 		assert(ctx != nil, "context_sim_char: nil context")
 		_push_char_input(&ctx.inp, r)
@@ -136,11 +111,6 @@ when INGOT_INPUT_SIM {
 
 	sim_char :: proc(r: rune) {
 		context_sim_char(default_context(), r)
-	}
-
-	@(deprecated = "use sim_char")
-	SimChar :: proc(r: rune) {
-		sim_char(r)
 	}
 
 	context_sim_wheel :: proc(ctx: ^Context, dx, dy: f32) {
@@ -153,11 +123,6 @@ when INGOT_INPUT_SIM {
 		context_sim_wheel(default_context(), dx, dy)
 	}
 
-	@(deprecated = "use sim_wheel")
-	SimWheel :: proc(dx, dy: f32) {
-		sim_wheel(dx, dy)
-	}
-
 	context_sim_reset :: proc(ctx: ^Context) {
 		assert(ctx != nil, "context_sim_reset: nil context")
 		ctx.inp = {}
@@ -167,8 +132,4 @@ when INGOT_INPUT_SIM {
 		context_sim_reset(default_context())
 	}
 
-	@(deprecated = "use sim_reset")
-	SimReset :: proc() {
-		sim_reset()
-	}
 }

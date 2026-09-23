@@ -919,25 +919,12 @@ matrix_mode_push :: proc() {
 	context_matrix_mode_push(default_context())
 }
 
-@(deprecated = "use matrix_mode_push")
-MatrixModePush :: proc() {
-	matrix_mode_push()
-}
 matrix_mode_pop :: proc() {
 	context_matrix_mode_pop(default_context())
 }
 
-@(deprecated = "use matrix_mode_pop")
-MatrixModePop :: proc() {
-	matrix_mode_pop()
-}
 matrix_mode_translate :: proc(x, y: f32) {
 	context_matrix_mode_translate(default_context(), x, y)
-}
-
-@(deprecated = "use matrix_mode_translate")
-MatrixModeTranslate :: proc(x, y: f32) {
-	matrix_mode_translate(x, y)
 }
 
 // _batch_record_peak folds one flush's batch size into the renderer's
@@ -1558,11 +1545,6 @@ context_set_custom_blend :: proc(ctx: ^Context, src, dst: BlendFactorRL, op: Ble
 
 set_custom_blend :: proc(src, dst: BlendFactorRL, op: BlendOpRL) {
 	context_set_custom_blend(default_context(), src, dst, op)
-}
-
-@(deprecated = "use set_custom_blend")
-SetCustomBlend :: proc(src, dst: BlendFactorRL, op: BlendOpRL) {
-	set_custom_blend(src, dst, op)
 }
 
 // GL blend enum aliases (values match rlgl / OpenGL) so rlgl can forward raw

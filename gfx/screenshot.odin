@@ -331,8 +331,3 @@ context_save_render_texture_png :: proc(
 save_render_texture_png :: proc(target: RenderTexture2D, path: string) -> bool {
 	return context_save_render_texture_png(default_context(), target, path)
 }
-
-@(deprecated = "use save_render_texture_png")
-SaveRenderTexturePng :: proc(target: RenderTexture2D, path: string) -> bool {
-	return save_render_texture_png(target, path)
-}

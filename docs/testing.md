@@ -56,6 +56,21 @@ local and native; no macOS-to-Linux cross toolchain is supplied. AccessKit is
 validated on Linux amd64 and intentionally unavailable on Linux arm64 until a
 verified arm64 artifact exists.
 
+From any host, type-check the other platforms before pushing:
+
+```sh
+bash scripts/check-cross.sh
+```
+
+This vets every gated package, the bindings, and the SDL3 graphics backend for
+Windows x64, Linux x64, and Linux arm64. On first use
+`scripts/provision-cross-vendor.sh` installs the prebuilt stb, miniaudio, and
+wgpu-native libraries those targets need into the active toolchain, using the
+same release assets as CI; it needs the GitHub CLI once. Linux arm64 skips
+`box3d_workers` because no prebuilt Box3D library exists for it. The check
+proves the code compiles for each target; linking and running remain the job of
+the native gates.
+
 GitHub Actions also provisions the pinned toolchain on native Windows x64 and
 macOS arm64 runners. Windows runs `scripts/test.ps1` and `scripts/check.ps1`;
 macOS runs `scripts/test.sh -define:ODIN_TEST_THREADS=1` and `scripts/check.sh`.
@@ -151,7 +166,9 @@ Validate the browser target with:
 bash scripts/check-web.sh
 ```
 
-This compiles the gallery, Breakout, Box3D stack, and default web demo, then runs
+This compiles the gallery, Breakout, Box3D stack, and default web demo, vets
+every web-capable package listed under `web_vet_packages` in
+`scripts/gate-manifest.json` for `js_wasm32`, then runs
 the dependency-free JavaScript lifecycle and semantic DOM tests. These tests do
 not launch a browser; see `production-readiness.md` for the real browser,
 operating-system, PTY, GPU, networking, and accessibility matrix.
@@ -265,6 +282,13 @@ and identify the offending source location.
 Use `SAN=none`, `SAN=address`, or `SAN=thread` to select instrumentation where a
 target supports it. AddressSanitizer and ThreadSanitizer run in separate
 binaries because they cannot be combined.
+
+On macOS, Apple clang's sanitizer runtime rejects objects instrumented by
+upstream LLVM, so sanitized builds must link with the upstream clang whose major
+version matches Odin's LLVM (`odin report` prints it). `fuzz/run.sh` finds it
+through `scripts/sanitizer-toolchain.sh`: install it with
+`brew install llvm@<major>`, or point `INGOT_SANITIZER_CLANG_DIR` at the
+directory containing that `clang`.
 
 ## Why deterministic simulation fits Ingot
 

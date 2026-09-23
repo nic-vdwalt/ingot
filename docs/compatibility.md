@@ -148,8 +148,8 @@ The naming rule follows from the layers. A PascalCase procedure in `ingot:gfx`
 must carry a name that `vendor:raylib` declares; Ingot-only capabilities use
 `context_*` (explicit owner), `frame_*` (owner-bound frame), or a plain
 snake_case wrapper over the default owner, such as `set_frame_strategy`,
-`request_redraw`, or `update_texture_checked`. Former Ingot-only PascalCase
-names remain as `@(deprecated)` forwarders for one release.
+`request_redraw`, or `update_texture_checked`. The former Ingot-only
+PascalCase names were removed in `0.3.0`; see the changelog for the mapping.
 `scripts/check_gfx_context.py` reads the raylib vocabulary from the pinned
 toolchain and rejects any other exported PascalCase procedure.
 

@@ -17,7 +17,13 @@ class GateManifestTest(unittest.TestCase):
             self.assertEqual(len(normalized), len(set(normalized)), key)
 
     def test_packages_and_examples_exist(self):
-        keys = ["test_packages", "check_packages", "binding_packages", "compile_packages"]
+        keys = [
+            "test_packages",
+            "check_packages",
+            "binding_packages",
+            "compile_packages",
+            "web_vet_packages",
+        ]
         for key in keys:
             for package in MANIFEST[key]:
                 self.assertTrue((ROOT / package).is_dir(), package)
@@ -31,6 +37,11 @@ class GateManifestTest(unittest.TestCase):
         bindings = set(MANIFEST["binding_packages"])
         for package in MANIFEST["test_packages"]:
             self.assertIn(package, checked | bindings, package)
+
+    def test_web_vet_packages_are_checked_natively(self):
+        checked = set(MANIFEST["check_packages"])
+        for package in MANIFEST["web_vet_packages"]:
+            self.assertIn(package, checked, package)
 
     def test_windows_expected_assert_tests_are_fully_qualified(self):
         expected_assert_suites = {

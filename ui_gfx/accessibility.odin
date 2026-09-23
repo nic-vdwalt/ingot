@@ -1,7 +1,7 @@
 package ui_gfx
 
-import "base:runtime"
-import "core:c"
+@(require) import "base:runtime"
+@(require) import "core:c"
 import ak "ingot:accesskit"
 import rl "ingot:gfx"
 import "ingot:ui"

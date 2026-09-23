@@ -96,15 +96,6 @@ load_render_texture_ex :: proc(
 	return context_load_render_texture_ex(default_context(), width, height, format, with_depth)
 }
 
-@(deprecated = "use load_render_texture_ex")
-LoadRenderTextureEx :: proc(
-	width, height: i32,
-	format: wg.TextureFormat,
-	with_depth: bool,
-) -> RenderTexture2D {
-	return load_render_texture_ex(width, height, format, with_depth)
-}
-
 // UnloadRenderTexture releases the color (and optional depth) textures.
 // Both route through the retire queue (context.odin), so unloading is safe
 // at any point in a frame - destruction defers past this frame's submit.
@@ -297,18 +288,8 @@ context_rl_load_color_texture :: proc(ctx: ^Context, w, h: i32, pf: PixelFormat)
 	return t.id
 }
 
-@(deprecated = "use context_rl_load_color_texture")
-ContextRlLoadColorTexture :: proc(ctx: ^Context, w, h: i32, pf: PixelFormat) -> u32 {
-	return context_rl_load_color_texture(ctx, w, h, pf)
-}
-
 rl_load_color_texture :: proc(w, h: i32, pf: PixelFormat) -> u32 {
 	return context_rl_load_color_texture(default_context(), w, h, pf)
-}
-
-@(deprecated = "use rl_load_color_texture")
-RlLoadColorTexture :: proc(w, h: i32, pf: PixelFormat) -> u32 {
-	return rl_load_color_texture(w, h, pf)
 }
 
 // rl_load_depth_texture creates a depth attachment (rlgl.LoadTextureDepth parity).
@@ -319,18 +300,8 @@ context_rl_load_depth_texture :: proc(ctx: ^Context, w, h: i32) -> u32 {
 	return t.id
 }
 
-@(deprecated = "use context_rl_load_depth_texture")
-ContextRlLoadDepthTexture :: proc(ctx: ^Context, w, h: i32) -> u32 {
-	return context_rl_load_depth_texture(ctx, w, h)
-}
-
 rl_load_depth_texture :: proc(w, h: i32) -> u32 {
 	return context_rl_load_depth_texture(default_context(), w, h)
-}
-
-@(deprecated = "use rl_load_depth_texture")
-RlLoadDepthTexture :: proc(w, h: i32) -> u32 {
-	return rl_load_depth_texture(w, h)
 }
 
 // rl_unload_texture_id releases a texture by raw id (rlgl.UnloadTexture parity).
@@ -340,16 +311,6 @@ context_rl_unload_texture_id :: proc(ctx: ^Context, id: u32) {
 	context_unload_texture(ctx, Texture2D{id = id})
 }
 
-@(deprecated = "use context_rl_unload_texture_id")
-ContextRlUnloadTextureId :: proc(ctx: ^Context, id: u32) {
-	context_rl_unload_texture_id(ctx, id)
-}
-
 rl_unload_texture_id :: proc(id: u32) {
 	context_rl_unload_texture_id(default_context(), id)
-}
-
-@(deprecated = "use rl_unload_texture_id")
-RlUnloadTextureId :: proc(id: u32) {
-	rl_unload_texture_id(id)
 }

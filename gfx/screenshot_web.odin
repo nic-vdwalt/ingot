@@ -33,8 +33,3 @@ save_render_texture_png :: proc(target: RenderTexture2D, path: string) -> bool {
 	assert(target.id == target.texture.id, "save_render_texture_png: torn target handle")
 	return false
 }
-
-@(deprecated = "use save_render_texture_png")
-SaveRenderTexturePng :: proc(target: RenderTexture2D, path: string) -> bool {
-	return save_render_texture_png(target, path)
-}

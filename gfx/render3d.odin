@@ -92,11 +92,6 @@ draw_cube_transform :: proc(transform: Matrix, color: Color) {
 	context_draw_cube_transform(default_context(), transform, color)
 }
 
-@(deprecated = "use draw_cube_transform")
-DrawCubeTransform :: proc(transform: Matrix, color: Color) {
-	draw_cube_transform(transform, color)
-}
-
 context_draw_cube_wires_transform :: proc(ctx: ^Context, transform: Matrix, color: Color) {
 	assert(ctx != nil, "context_draw_cube_wires_transform: nil context")
 	if !ctx.cam3d_active do return
@@ -125,11 +120,6 @@ DrawCubeWiresV :: proc(position, size: Vector3, color: Color) {
 
 draw_cube_wires_transform :: proc(transform: Matrix, color: Color) {
 	context_draw_cube_wires_transform(default_context(), transform, color)
-}
-
-@(deprecated = "use draw_cube_wires_transform")
-DrawCubeWiresTransform :: proc(transform: Matrix, color: Color) {
-	draw_cube_wires_transform(transform, color)
 }
 
 context_draw_grid :: proc(ctx: ^Context, slices: i32, spacing: f32) {

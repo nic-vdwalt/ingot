@@ -575,43 +575,12 @@ sync_web_text_input :: proc(
 	)
 }
 
-@(deprecated = "use sync_web_text_input")
-SyncWebTextInput :: proc(
-	form_id, field_id, name, placeholder, value: string,
-	x, y, w, h, input_type, autocomplete: i32,
-	active: bool,
-) -> Web_Input_Result {
-	return sync_web_text_input(
-		form_id,
-		field_id,
-		name,
-		placeholder,
-		value,
-		x,
-		y,
-		w,
-		h,
-		input_type,
-		autocomplete,
-		active,
-	)
-}
-
 sync_web_submit_button :: proc(
 	form_id, label: string,
 	x, y, w, h, style, font_size: i32,
 	enabled: bool,
 ) -> bool {
 	return platform_sync_web_submit_button(form_id, label, x, y, w, h, style, font_size, enabled)
-}
-
-@(deprecated = "use sync_web_submit_button")
-SyncWebSubmitButton :: proc(
-	form_id, label: string,
-	x, y, w, h, style, font_size: i32,
-	enabled: bool,
-) -> bool {
-	return sync_web_submit_button(form_id, label, x, y, w, h, style, font_size, enabled)
 }
 
 Web_Control_Result :: struct {
@@ -636,33 +605,6 @@ sync_web_control :: proc(
 	position_in_set, size_of_set: i32,
 ) -> Web_Control_Result {
 	return platform_sync_web_control(
-		role,
-		id,
-		label,
-		x,
-		y,
-		w,
-		h,
-		state,
-		value,
-		lo,
-		hi,
-		position_in_set,
-		size_of_set,
-	)
-}
-
-@(deprecated = "use sync_web_control")
-SyncWebControl :: proc(
-	role: i32,
-	id: u64,
-	label: string,
-	x, y, w, h: i32,
-	state: u8,
-	value, lo, hi: f32,
-	position_in_set, size_of_set: i32,
-) -> Web_Control_Result {
-	return sync_web_control(
 		role,
 		id,
 		label,
@@ -746,11 +688,6 @@ set_text_input_rect :: proc(x, y, w, h: i32) {
 	context_set_text_input_rect(default_context(), x, y, w, h)
 }
 
-@(deprecated = "use set_text_input_rect")
-SetTextInputRect :: proc(x, y, w, h: i32) {
-	set_text_input_rect(x, y, w, h)
-}
-
 // get_preedit returns the in-progress IME composition string (empty when not
 // composing) and the caret byte offset within it. The string aliases an
 // internal buffer valid until the next composition event; clone to keep.
@@ -769,9 +706,4 @@ context_get_preedit :: proc(ctx: ^Context) -> (text: string, caret: int) {
 
 get_preedit :: proc() -> (text: string, caret: int) {
 	return context_get_preedit(default_context())
-}
-
-@(deprecated = "use get_preedit")
-GetPreedit :: proc() -> (text: string, caret: int) {
-	return get_preedit()
 }

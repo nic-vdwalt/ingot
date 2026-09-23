@@ -92,6 +92,17 @@ bash "$ROOT/build_web.sh" >/dev/null
 echo "== wasm check: net =="
 (cd "$ROOT" && odin check net -collection:ingot=. -target:js_wasm32 -no-entry-point)
 
+# Imports used only inside native `when` blocks are invisible to the native
+# vet, so vet every web-capable package again for js_wasm32. term, testx and
+# fuzz/fuzzx need core:os and are native-only by design.
+web_vet_packages="$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["web_vet_packages"]))' \
+	"$ROOT/scripts/gate-manifest.json")"
+for pkg in $web_vet_packages; do
+	echo "== wasm vet: $pkg =="
+	(cd "$ROOT" && odin check "$pkg" -collection:ingot=. -target:js_wasm32 \
+		-vet -strict-style -vet-shadowing -no-entry-point)
+done
+
 # The last build left its module in web/; check it for the zero-segment bloat
 # that a static initialiser on a large global reintroduces. See
 # check_wasm_bloat.py - this cost 11 MB of every demo download until it was

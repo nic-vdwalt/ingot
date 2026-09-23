@@ -59,6 +59,15 @@ none) SANFLAGS="-debug" ;;
 	;;
 esac
 
+# The tsan phase sanitizes regardless of SAN, and it runs inside all and soak.
+# shellcheck source=../scripts/sanitizer-toolchain.sh
+source "$ROOT/scripts/sanitizer-toolchain.sh"
+case "${SAN:-address}:$TARGET" in
+none:tsan | none:all | none:soak | address:* | thread:*)
+	ingot_use_sanitizer_clang
+	;;
+esac
+
 ARGS=()
 [ -n "$SEED" ] && ARGS+=("-seed:$SEED")
 [ -n "$ITERATIONS" ] && ARGS+=("-iterations:$ITERATIONS")

@@ -671,11 +671,6 @@ shader_bind_raw :: proc(id: u32) {
 	context_shader_bind_raw(default_context(), id)
 }
 
-@(deprecated = "use shader_bind_raw")
-ShaderBindRaw :: proc(id: u32) {
-	shader_bind_raw(id)
-}
-
 context_shader_unbind_raw :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_shader_unbind_raw: nil context")
 	if context_active_pass_begun(ctx) {
@@ -686,11 +681,6 @@ context_shader_unbind_raw :: proc(ctx: ^Context) {
 
 shader_unbind_raw :: proc() {
 	context_shader_unbind_raw(default_context())
-}
-
-@(deprecated = "use shader_unbind_raw")
-ShaderUnbindRaw :: proc() {
-	shader_unbind_raw()
 }
 
 @(private)

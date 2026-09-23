@@ -65,6 +65,13 @@ worked example applied to a subsystem before it is written.
   and the default demo, then runs `web/test/*.test.mjs` with dependency-free Node.
   CI runs this target-independent gate on Linux only. Windows and macOS CI are
   native compile, link, and test evidence, not GPU or accessibility validation.
+- **Cross-target type-check**: `bash scripts/check-cross.sh` - vets every gated
+  package for Windows x64, Linux x64, and Linux arm64 from any host. The first
+  run installs the other targets' vendor libraries with
+  `scripts/provision-cross-vendor.sh` (needs `gh`).
+- **Sanitizers on macOS**: `fuzz/run.sh` links ASan/TSan builds with the
+  Homebrew `llvm@<N>` clang matching Odin's LLVM (`scripts/sanitizer-toolchain.sh`);
+  Apple clang's runtime cannot link them.
 - **Rebuild libvterm** (rarely needed): `scripts/build-libvterm.sh` (macOS) /
   `scripts/build-libvterm.bat` (Windows).
 - **Never commit under `artifacts/`** except `artifacts/readme-example/main.odin`.

@@ -390,11 +390,6 @@ get_projection_matrix :: proc() -> Matrix {
 	return context_get_projection_matrix(default_context())
 }
 
-@(deprecated = "use get_projection_matrix")
-GetProjectionMatrix :: proc() -> Matrix {
-	return get_projection_matrix()
-}
-
 // --- 2D camera -------------------------------------------------------------
 
 // BeginMode2D applies `camera` to every 2D draw until EndMode2D, by installing
@@ -526,11 +521,6 @@ begin_mode_3d_pro :: proc(view_projection: Matrix) {
 	context_begin_mode_3d_pro(default_context(), view_projection)
 }
 
-@(deprecated = "use begin_mode_3d_pro")
-BeginMode3DPro :: proc(view_projection: Matrix) {
-	begin_mode_3d_pro(view_projection)
-}
-
 context_end_mode_3d :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_end_mode_3d: nil context")
 	assert(ctx.cam3d_active, "EndMode3D: no active 3D camera mode")
@@ -628,20 +618,10 @@ world_to_screen_visible :: proc(position: Vector3, camera: Camera3D) -> (Vector2
 	return context_world_to_screen_visible(default_context(), position, camera)
 }
 
-@(deprecated = "use world_to_screen_visible")
-WorldToScreenVisible :: proc(position: Vector3, camera: Camera3D) -> (Vector2, bool) {
-	return world_to_screen_visible(position, camera)
-}
-
 get_world_to_screen_pro :: proc(position: Vector3, view_projection: Matrix) -> Vector2 {
 	assert(_camera_vector_is_finite(position), "get_world_to_screen_pro: non-finite position")
 	assert(_camera_matrix_is_finite(view_projection), "get_world_to_screen_pro: non-finite matrix")
 	return _world_to_screen_pro(position, view_projection, GetScreenWidth(), GetScreenHeight())
-}
-
-@(deprecated = "use get_world_to_screen_pro")
-GetWorldToScreenPro :: proc(position: Vector3, view_projection: Matrix) -> Vector2 {
-	return get_world_to_screen_pro(position, view_projection)
 }
 
 @(private)

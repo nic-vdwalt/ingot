@@ -120,11 +120,6 @@ set_texture_sampling_checked :: proc(texture: Texture2D, sampling: Texture_Sampl
 	return context_set_texture_sampling_checked(default_context(), texture, sampling)
 }
 
-@(deprecated = "use set_texture_sampling_checked")
-SetTextureSamplingChecked :: proc(texture: Texture2D, sampling: Texture_Sampling) -> bool {
-	return set_texture_sampling_checked(texture, sampling)
-}
-
 context_load_texture_mips_checked :: proc(
 	ctx: ^Context,
 	levels: []Texture_Mip_Data,
@@ -168,14 +163,6 @@ load_texture_mips_checked :: proc(
 	sampling: Texture_Sampling,
 ) -> Texture2D {
 	return context_load_texture_mips_checked(default_context(), levels, sampling)
-}
-
-@(deprecated = "use load_texture_mips_checked")
-LoadTextureMipsChecked :: proc(
-	levels: []Texture_Mip_Data,
-	sampling: Texture_Sampling,
-) -> Texture2D {
-	return load_texture_mips_checked(levels, sampling)
 }
 
 texture_mip_chain_valid :: proc(levels: []Texture_Mip_Data, expected_count: u32) -> bool {
@@ -669,11 +656,6 @@ update_texture_mips_checked :: proc(texture: Texture2D, levels: []Texture_Mip_Da
 	return context_update_texture_mips_checked(default_context(), texture, levels)
 }
 
-@(deprecated = "use update_texture_mips_checked")
-UpdateTextureMipsChecked :: proc(texture: Texture2D, levels: []Texture_Mip_Data) -> bool {
-	return update_texture_mips_checked(texture, levels)
-}
-
 update_texture_checked :: proc(
 	texture: Texture2D,
 	pixels: rawptr,
@@ -681,16 +663,6 @@ update_texture_checked :: proc(
 	format: PixelFormat,
 ) -> bool {
 	return context_update_texture_checked(default_context(), texture, pixels, byte_count, format)
-}
-
-@(deprecated = "use update_texture_checked")
-UpdateTextureChecked :: proc(
-	texture: Texture2D,
-	pixels: rawptr,
-	byte_count: int,
-	format: PixelFormat,
-) -> bool {
-	return update_texture_checked(texture, pixels, byte_count, format)
 }
 
 context_update_texture :: proc(ctx: ^Context, texture: Texture2D, pixels: rawptr) {
@@ -760,11 +732,6 @@ context_texture_slots_used :: proc(ctx: ^Context) -> int {
 
 texture_slots_used :: proc() -> int {
 	return context_texture_slots_used(default_context())
-}
-
-@(deprecated = "use texture_slots_used")
-TextureSlotsUsed :: proc() -> int {
-	return texture_slots_used()
 }
 
 // IsTextureValid reports whether `texture` refers to a live slot. A loader

@@ -48,6 +48,9 @@ foreach ($Package in $Manifest.check_packages) {
 Write-Host "== checking net (INGOT_WS_SIM=true, vet) =="
 & odin check "$Root/net" $Collection -vet -strict-style -vet-shadowing -no-entry-point -define:INGOT_WS_SIM=true @OdinFlags
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host "== checking ui_gfx (INGOT_ACCESSKIT=false, vet) =="
+& odin check "$Root/ui_gfx" $Collection -vet -strict-style -vet-shadowing -no-entry-point -define:INGOT_ACCESSKIT=false @OdinFlags
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($Mode in $Manifest.simulation_modes) {
     $Package = $Mode[0]
     $Define = $Mode[1]

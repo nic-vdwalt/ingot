@@ -54,18 +54,8 @@ set_frame_strategy :: proc(s: Frame_Strategy) {
 	context_set_frame_strategy(default_context(), s)
 }
 
-@(deprecated = "use set_frame_strategy")
-SetFrameStrategy :: proc(s: Frame_Strategy) {
-	set_frame_strategy(s)
-}
-
 get_frame_strategy :: proc() -> Frame_Strategy {
 	return context_get_frame_strategy(default_context())
-}
-
-@(deprecated = "use get_frame_strategy")
-GetFrameStrategy :: proc() -> Frame_Strategy {
-	return get_frame_strategy()
 }
 
 // request_redraw schedules an immediate frame (plus settle burst). Safe to call
@@ -75,20 +65,10 @@ request_redraw :: proc "contextless" () {
 	context_request_redraw(&default_context_storage)
 }
 
-@(deprecated = "use request_redraw")
-RequestRedraw :: proc "contextless" () {
-	request_redraw()
-}
-
 context_request_redraw :: proc "contextless" (ctx: ^Context) {
 	if ctx == nil do return
 	_idle_request_redraw(&ctx.idle)
 	platform_wake()
-}
-
-@(deprecated = "use context_request_redraw")
-RequestRedrawContext :: proc "contextless" (ctx: ^Context) {
-	context_request_redraw(ctx)
 }
 
 // request_redraw_in schedules a frame after `seconds` (caret blink, delayed
@@ -97,22 +77,12 @@ request_redraw_in :: proc(seconds: f64) {
 	context_request_redraw_in(default_context(), seconds)
 }
 
-@(deprecated = "use request_redraw_in")
-RequestRedrawIn :: proc(seconds: f64) {
-	request_redraw_in(seconds)
-}
-
 context_request_redraw_in :: proc(ctx: ^Context, seconds: f64) {
 	if ctx == nil do return
 	assert(ctx.start_time_s >= 0, "context_request_redraw_in: invalid start time")
 	assert(seconds == seconds, "context_request_redraw_in: NaN delay")
 	now := platform_now() - ctx.start_time_s
 	_idle_request_in(&ctx.idle, now, seconds)
-}
-
-@(deprecated = "use context_request_redraw_in")
-RequestRedrawInContext :: proc(ctx: ^Context, seconds: f64) {
-	context_request_redraw_in(ctx, seconds)
 }
 
 // raylib-compat aliases.

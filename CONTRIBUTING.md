@@ -14,6 +14,7 @@ run:
 bash scripts/check.sh
 bash scripts/test.sh
 bash scripts/check-web.sh
+bash scripts/check-cross.sh
 ```
 
 Run the matching PowerShell scripts on Windows. These commands provide local

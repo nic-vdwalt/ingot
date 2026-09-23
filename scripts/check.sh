@@ -82,6 +82,13 @@ echo "== checking net (INGOT_WS_SIM=true, vet) =="
 # shellcheck disable=SC2086
 odin check "$root/net" $col $vet_flags -define:INGOT_WS_SIM=true "$@"
 
+# INGOT_ACCESSKIT=false compiles out ui_gfx's AccessKit bridge, the same import
+# set the web build sees; vet it natively so an import used only by the bridge
+# fails here rather than only in check-web.sh.
+echo "== checking ui_gfx (INGOT_ACCESSKIT=false, vet) =="
+# shellcheck disable=SC2086
+odin check "$root/ui_gfx" $col $vet_flags -define:INGOT_ACCESSKIT=false "$@"
+
 # Simulated-transport builds are a separate compilation of the same packages:
 # a `when !INGOT_*_SIM` block hides code from one mode and reveals it in the
 # other, so a default-mode check cannot see breakage in the sim mode. This is

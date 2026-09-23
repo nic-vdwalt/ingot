@@ -12,11 +12,6 @@ is_file_drag_over :: proc() -> bool {
 	return context_is_file_drag_over(default_context())
 }
 
-@(deprecated = "use is_file_drag_over")
-IsFileDragOver :: proc() -> bool {
-	return is_file_drag_over()
-}
-
 @(private)
 _drop_hover_stage_context :: proc "contextless" (ctx: ^Context, over: bool) {
 	if ctx == nil do return

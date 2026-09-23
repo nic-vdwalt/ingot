@@ -749,11 +749,6 @@ context_focus_window :: proc(ctx: ^Context) {
 }
 focus_window :: proc() {context_focus_window(default_context())}
 
-@(deprecated = "use focus_window")
-FocusWindow :: proc() {
-	focus_window()
-}
-
 // --- drag & drop (web) ------------------------------------------------------
 //
 // JS (ingot_web.js attachDrop) stages dropped file names + bytes and calls the
@@ -828,9 +823,4 @@ context_get_dropped_file_data :: proc(
 
 get_dropped_file_data :: proc(index: i32, allocator := context.allocator) -> []byte {
 	return context_get_dropped_file_data(default_context(), index, allocator)
-}
-
-@(deprecated = "use get_dropped_file_data")
-GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
-	return get_dropped_file_data(index, allocator)
 }

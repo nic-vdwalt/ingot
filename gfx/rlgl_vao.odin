@@ -141,11 +141,6 @@ context_rl_load_vertex_array :: proc(ctx: ^Context) -> u32 {
 	return 0
 }
 
-@(deprecated = "use context_rl_load_vertex_array")
-ContextRlLoadVertexArray :: proc(ctx: ^Context) -> u32 {
-	return context_rl_load_vertex_array(ctx)
-}
-
 RlLoadVertexArray :: proc() -> u32 {
 	return context_rl_load_vertex_array(default_context())
 }
@@ -157,11 +152,6 @@ context_rl_enable_vertex_array :: proc(ctx: ^Context, id: u32) -> bool {
 	return true
 }
 
-@(deprecated = "use context_rl_enable_vertex_array")
-ContextRlEnableVertexArray :: proc(ctx: ^Context, id: u32) -> bool {
-	return context_rl_enable_vertex_array(ctx, id)
-}
-
 RlEnableVertexArray :: proc(id: u32) -> bool {
 	return context_rl_enable_vertex_array(default_context(), id)
 }
@@ -169,11 +159,6 @@ RlEnableVertexArray :: proc(id: u32) -> bool {
 context_rl_disable_vertex_array :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_rl_disable_vertex_array: nil context")
 	ctx.resources.rlgl.current_vao = 0
-}
-
-@(deprecated = "use context_rl_disable_vertex_array")
-ContextRlDisableVertexArray :: proc(ctx: ^Context) {
-	context_rl_disable_vertex_array(ctx)
 }
 
 RlDisableVertexArray :: proc() {
@@ -201,11 +186,6 @@ context_rl_unload_vertex_array :: proc(ctx: ^Context, id: u32) {
 	assert(resources.vao_count > 0, "context_rl_unload_vertex_array: count underflow")
 	resources.vao_count -= 1
 	if resources.current_vao == id do resources.current_vao = 0
-}
-
-@(deprecated = "use context_rl_unload_vertex_array")
-ContextRlUnloadVertexArray :: proc(ctx: ^Context, id: u32) {
-	context_rl_unload_vertex_array(ctx, id)
 }
 
 RlUnloadVertexArray :: proc(id: u32) {
@@ -249,16 +229,6 @@ context_rl_load_vertex_buffer :: proc(
 	return id
 }
 
-@(deprecated = "use context_rl_load_vertex_buffer")
-ContextRlLoadVertexBuffer :: proc(
-	ctx: ^Context,
-	data: rawptr,
-	size: i32,
-	dynamic_buf: bool,
-) -> u32 {
-	return context_rl_load_vertex_buffer(ctx, data, size, dynamic_buf)
-}
-
 RlLoadVertexBuffer :: proc(data: rawptr, size: i32, dynamic_buf: bool) -> u32 {
 	return context_rl_load_vertex_buffer(default_context(), data, size, dynamic_buf)
 }
@@ -274,17 +244,6 @@ context_rl_update_vertex_buffer :: proc(
 	slot := _vbo_slot(ctx.id, &ctx.resources.rlgl, bufferId)
 	if slot == nil || data == nil || dataSize <= 0 || offset < 0 do return
 	wg.QueueWriteBuffer(ctx.queue, slot.buffer, u64(offset), data, uint(dataSize))
-}
-
-@(deprecated = "use context_rl_update_vertex_buffer")
-ContextRlUpdateVertexBuffer :: proc(
-	ctx: ^Context,
-	bufferId: u32,
-	data: rawptr,
-	dataSize: i32,
-	offset: i32,
-) {
-	context_rl_update_vertex_buffer(ctx, bufferId, data, dataSize, offset)
 }
 
 RlUpdateVertexBuffer :: proc(bufferId: u32, data: rawptr, dataSize: i32, offset: i32) {
@@ -339,11 +298,6 @@ context_rl_unload_vertex_buffer :: proc(ctx: ^Context, vboId: u32) {
 	}
 }
 
-@(deprecated = "use context_rl_unload_vertex_buffer")
-ContextRlUnloadVertexBuffer :: proc(ctx: ^Context, vboId: u32) {
-	context_rl_unload_vertex_buffer(ctx, vboId)
-}
-
 RlUnloadVertexBuffer :: proc(vboId: u32) {
 	context_rl_unload_vertex_buffer(default_context(), vboId)
 }
@@ -385,19 +339,6 @@ context_rl_set_vertex_attribute :: proc(
 	assert(len(v.attrs) > 0)
 }
 
-@(deprecated = "use context_rl_set_vertex_attribute")
-ContextRlSetVertexAttribute :: proc(
-	ctx: ^Context,
-	index: u32,
-	compSize: i32,
-	type: i32,
-	normalized: bool,
-	stride: i32,
-	offset: i32,
-) {
-	context_rl_set_vertex_attribute(ctx, index, compSize, type, normalized, stride, offset)
-}
-
 RlSetVertexAttribute :: proc(
 	index: u32,
 	compSize: i32,
@@ -431,11 +372,6 @@ context_rl_set_vertex_attribute_divisor :: proc(ctx: ^Context, index: u32, divis
 	}
 }
 
-@(deprecated = "use context_rl_set_vertex_attribute_divisor")
-ContextRlSetVertexAttributeDivisor :: proc(ctx: ^Context, index: u32, divisor: i32) {
-	context_rl_set_vertex_attribute_divisor(ctx, index, divisor)
-}
-
 RlSetVertexAttributeDivisor :: proc(index: u32, divisor: i32) {
 	context_rl_set_vertex_attribute_divisor(default_context(), index, divisor)
 }
@@ -449,18 +385,8 @@ context_rl_enable_inst_shader :: proc(ctx: ^Context, id: u32) {
 	ctx.resources.rlgl.inst_shader = id
 }
 
-@(deprecated = "use context_rl_enable_inst_shader")
-ContextRlEnableInstShader :: proc(ctx: ^Context, id: u32) {
-	context_rl_enable_inst_shader(ctx, id)
-}
-
 rl_enable_inst_shader :: proc(id: u32) {
 	context_rl_enable_inst_shader(default_context(), id)
-}
-
-@(deprecated = "use rl_enable_inst_shader")
-RlEnableInstShader :: proc(id: u32) {
-	rl_enable_inst_shader(id)
 }
 
 context_rl_disable_inst_shader :: proc(ctx: ^Context) {
@@ -468,18 +394,8 @@ context_rl_disable_inst_shader :: proc(ctx: ^Context) {
 	ctx.resources.rlgl.inst_shader = 0
 }
 
-@(deprecated = "use context_rl_disable_inst_shader")
-ContextRlDisableInstShader :: proc(ctx: ^Context) {
-	context_rl_disable_inst_shader(ctx)
-}
-
 rl_disable_inst_shader :: proc() {
 	context_rl_disable_inst_shader(default_context())
-}
-
-@(deprecated = "use rl_disable_inst_shader")
-RlDisableInstShader :: proc() {
-	rl_disable_inst_shader()
 }
 
 // --- instanced draw ---------------------------------------------------------
@@ -652,11 +568,6 @@ context_rl_draw_vertex_array_instanced :: proc(ctx: ^Context, offset, count, ins
 	when GPU_TIMING_DIAGNOSTICS {
 		_gpu_timing_diagnostic_draw(&ctx.gpu_timing.diagnostics[0], pass)
 	}
-}
-
-@(deprecated = "use context_rl_draw_vertex_array_instanced")
-ContextRlDrawVertexArrayInstanced :: proc(ctx: ^Context, offset, count, instances: i32) {
-	context_rl_draw_vertex_array_instanced(ctx, offset, count, instances)
 }
 
 RlDrawVertexArrayInstanced :: proc(offset, count, instances: i32) {
