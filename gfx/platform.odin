@@ -12,22 +12,49 @@ package gfx
 INGOT_GFX_SDL3 :: #config(INGOT_GFX_SDL3, false)
 #assert(ODIN_OS != .JS || !INGOT_GFX_SDL3)
 
-ACTIVATION_RETRY_LIMIT :: u8(3)
+ACTIVATION_RETRY_LIMIT :: u8(5)
+// Seconds to wait before each attempt, so retries span AppKit's activation
+// latency instead of being spent on consecutive event pumps.
+ACTIVATION_RETRY_DELAYS :: [ACTIVATION_RETRY_LIMIT]f64{0.0, 0.05, 0.15, 0.4, 1.0}
+ACTIVATION_REARM_COOLDOWN :: 2.0
 
 @(private)
-_activation_retry_advance :: proc(pending: u8, focused: bool) -> (next: u8, retry: bool) {
+_activation_retry_advance :: proc(
+	pending: u8,
+	next_at, now: f64,
+	focused: bool,
+) -> (
+	next_pending: u8,
+	next_next_at: f64,
+	retry: bool,
+) {
 	assert(pending <= ACTIVATION_RETRY_LIMIT, "activation retry count out of range")
-	if focused || pending == 0 do return 0, false
-	next = pending - 1
-	assert(next < pending, "activation retry count did not decrease")
-	return next, true
+	if focused do return 0, 0, false
+	if pending == 0 do return 0, next_at, false
+	if now < next_at do return pending, next_at, false
+	delays := ACTIVATION_RETRY_DELAYS
+	attempt := int(ACTIVATION_RETRY_LIMIT - pending)
+	next_pending = pending - 1
+	if next_pending > 0 {
+		next_next_at = now + delays[attempt + 1]
+	} else {
+		next_next_at = now + ACTIVATION_REARM_COOLDOWN
+	}
+	assert(next_pending < pending, "activation retry count did not decrease")
+	return next_pending, next_next_at, true
 }
 
+// Re-arm on an application activation edge, or when the application is active
+// but owns no key window at all (so a sibling window's focus is never stolen),
+// rate-limited by the cooldown deadline left behind by the previous budget.
 @(private)
 _activation_should_rearm :: proc(
-	app_active, app_was_active, focused, known, eligible: bool,
+	app_active, app_was_active, focused, known, eligible, app_has_key_window, visible: bool,
+	now, next_at: f64,
 ) -> bool {
-	return app_active && !app_was_active && known && !focused && eligible
+	if !(eligible && known && visible && app_active && !focused) do return false
+	if !app_was_active do return true
+	return !app_has_key_window && now >= next_at
 }
 
 @(private)

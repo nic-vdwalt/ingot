@@ -22,6 +22,12 @@ _platform_activation_poll :: proc(ctx: ^Context) {
 }
 
 @(private)
+_platform_activation_wait_timeout :: proc(ctx: ^Context, timeout: f64) -> f64 {
+	assert(ctx != nil, "_platform_activation_wait_timeout: nil context")
+	return timeout
+}
+
+@(private)
 _platform_native_window_focus :: proc(ctx: ^Context) -> (focused, known: bool) {
 	if ctx == nil || ctx.win == nil do return false, false
 	hwnd := win32.HWND(context_get_window_handle(ctx))

@@ -81,20 +81,42 @@ test_window_focus_resolution :: proc(t: ^testing.T) {
 
 @(test)
 test_window_activation_retry_policy :: proc(t: ^testing.T) {
+	delays := ACTIVATION_RETRY_DELAYS
 	pending := ACTIVATION_RETRY_LIMIT
+	next_at := 0.0
+	now := 10.0
 	for attempt in 0 ..< int(ACTIVATION_RETRY_LIMIT) {
-		next, retry := _activation_retry_advance(pending, false)
-		testing.expect(t, retry, "unfocused window retries within the fixed budget")
+		if next_at > now {
+			early_pending, early_at, early_retry := _activation_retry_advance(
+				pending,
+				next_at,
+				next_at - 0.001,
+				false,
+			)
+			testing.expect(t, !early_retry, "no retry before the scheduled deadline")
+			testing.expect_value(t, early_pending, pending)
+			testing.expect_value(t, early_at, next_at)
+			now = next_at
+		}
+		next, due, retry := _activation_retry_advance(pending, next_at, now, false)
+		testing.expect(t, retry, "unfocused window retries at its scheduled offset")
 		testing.expect_value(t, next, pending - 1)
+		if next > 0 {
+			testing.expect_value(t, due, now + delays[attempt + 1])
+		} else {
+			testing.expect_value(t, due, now + ACTIVATION_REARM_COOLDOWN)
+		}
 		pending = next
-		_ = attempt
+		next_at = due
 	}
-	next, retry := _activation_retry_advance(pending, false)
+	next, due, retry := _activation_retry_advance(pending, next_at, next_at + 100, false)
 	testing.expect(t, !retry, "exhausted window does not keep stealing focus")
 	testing.expect_value(t, next, u8(0))
-	next, retry = _activation_retry_advance(ACTIVATION_RETRY_LIMIT, true)
+	testing.expect_value(t, due, next_at)
+	next, due, retry = _activation_retry_advance(ACTIVATION_RETRY_LIMIT, 0, now, true)
 	testing.expect(t, !retry, "focused window stops retrying immediately")
 	testing.expect_value(t, next, u8(0))
+	testing.expect_value(t, due, 0.0)
 }
 
 when ODIN_OS == .Darwin {
@@ -104,15 +126,36 @@ when ODIN_OS == .Darwin {
 		for should_wait in modes {
 			ctx := new(Context)
 			ctx.activation_retries_pending = ACTIVATION_RETRY_LIMIT
+			ctx.activation_next_at = 0
 			input_service_events(ctx, should_wait, 0.001)
 			testing.expect_value(t, ctx.activation_retries_pending, ACTIVATION_RETRY_LIMIT - 1)
 			for attempt in 0 ..< int(ACTIVATION_RETRY_LIMIT) {
 				input_service_events(ctx, should_wait, 0.001)
 				_ = attempt
 			}
-			testing.expect_value(t, ctx.activation_retries_pending, u8(0))
+			testing.expect_value(
+				t,
+				ctx.activation_retries_pending,
+				ACTIVATION_RETRY_LIMIT - 1,
+			)
 			free(ctx)
 		}
+	}
+}
+
+@(test)
+test_activation_wait_timeout_clamps_to_retry :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	testing.expect_value(t, _platform_activation_wait_timeout(ctx, 1.0), 1.0)
+	when ODIN_OS == .Darwin {
+		ctx.activation_retries_pending = ACTIVATION_RETRY_LIMIT
+		ctx.activation_next_at = platform_now() + 0.25
+		wait := _platform_activation_wait_timeout(ctx, 1.0)
+		testing.expect(t, wait > 0 && wait <= 0.25, "wait ends at the next retry deadline")
+		testing.expect_value(t, _platform_activation_wait_timeout(ctx, 0.1), 0.1)
+		ctx.activation_next_at = 0
+		testing.expect_value(t, _platform_activation_wait_timeout(ctx, 1.0), 0.0)
 	}
 }
 
@@ -120,23 +163,43 @@ when ODIN_OS == .Darwin {
 test_window_activation_rearm_policy :: proc(t: ^testing.T) {
 	testing.expect(
 		t,
-		_activation_should_rearm(true, false, false, true, true),
+		_activation_should_rearm(true, false, false, true, true, false, true, 0, 5),
 		"application activation repairs a non-key eligible window",
 	)
 	testing.expect(
 		t,
-		!_activation_should_rearm(true, true, false, true, true),
-		"an active application does not repeatedly steal focus",
+		!_activation_should_rearm(true, true, false, true, true, true, true, 10, 5),
+		"an active application does not steal focus from its other key window",
 	)
 	testing.expect(
 		t,
-		!_activation_should_rearm(true, false, true, true, true),
+		!_activation_should_rearm(true, true, false, true, true, false, true, 4, 5),
+		"an active application without a key window waits for the cooldown",
+	)
+	testing.expect(
+		t,
+		_activation_should_rearm(true, true, false, true, true, false, true, 5, 5),
+		"an active application without a key window re-arms after the cooldown",
+	)
+	testing.expect(
+		t,
+		!_activation_should_rearm(true, false, true, true, true, false, true, 0, 0),
 		"a key window needs no activation repair",
 	)
 	testing.expect(
 		t,
-		!_activation_should_rearm(true, false, false, true, false),
+		!_activation_should_rearm(true, false, false, true, false, false, true, 0, 0),
 		"an unfocused or hidden window remains ineligible",
+	)
+	testing.expect(
+		t,
+		!_activation_should_rearm(true, false, false, true, true, false, false, 0, 0),
+		"an invisible or minimized window does not re-arm",
+	)
+	testing.expect(
+		t,
+		!_activation_should_rearm(false, false, false, true, true, false, true, 10, 0),
+		"an inactive application does not re-arm",
 	)
 }
 

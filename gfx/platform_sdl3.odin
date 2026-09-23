@@ -258,7 +258,8 @@ when INGOT_GFX_SDL3 {
 	platform_wait_events :: proc(timeout: f64, ctx: ^Context) {
 		assert(ctx != nil, "platform_wait_events: nil context")
 		assert(timeout >= 0, "platform_wait_events: negative timeout")
-		milliseconds := i32(clamp(timeout * 1000, 0, f64(max(i32))))
+		wait := _platform_activation_wait_timeout(ctx, timeout)
+		milliseconds := i32(clamp(wait * 1000, 0, f64(max(i32))))
 		event: sdl.Event
 		if sdl.WaitEventTimeout(&event, milliseconds) do _sdl_dispatch(&event)
 		_sdl_poll_all()
