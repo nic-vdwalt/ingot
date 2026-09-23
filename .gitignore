@@ -18,7 +18,6 @@ libvterm/lib/linux_arm64/
 /api-map
 /chart_demo
 /idle_demo
-/procgen_world
 /box3d_stack
 /box3d_advanced
 /box3d_benchmark
@@ -48,7 +47,6 @@ fuzz/ui/fuzz_ui
 fuzz/view/fuzz_view
 fuzz/gfx_frame/fuzz_gfx_frame
 fuzz/interact/fuzz_interact
-fuzz/procgen/fuzz_procgen
 fuzz/wsreconn/fuzz_wsreconn
 fuzz/wsreconn/fuzz_wsreconn_tsan
 benchmarks/widgets/build/

@@ -1,4 +1,4 @@
-package procgen
+package mesh
 
 import "ingot:asset"
 

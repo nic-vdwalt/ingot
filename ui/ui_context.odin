@@ -116,6 +116,7 @@ ui_frame_ticket_valid :: proc(ticket: Ui_Frame_Ticket) -> bool {
 	)
 }
 
+// tigerstyle: pure
 ui_frame_phase :: proc(ticket: Ui_Frame_Ticket) -> Ui_Frame_Phase {
 	assert(ui_frame_ticket_valid(ticket), "ui frame phase: expired ticket")
 	return ticket.frame.phase
@@ -433,6 +434,7 @@ frame_pane_origin :: proc(frame: ^Ui_Frame) -> Vector2 {
 
 // frame_z reports the ambient input z-order. An empty stack is Z_CONTENT, so a
 // frame that never opens a scope behaves exactly as it did before z-ordering.
+// tigerstyle: pure
 frame_z :: proc(frame: ^Ui_Frame) -> Z_Order {
 	assert(frame != nil, "frame_z: nil frame")
 	assert(frame.z_count >= 0 && frame.z_count <= MAX_Z_SCOPES, "frame_z: corrupt z scope")

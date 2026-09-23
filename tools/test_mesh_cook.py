@@ -70,7 +70,7 @@ def acmr(indices, cache_size=cook.CACHE_SIZE):
     return misses / (len(indices) / 3)
 
 
-# The contract between this module and `ingot/procgen/mesh_optimize.odin`,
+# The contract between this module and `ingot/mesh/mesh_optimize.odin`,
 # written out literally on both sides. A 4x4 grid is small enough to read and
 # large enough that all three passes do real work: 32 triangles fill the
 # modelled cache and force evictions, and the run split produces more than one

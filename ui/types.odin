@@ -177,6 +177,7 @@ Key :: enum i32 {
 }
 KeyboardKey :: Key
 
+// tigerstyle: pure
 point_in_rect :: proc(point: Vec2, rect: Rect) -> bool {
 	return(
 		point.x >= rect.x &&

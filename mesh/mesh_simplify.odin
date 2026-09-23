@@ -1,13 +1,13 @@
-package procgen
+package mesh
 
-import asset "../asset"
 import "core:math"
+import "ingot:asset"
 
 // Quadric edge-collapse simplification.
 //
 // This is the offline half of cluster LOD: `mesh_cluster.odin` locks a group's
 // outer boundary and calls in here to halve the interior. It is written to the
-// same rules as the rest of `ingot:procgen` - deterministic for a given input,
+// same rules as the rest of `ingot:mesh` - deterministic for a given input,
 // no recursion, and no allocation beyond a caller-supplied scratch block whose
 // size is a pure function of the input dimensions.
 //
@@ -165,7 +165,7 @@ simplify_scratch_size :: proc(vertex_count, index_count: int) -> int {
 // `simplify_mesh` expects.
 //
 // The scratch's element types are package private, so without this a caller
-// outside `ingot:procgen` has no way to build one: it can name the struct but
+// outside `ingot:mesh` has no way to build one: it can name the struct but
 // not the types of its fields. The block is allowed to start unaligned, which
 // is why it must be `SIMPLIFY_SCRATCH_PADDING` bytes larger than
 // `simplify_scratch_size` reports - a caller handing in a static array should

@@ -1,7 +1,7 @@
-package procgen
+package mesh
 
-import asset "../asset"
 import "core:math"
+import "ingot:asset"
 
 // Index-order optimisation: the last thing that happens to a level's geometry
 // before it is stored. Three passes in a fixed order.

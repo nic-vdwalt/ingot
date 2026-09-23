@@ -229,6 +229,7 @@ when !INGOT_NET_SIM {
 		return min(timeout, MAXIMUM_RECEIVE_TIMEOUT)
 	}
 
+	// tigerstyle: pure
 	@(private = "file")
 	valid_request :: proc(request: Http_Request) -> bool {
 		if request.path == "" || request.path[0] != '/' do return false

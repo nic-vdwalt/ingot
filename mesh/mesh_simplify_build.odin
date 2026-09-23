@@ -1,7 +1,7 @@
-package procgen
+package mesh
 
-import asset "../asset"
 import "core:math"
+import "ingot:asset"
 
 // Working parts of the quadric simplifier: position grouping, quadric
 // accumulation, edge extraction, collapse selection, and compaction. Split from

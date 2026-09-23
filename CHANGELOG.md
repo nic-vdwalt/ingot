@@ -19,6 +19,12 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   conditions that call procedures not known to be pure, because
   `-disable-assert` drops the whole call including its arguments. Waive a
   deliberate case with `// tigerstyle: allow-assert-call -- reason`.
+- Purity is declared at the procedure with a `// tigerstyle: pure` marker
+  instead of a central name list. The style check reports dangling markers,
+  marked procedures that call a mutator (`append`, `delete`, `atomic_store`, …)
+  or write through a parameter, and in-tree procedures listed in
+  `EXTERNAL_PURE_NAMES`, which is reserved for `core:`/`base:` queries. Calls
+  to declared types (`Asset_Id(x)`, `Matrix(…)`) count as pure conversions.
 
 ### Fixed
 

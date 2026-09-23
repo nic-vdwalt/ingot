@@ -37,6 +37,7 @@ Wave :: struct {
 // --- handle packing (pure; unit-tested) -------------------------------------
 
 // _audio_handle_pack encodes slot (0-based) + generation into a non-zero u32.
+// tigerstyle: pure
 @(private)
 _audio_handle_pack :: proc "contextless" (slot: i32, gen: u16) -> u32 {
 	if slot < 0 || slot >= MAX_SOUNDS do return 0
@@ -44,6 +45,7 @@ _audio_handle_pack :: proc "contextless" (slot: i32, gen: u16) -> u32 {
 }
 
 // _audio_handle_slot decodes the slot index, or -1 for the invalid handle.
+// tigerstyle: pure
 @(private)
 _audio_handle_slot :: proc "contextless" (handle: u32) -> i32 {
 	low := i32(handle & 0xFFFF)
@@ -52,6 +54,7 @@ _audio_handle_slot :: proc "contextless" (handle: u32) -> i32 {
 }
 
 // _audio_handle_gen decodes the generation counter.
+// tigerstyle: pure
 @(private)
 _audio_handle_gen :: proc "contextless" (handle: u32) -> u16 {
 	return u16(handle >> 16)

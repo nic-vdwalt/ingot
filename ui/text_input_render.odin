@@ -538,6 +538,7 @@ ti_draw_spell_popup :: proc(ctx: ^TI_Ctx) {
 	}
 }
 
+// tigerstyle: pure
 @(private = "package")
 ti_inactive_candidate :: proc(ctx: ^TI_Ctx) -> bool {
 	assert(ctx != nil && ctx.sb != nil, "ti_inactive_candidate: invalid context")

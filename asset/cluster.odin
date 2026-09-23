@@ -4,7 +4,7 @@ import "core:math"
 
 // Cluster LOD data. A cooked mesh may carry a directed acyclic graph of
 // triangle clusters instead of, or alongside, a discrete LOD chain. The graph
-// is built offline by `ingot:procgen`; this package only defines the shape and
+// is built offline by `ingot:mesh`; this package only defines the shape and
 // proves a decoded graph cannot crack, cycle, or index out of range.
 //
 // The selection rule the whole structure exists to serve is:

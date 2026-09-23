@@ -5,10 +5,10 @@ serialized bundle. Deliberately dependency-free: it must run inside Blender's
 bundled Python, which is the only interpreter guaranteed to be present when
 `bash build.sh assets` runs.
 
-The simplifier here mirrors `ingot/procgen/mesh_simplify.odin` decision for
+The simplifier here mirrors `ingot/mesh/mesh_simplify.odin` decision for
 decision - position grouping, collapse onto an existing vertex, locked borders,
 and the frozen fan around a locked vertex - and the index-order passes mirror
-`ingot/procgen/mesh_optimize.odin` the same way. The two implementations exist
+`ingot/mesh/mesh_optimize.odin` the same way. The two implementations exist
 because the cook runs offline in Python and the terrain builder runs at load
 time in Odin; `ingot/docs/cluster-lod.md` is the contract they both answer to.
 
@@ -128,10 +128,10 @@ def validate_mesh(vertices, indices, label):
 
 
 # -- index optimisation -------------------------------------------------------
-# Mirrors `ingot/procgen/mesh_optimize.odin`. The two implementations exist
+# Mirrors `ingot/mesh/mesh_optimize.odin`. The two implementations exist
 # because this cook runs inside Blender's bundled interpreter and the runtime
 # cook runs in Odin, so neither can call the other. `test_mesh_cook.py` and
-# `procgen/mesh_optimize_test.odin` assert the same golden index order, which is
+# `mesh/mesh_optimize_test.odin` assert the same golden index order, which is
 # what keeps that duplication honest.
 
 CACHE_SIZE = 32
@@ -233,7 +233,7 @@ def _best_triangle(heap, stamp, live):
 
     The `(-score, triangle)` key reproduces that scan exactly rather than
     merely closely: the scan walked upward taking a strictly better score, so it
-    too kept the lowest index among equals. `procgen/mesh_optimize.odin` orders
+    too kept the lowest index among equals. `mesh/mesh_optimize.odin` orders
     its heap the same way.
     """
     while heap:
@@ -256,7 +256,7 @@ def _vertex_score(cache_position, remaining):
     last-ulp disagreement between two libms would flip a tie and diverge the
     whole output order. So x**1.5 is written x*sqrt(x) and 2*n**-0.5 is written
     2/sqrt(n) - the same values, reproducible on every platform.
-    `procgen/mesh_optimize.odin` spells them the same way, and that is the only
+    `mesh/mesh_optimize.odin` spells them the same way, and that is the only
     reason the golden order is shareable at all.
     """
     # A vertex with no triangles left is worthless, and scoring it below every
@@ -340,7 +340,7 @@ def optimize(vertices, indices):
 
 
 # -- quadric simplification ---------------------------------------------------
-# Mirrors ingot/procgen/mesh_simplify.odin. See ingot/docs/cluster-lod.md for
+# Mirrors ingot/mesh/mesh_simplify.odin. See ingot/docs/cluster-lod.md for
 # why collapses move onto existing vertices and why a locked vertex's whole
 # triangle fan is frozen rather than just the vertex itself.
 

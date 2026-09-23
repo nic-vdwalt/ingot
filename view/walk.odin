@@ -123,6 +123,7 @@ walk_unwind :: proc(w: ^Walk) -> (step: Walk_Step, ok: bool) {
 // opened. Callers assert this after their loop; an unbalanced walk means the
 // caller broke out early or the tree was malformed, and either would leave a
 // ui layout or identity scope open.
+// tigerstyle: pure
 walk_balanced :: proc(w: ^Walk) -> bool {
 	assert(w != nil, "walk_balanced: nil walk")
 	return w.depth == 0 && w.next == VIEW_NODE_NONE

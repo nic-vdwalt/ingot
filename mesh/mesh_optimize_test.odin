@@ -1,8 +1,8 @@
 #+build !js
-package procgen
+package mesh
 
-import asset "../asset"
 import "core:testing"
+import "ingot:asset"
 
 mesh_test_optimize_scratch :: proc(vertex_count, index_count: int) -> Optimize_Scratch {
 	triangles := index_count / 3

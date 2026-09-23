@@ -201,7 +201,6 @@ PURE_PATTERNS = (
     re.compile(r"(?:^|_)(?:is|has|can)_"),
     re.compile(r"^prepared_[a-z_]+$"),
     re.compile(r"^terrain_recipe_validate_v[0-9]+$"),
-    re.compile(r"^[A-Z][A-Za-z0-9]*_Id$"),
     re.compile(r"_IsValid$"),
     re.compile(
         r"_(?:valid|finite|settled|fits|matches|active|ready|balanced|open|kind|count"
@@ -209,28 +208,181 @@ PURE_PATTERNS = (
         r"|is_ancestor|child_count|schema|length|contains|equal|equals)$"
     ),
 )
-# Queries whose names do not follow a pure-predicate convention. Each body was
-# read and has no side effects; add a name here only after doing the same.
-PURE_NAMES = frozenset(
+# Pure queries defined outside the scanned tree (core:/base:), where no marker
+# can be written. A procedure declared in this tree declares its purity with a
+# `// tigerstyle: pure` marker instead; listing it here is reported.
+EXTERNAL_PURE_NAMES = frozenset(
     {
-        "Matrix", "_audio_handle_gen", "_audio_handle_pack", "_audio_handle_slot",
-        "_gpu_timing_record_matches_slot",
-        "_terrain_dot_v4", "_top", "atomic_load", "atomic_load_explicit", "builder_len",
-        "calendar_days_in_month", "context_epoch", "context_ready", "frame_available",
-        "frame_owner", "frame_z", "has_prefix", "has_suffix", "layout_kind", "map_advance_progress",
-        "map_ease", "map_edge_amount", "map_segment_clear", "memory", "modal_owner_current",
-        "point_in_rect", "rects_overlap", "spell_menu_active", "theme_palette_colors_present",
-        "ti_inactive_candidate", "to_string", "ui_frame_phase", "valid_request", "walk_balanced",
-        "ws_transport_open",
+        "atomic_load", "atomic_load_explicit", "builder_len", "has_prefix", "has_suffix",
+        "memory", "to_string",
     }
 )
 
+# Purity is declared where the procedure is written, not in a central list:
+#
+#     // tigerstyle: pure
+#     @(private)
+#     frame_z :: proc(frame: ^Ui_Frame) -> Z_Order {
+#
+# Attributes may sit between the marker and the declaration. The body check
+# below is a heuristic backstop, not a proof: it rejects direct mutator calls
+# and writes through a parameter, but cannot see mutation done by callees.
+PURE_MARKER = re.compile(r"^\s*//\s*tigerstyle:\s*pure\s*$")
+PROC_DECLARATION = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*::\s*(?:#force_inline\s+)?proc\b")
+TYPE_DECLARATION = re.compile(
+    r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*::\s*(?:#type\s+)?(?:distinct\b|struct\b|enum\b|union\b"
+    r"|bit_set\b|bit_field\b|matrix\s*\[|map\s*\[|#simd\b|\[|\^"
+    r"|(?:bool|b8|b16|b32|b64|int|uint|i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|uintptr"
+    r"|f16|f32|f64|rune|string|cstring|rawptr)\s*$)"
+)
+MUTATOR_CALL = re.compile(
+    r"\b(append|append_elem|append_elems|inject_at|delete|free|free_all|new|make|clear"
+    r"|resize|reserve|pop|pop_front|ordered_remove|unordered_remove|atomic_store"
+    r"|atomic_store_explicit|atomic_add|atomic_sub|atomic_exchange"
+    r"|atomic_compare_exchange\w*)\s*\("
+)
 
-def condition_call_is_pure(qualified: str) -> bool:
+
+@dataclasses.dataclass(frozen=True)
+class PurityIndex:
+    pure_names: frozenset[str]
+    type_names: frozenset[str]
+
+
+def condition_call_is_pure(qualified: str, purity: PurityIndex | None = None) -> bool:
     name = qualified.split(".")[-1].strip()
-    if name in PURE_BUILTINS or name in PURE_NAMES:
+    if name in PURE_BUILTINS or name in EXTERNAL_PURE_NAMES:
+        return True
+    if purity is not None and (name in purity.pure_names or name in purity.type_names):
         return True
     return any(pattern.search(name) for pattern in PURE_PATTERNS)
+
+
+def procedure_parameters(signature: str) -> list[str]:
+    open_index = signature.find("(", signature.find("proc"))
+    if open_index < 0:
+        return []
+    depth = 0
+    close_index = open_index
+    for close_index in range(open_index, len(signature)):
+        if signature[close_index] in "([{":
+            depth += 1
+        elif signature[close_index] in ")]}":
+            depth -= 1
+            if depth == 0:
+                break
+    pieces: list[str] = []
+    depth = 0
+    start = open_index + 1
+    for index in range(open_index + 1, close_index + 1):
+        char = signature[index]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}" and depth > 0:
+            depth -= 1
+        elif (char == "," and depth == 0) or index == close_index:
+            pieces.append(signature[start:index])
+            start = index + 1
+    names: list[str] = []
+    for piece in pieces:
+        head = piece.split(":", 1)[0]
+        head = re.sub(r"^\s*(?:using\s+|#\w+\s+|\$|\.\.)*", "", head)
+        match = re.match(r"[A-Za-z_][A-Za-z0-9_]*", head)
+        if match:
+            names.append(match.group(0))
+    return names
+
+
+def pure_body_violations(masked: str, procedure: Procedure) -> list[Violation]:
+    lines = masked.splitlines()[procedure.start_line - 1 : procedure.end_line]
+    text = "\n".join(lines)
+    body_start = text.find("{", text.find("proc"))
+    parameters = procedure_parameters(text[:body_start] if body_start >= 0 else text)
+    result: list[Violation] = []
+    for match in MUTATOR_CALL.finditer(text, max(body_start, 0)):
+        line = procedure.start_line + text.count("\n", 0, match.start())
+        result.append(
+            Violation(
+                line,
+                f"pure-marked proc {procedure.name} mutates state: calls {match.group(1)}",
+            )
+        )
+    if parameters:
+        names = "|".join(re.escape(name) for name in parameters)
+        write = re.compile(
+            rf"(?<![A-Za-z0-9_.])({names})\s*(?:\^|\.\s*[A-Za-z_]\w*|\[[^\]\n]*\])"
+            rf"(?:\s*(?:\^|\.\s*[A-Za-z_]\w*|\[[^\]\n]*\]))*\s*(?:<<|>>|&~|[-+*/%|&~^])?=(?!=)"
+        )
+        for match in write.finditer(text, max(body_start, 0)):
+            line = procedure.start_line + text.count("\n", 0, match.start())
+            result.append(
+                Violation(
+                    line,
+                    f"pure-marked proc {procedure.name} mutates state: writes through "
+                    f"parameter {match.group(1)}",
+                )
+            )
+    return result
+
+
+def purity_declarations(source: str) -> tuple[set[str], set[str], list[Violation]]:
+    masked = mask_source(source)
+    original_lines = source.splitlines()
+    masked_lines = masked.splitlines()
+    pure_names: set[str] = set()
+    type_names: set[str] = set()
+    violations: list[Violation] = []
+    marked_lines: dict[int, str] = {}
+    for index, line_text in enumerate(masked_lines):
+        type_match = TYPE_DECLARATION.match(line_text)
+        if type_match:
+            type_names.add(type_match.group(1))
+        proc_match = PROC_DECLARATION.match(line_text)
+        if proc_match and proc_match.group(1) in EXTERNAL_PURE_NAMES:
+            violations.append(
+                Violation(
+                    index + 1,
+                    f"{proc_match.group(1)} is declared here; declare purity with a "
+                    "`// tigerstyle: pure` marker instead of EXTERNAL_PURE_NAMES",
+                )
+            )
+    for index, line_text in enumerate(original_lines):
+        if not PURE_MARKER.match(line_text):
+            continue
+        following = index + 1
+        while following < len(masked_lines) and (
+            not masked_lines[following].strip() or masked_lines[following].strip().startswith("@(")
+        ):
+            following += 1
+        match = None
+        if following < len(masked_lines):
+            match = PROC_DECLARATION.match(masked_lines[following])
+        if not match:
+            violations.append(
+                Violation(index + 1, "dangling pure marker: no procedure declaration follows")
+            )
+            continue
+        pure_names.add(match.group(1))
+        marked_lines[following + 1] = match.group(1)
+    for procedure in procedures(source):
+        declaration_line = procedure.start_line
+        while declaration_line <= procedure.end_line and declaration_line not in marked_lines:
+            if PROC_DECLARATION.match(masked_lines[declaration_line - 1]):
+                break
+            declaration_line += 1
+        if marked_lines.get(declaration_line) == procedure.name:
+            violations.extend(pure_body_violations(masked, procedure))
+    return pure_names, type_names, violations
+
+
+def build_purity_index(sources: list[str]) -> PurityIndex:
+    pure_names: set[str] = set()
+    type_names: set[str] = set()
+    for source in sources:
+        names, types, _ = purity_declarations(source)
+        pure_names |= names
+        type_names |= types
+    return PurityIndex(frozenset(pure_names), frozenset(type_names))
 
 
 def assert_condition_end(masked: str, start: int) -> int:
@@ -250,7 +402,9 @@ def assert_condition_end(masked: str, start: int) -> int:
     return index
 
 
-def assert_side_effect_violations(source: str) -> list[Violation]:
+def assert_side_effect_violations(
+    source: str, purity: PurityIndex | None = None
+) -> list[Violation]:
     masked = mask_source(source)
     original_lines = source.splitlines()
     result: list[Violation] = []
@@ -260,7 +414,7 @@ def assert_side_effect_violations(source: str) -> list[Violation]:
         impure = [
             call.group(1)
             for call in CONDITION_CALL.finditer(condition)
-            if not condition_call_is_pure(call.group(1))
+            if not condition_call_is_pure(call.group(1), purity)
         ]
         if not impure:
             continue
@@ -341,9 +495,16 @@ def control_flow_violations(source: str, procedure: Procedure) -> list[Violation
     return result
 
 
-def check_source(source: str, baseline: dict[str, int] | None = None, path: str = "") -> list[Violation]:
+def check_source(
+    source: str,
+    baseline: dict[str, int] | None = None,
+    path: str = "",
+    purity: PurityIndex | None = None,
+) -> list[Violation]:
     baseline = baseline or {}
-    violations: list[Violation] = []
+    pure_names, type_names, violations = purity_declarations(source)
+    if purity is None:
+        purity = PurityIndex(frozenset(pure_names), frozenset(type_names))
     for number, line in enumerate(source.splitlines(), 1):
         if len(line) > LINE_LIMIT:
             violations.append(Violation(number, f"line has {len(line)} characters; limit is {LINE_LIMIT}"))
@@ -358,7 +519,7 @@ def check_source(source: str, baseline: dict[str, int] | None = None, path: str 
                 )
             )
         violations.extend(control_flow_violations(source, procedure))
-    violations.extend(assert_side_effect_violations(source))
+    violations.extend(assert_side_effect_violations(source, purity))
     return sorted(violations, key=lambda violation: (violation.line, violation.message))
 
 
@@ -384,17 +545,19 @@ def main() -> int:
     if arguments.baseline:
         baseline = json.loads(Path(arguments.baseline).read_text())
     failed = False
+    sources: dict[str, str] = {}
     for relative in tracked_odin_files(root):
         path = root / relative
-        if not path.is_file():
-            continue
-        source = path.read_text(encoding="utf-8")
+        if path.is_file():
+            sources[relative] = path.read_text(encoding="utf-8")
+    purity = build_purity_index(list(sources.values()))
+    for relative, source in sources.items():
         if arguments.print_procedures:
             for procedure in procedures(source):
                 if procedure.lines > PROCEDURE_LIMIT:
                     print(f'\t"{relative}:{procedure.name}": {procedure.lines},')
             continue
-        for violation in check_source(source, baseline, relative):
+        for violation in check_source(source, baseline, relative, purity):
             print(f"{relative}:{violation.line}: {violation.message}")
             failed = True
     return 1 if failed else 0

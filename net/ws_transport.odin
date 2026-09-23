@@ -57,6 +57,7 @@ Ws_Transport :: struct {
 // or mid-handshake. Plain access is a data race (ThreadSanitizer reports it
 // through fuzz/run.sh tsan), and on a relaxed memory model the worker can miss
 // the close and keep using a socket the closer already tore down.
+// tigerstyle: pure
 ws_transport_open :: proc(transport: ^Ws_Transport) -> bool {
 	if transport == nil do return false
 	return sync.atomic_load(&transport.open)

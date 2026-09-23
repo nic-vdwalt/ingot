@@ -1,5 +1,5 @@
 #+build !js
-package procgen
+package noise
 
 import "core:testing"
 

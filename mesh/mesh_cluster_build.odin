@@ -1,6 +1,6 @@
-package procgen
+package mesh
 
-import asset "../asset"
+import "ingot:asset"
 
 // Level construction for the cluster DAG: group boundary detection, gathering,
 // simplification, and re-clustering. Kept apart from `mesh_cluster.odin` so the

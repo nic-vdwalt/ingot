@@ -1,7 +1,7 @@
-package procgen
+package mesh
 
-import asset "../asset"
 import "core:math"
+import "ingot:asset"
 
 // Spatial ordering and bounding volumes for the cluster builder.
 //

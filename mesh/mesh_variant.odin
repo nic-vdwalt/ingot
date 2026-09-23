@@ -1,7 +1,8 @@
-package procgen
+package mesh
 
-import asset "../asset"
 import "core:math"
+import "ingot:asset"
+import "ingot:noise"
 
 MESH_DEFORM_GENERATOR_VERSION :: u32(1)
 MESH_DEFORM_FREQUENCY_MAX :: f32(4)
@@ -156,14 +157,18 @@ _mesh_deform_position :: proc(
 	normalized_z := (position.z - bounds.minimum.z) / max(extent.z, MESH_DEFORM_EPSILON)
 	strength := recipe.taper + (1 - recipe.taper) * normalized_z
 	radial_noise :=
-		(noise_2d(recipe.seed, normalized_x * recipe.frequency, normalized_z * recipe.frequency) +
-			noise_2d(
+		(noise.noise_2d(
+				recipe.seed,
+				normalized_x * recipe.frequency,
+				normalized_z * recipe.frequency,
+			) +
+			noise.noise_2d(
 				recipe.seed ~ 0xD1B54A32D192ED03,
 				normalized_y * recipe.frequency,
 				normalized_z * recipe.frequency,
 			)) *
 		0.5
-	vertical_noise := noise_2d(
+	vertical_noise := noise.noise_2d(
 		recipe.seed ~ 0x94D049BB133111EB,
 		normalized_x * recipe.frequency,
 		normalized_y * recipe.frequency,

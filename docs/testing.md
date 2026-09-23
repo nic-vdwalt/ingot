@@ -205,7 +205,6 @@ fuzz/run.sh net 12345 100000
 | `interact` | Widget interaction sequences with synthetic input (`INGOT_INPUT_SIM`) |
 | `input` | Text-input edit operations (in-package, high iteration count) |
 | `wsreconn` | WebSocket reconnect state machine against a real worker thread (`INGOT_WS_SIM`) |
-| `procgen` | Terrain chunk and volume generation |
 | `gpu3d` | Headless 3D mesh, camera, frustum, and picking checks |
 | `tsan` | ThreadSanitizer pass over `wsreconn`, net tests, and the accessibility queue |
 | `gfx-frame` | Windowed GPU lifecycle; needs a display and is not part of `all` |

@@ -31,6 +31,7 @@ Spell_Menu :: struct {
 }
 
 // spell_menu_active reports whether the menu is open for this builder.
+// tigerstyle: pure
 spell_menu_active :: proc(menu: ^Spell_Menu, sb: ^strings.Builder) -> bool {
 	assert(menu != nil, "spell_menu_active: nil menu")
 	return menu.open && menu.sb == sb

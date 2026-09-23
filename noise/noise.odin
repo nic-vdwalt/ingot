@@ -1,4 +1,4 @@
-package procgen
+package noise
 
 import "core:math"
 
@@ -128,8 +128,9 @@ warped_fractal_3d :: proc(config: Noise_Config, x, y, z: f32) -> f32 {
 	)
 }
 
-@(private)
-_noise_hash :: proc(seed: u64, x, y: i64) -> u64 {
+// noise_hash is the splitmix64-finalized 2D lattice hash behind noise_2d.
+// Exposed so callers can place seeded features on the same integer lattice.
+noise_hash :: proc(seed: u64, x, y: i64) -> u64 {
 	value := seed ~ u64(x) * 0x9E3779B185EBCA87 ~ u64(y) * 0xC2B2AE3D27D4EB4F
 	value ~= value >> 30
 	value *= 0xBF58476D1CE4E5B9
@@ -138,7 +139,7 @@ _noise_hash :: proc(seed: u64, x, y: i64) -> u64 {
 	return value ~ (value >> 31)
 }
 
-// _noise_hash_3d extends _noise_hash with a third odd multiplier. The
+// _noise_hash_3d extends noise_hash with a third odd multiplier. The
 // splitmix64 finalizer is unchanged, so a z of zero does not collapse onto the
 // 2D hash -- the multiply still mixes the other two axes through it.
 @(private)
@@ -157,7 +158,7 @@ _noise_hash_3d :: proc(seed: u64, x, y, z: i64) -> u64 {
 
 @(private)
 _noise_lattice :: proc(seed: u64, x, y: i64) -> f32 {
-	value := _noise_hash(seed, x, y) >> 40
+	value := noise_hash(seed, x, y) >> 40
 	return f32(value) / f32(0xFFFFFF) * 2 - 1
 }
 

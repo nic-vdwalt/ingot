@@ -151,6 +151,7 @@ modal_is_top :: proc(frame: ^Ui_Frame, state: ^Modal_State) -> bool {
 	return state.id != Modal_Id(0) && modal_top_id(frame) == state.id
 }
 
+// tigerstyle: pure
 modal_owner_current :: proc(frame: ^Ui_Frame) -> Modal_Id {
 	assert(frame != nil, "modal owner current: nil frame")
 	assert(

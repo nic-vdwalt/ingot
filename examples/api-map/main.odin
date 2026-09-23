@@ -546,6 +546,7 @@ map_edge_elbow :: proc(layout: ^Map_Layout, edge_index: i32) -> Edge_Path {
 	return {{start, {channel_x, start.y}, {channel_x, finish.y}, finish}, 4}
 }
 
+// tigerstyle: pure
 map_segment_clear :: proc(
 	layout: ^Map_Layout,
 	start, finish: fit.Point,
@@ -990,6 +991,7 @@ map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(drawn_edges == edge_count, "api map active: edge count mismatch")
 }
 
+// tigerstyle: pure
 map_edge_amount :: proc(stage: i32) -> f32 {
 	assert(stage >= 1 && stage <= STAGE_COUNT, "api map edge: invalid stage")
 	if stage <= map_state.selected_stage do return 1
@@ -1018,11 +1020,13 @@ rect_float :: proc(rect: fit.Rect) -> fit.Float_Rect {
 	return {f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 }
 
+// tigerstyle: pure
 map_ease :: proc(value: f32) -> f32 {
 	clamped := clamp(value, 0, 1)
 	return clamped * clamped * (3 - 2 * clamped)
 }
 
+// tigerstyle: pure
 map_advance_progress :: proc(progress, delta: f32) -> f32 {
 	assert(progress >= 0 && progress <= 1, "api map progress: invalid value")
 	return clamp(progress + max(delta, 0) * 3.5, 0, 1)

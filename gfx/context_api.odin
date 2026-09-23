@@ -29,6 +29,7 @@ frame_end :: proc(frame: ^Frame) {
 	frame^ = {}
 }
 
+// tigerstyle: pure
 frame_owner :: proc(frame: ^Frame) -> ^Context {
 	assert(frame != nil && frame.open, "frame_owner: frame not open")
 	assert(
@@ -38,6 +39,7 @@ frame_owner :: proc(frame: ^Frame) -> ^Context {
 	return frame.owner
 }
 
+// tigerstyle: pure
 frame_available :: proc(frame: ^Frame) -> bool {
 	return frame != nil && frame.open && frame.available
 }

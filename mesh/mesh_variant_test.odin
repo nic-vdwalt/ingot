@@ -1,9 +1,9 @@
 #+build !js
-package procgen
+package mesh
 
-import asset "../asset"
 import "core:math"
 import "core:testing"
+import "ingot:asset"
 
 @(private = "file")
 mesh_variant_source :: proc(vertices: ^[3]asset.Vertex, indices: ^[3]u32) -> asset.Mesh_View {

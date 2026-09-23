@@ -1,8 +1,8 @@
 #+build !js
-package procgen
+package mesh
 
-import asset "../asset"
 import "core:testing"
+import "ingot:asset"
 
 _cluster_test_storage :: proc(
 	vertex_count, index_count: int,

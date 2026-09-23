@@ -1,8 +1,8 @@
 #+build !js
-package procgen
+package mesh
 
-import asset "../asset"
 import "core:testing"
+import "ingot:asset"
 
 @(test)
 cook_thresholds_follow_the_offline_tool :: proc(t: ^testing.T) {
@@ -51,17 +51,13 @@ cook_chain_from_policy_builds_a_monotonic_chain :: proc(t: ^testing.T) {
 // The milestone: a generated mesh reaches INGMESH2 bytes and comes back out
 // intact, without leaving the process.
 @(test)
-cook_terrain_volume_round_trips_through_ingmesh2 :: proc(t: ^testing.T) {
-	storage := new(Terrain_V3_Test_Storage)
-	defer free(storage)
-	buffer := _terrain_v3_test_buffer(storage, 7)
-	recipe := terrain_abstract_recipe_v3(2024)
-	request := Terrain_Volume_Request_V3{{-12, -12, -12}, {6, 6, 6}, 4}
-	result, generated := terrain_generate_volume_v3(&recipe, request, &buffer)
-	testing.expect(t, generated)
-	testing.expect(t, result.index_count > 0)
-	source, view_ok := asset.mesh_view(&buffer.mesh)
-	testing.expect(t, view_ok)
+cook_generated_mesh_round_trips_through_ingmesh2 :: proc(t: ^testing.T) {
+	vertices := make([]asset.Vertex, 49 * 49)
+	defer delete(vertices)
+	indices := make([]u32, 48 * 48 * 6)
+	defer delete(indices)
+	source := mesh_test_grid(48, vertices, indices)
+	testing.expect(t, len(source.indices) > 0)
 	cook := _cook_test_storage(len(source.vertices), len(source.indices), .Structure_3)
 	defer _cook_test_storage_free(cook)
 	chain, chain_ok := cook_chain_from_policy(source, .Structure_3, cook)

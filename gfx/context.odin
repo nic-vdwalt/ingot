@@ -418,6 +418,7 @@ set_default_context :: proc(ctx: ^Context) -> ^Context {
 	return previous
 }
 
+// tigerstyle: pure
 context_epoch :: proc(ctx: ^Context) -> u64 {
 	if ctx == nil do return 0
 	return ctx.epoch
@@ -445,6 +446,7 @@ _context_assign_id :: proc(ctx: ^Context) -> bool {
 	return true
 }
 
+// tigerstyle: pure
 context_ready :: proc(ctx: ^Context) -> bool {
 	return ctx != nil && ctx.lifecycle == .Ready && ctx.initialized
 }

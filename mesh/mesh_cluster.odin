@@ -1,6 +1,6 @@
-package procgen
+package mesh
 
-import asset "../asset"
+import "ingot:asset"
 
 // Cluster LOD DAG construction.
 //

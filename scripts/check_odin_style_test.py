@@ -106,7 +106,7 @@ class OdinStyleTest(unittest.TestCase):
         source = (
             "p :: proc() {\n"
             "\tassert(\n"
-            "\t\tprocgen.terrain_generate_field_v2(&recipe, request, buffer),\n"
+            "\t\tmesh.simplify_mesh(source, options, scratch),\n"
             "\t\t\"generate failed\",\n"
             "\t)\n"
             "\tif ticket != 0 do assert_contextless(_submission_rollback(tracker, ticket))\n"
@@ -114,7 +114,7 @@ class OdinStyleTest(unittest.TestCase):
         )
         violations = check_odin_style.check_source(source)
         self.assertEqual([violation.line for violation in violations], [2, 6])
-        self.assertIn("'procgen.terrain_generate_field_v2'", violations[0].message)
+        self.assertIn("'mesh.simplify_mesh'", violations[0].message)
         self.assertIn("'_submission_rollback'", violations[1].message)
 
     def test_pure_assert_conditions_are_accepted(self):
@@ -167,6 +167,77 @@ class OdinStyleTest(unittest.TestCase):
         violations = check_odin_style.check_source(rejected)
         self.assertEqual(len(violations), 1)
         self.assertEqual(violations[0].line, 3)
+
+    def test_pure_marker_allows_assert_call(self):
+        source = (
+            "// tigerstyle: pure\n"
+            "@(private)\n"
+            "slot_of :: proc(handle: u32) -> i32 {\n"
+            "\treturn i32(handle)\n"
+            "}\n"
+            "p :: proc(handle: u32) {\n"
+            "\tassert(slot_of(handle) >= 0)\n"
+            "}\n"
+        )
+        self.assertEqual(check_odin_style.check_source(source), [])
+
+    def test_unmarked_query_is_rejected_in_assert(self):
+        source = (
+            "slot_of :: proc(handle: u32) -> i32 {\n"
+            "\treturn i32(handle)\n"
+            "}\n"
+            "p :: proc(handle: u32) {\n"
+            "\tassert(slot_of(handle) >= 0)\n"
+            "}\n"
+        )
+        violations = check_odin_style.check_source(source)
+        self.assertEqual([violation.line for violation in violations], [5])
+        self.assertIn("'slot_of'", violations[0].message)
+
+    def test_marker_from_another_file_is_honoured_through_the_index(self):
+        declaring = "// tigerstyle: pure\nslot_of :: proc(handle: u32) -> i32 {\n\treturn 0\n}\n"
+        using = "p :: proc(handle: u32) {\n\tassert(pkg.slot_of(handle) >= 0)\n}\n"
+        purity = check_odin_style.build_purity_index([declaring, using])
+        self.assertEqual(check_odin_style.check_source(using, purity=purity), [])
+
+    def test_dangling_pure_marker_is_reported(self):
+        source = "// tigerstyle: pure\nLIMIT :: 10\n"
+        violations = check_odin_style.check_source(source)
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].line, 1)
+        self.assertIn("dangling pure marker", violations[0].message)
+
+    def test_pure_marked_proc_that_mutates_is_reported(self):
+        source = (
+            "// tigerstyle: pure\n"
+            "push :: proc(items: ^[dynamic]int, state: ^State) -> bool {\n"
+            "\tappend(items, 1)\n"
+            "\tstate.count += 1\n"
+            "\tstate.slots[0] = 2\n"
+            "\tlocal := state.count\n"
+            "\treturn local == state.count\n"
+            "}\n"
+        )
+        violations = check_odin_style.check_source(source)
+        self.assertEqual([violation.line for violation in violations], [3, 4, 5])
+        self.assertIn("calls append", violations[0].message)
+        self.assertIn("writes through parameter state", violations[1].message)
+
+    def test_type_conversion_is_pure(self):
+        source = (
+            "Asset_Id :: distinct u32\n"
+            "Matrix :: matrix[4, 4]f32\n"
+            "p :: proc(raw: u32, m: [16]f32) {\n"
+            "\tassert(Asset_Id(raw) != 0 && Matrix(1) == Matrix(1))\n"
+            "}\n"
+        )
+        self.assertEqual(check_odin_style.check_source(source), [])
+
+    def test_external_pure_name_declared_in_tree_is_reported(self):
+        source = "to_string :: proc(value: int) -> string {\n\treturn \"\"\n}\n"
+        violations = check_odin_style.check_source(source)
+        self.assertEqual(len(violations), 1)
+        self.assertIn("EXTERNAL_PURE_NAMES", violations[0].message)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,9 @@
 #+build !js
-package procgen
+package mesh
 
-import asset "../asset"
 import "core:math"
 import "core:testing"
+import "ingot:asset"
 
 // Shared fixture for the simplifier and cluster-builder tests: a flat grid of
 // `cells` x `cells` quads on the XY plane. A plane is the sharpest possible

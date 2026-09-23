@@ -268,6 +268,7 @@ Theme_Set_Substrate :: proc(theme: ^Theme, substrate: Substrate) {
 	theme.substrate = substrate
 }
 
+// tigerstyle: pure
 @(private = "file")
 theme_palette_colors_present :: proc(palette: Theme_Palette) -> bool {
 	colors := [?]Color {

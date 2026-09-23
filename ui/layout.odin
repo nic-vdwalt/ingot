@@ -1068,6 +1068,7 @@ take_remaining :: proc(l: ^Layout) -> Rect_I32 {
 }
 
 // layout_kind returns the active frame's axis kind (Column or Row).
+// tigerstyle: pure
 layout_kind :: proc(l: ^Layout) -> Layout_Kind {
 	assert(l != nil)
 	assert(l.depth > 0 && l.depth <= len(l.stack), "layout_kind: layout not begun")
@@ -1323,6 +1324,7 @@ _flex_resolve :: proc(f: ^Layout_Frame, sizes: []Track, space: i32) {
 }
 
 // _top returns the active frame. Internal; callers use the procs above.
+// tigerstyle: pure
 @(private = "file")
 _top :: proc(l: ^Layout) -> ^Layout_Frame {
 	assert(l != nil, "_top: nil l")

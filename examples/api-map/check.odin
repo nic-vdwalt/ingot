@@ -129,11 +129,13 @@ map_check_edges :: proc(layout: ^Map_Layout) {
 	}
 }
 
+// tigerstyle: pure
 rects_overlap :: proc(a, b: fit.Rect) -> bool {
 	assert(a.w > 0 && a.h > 0 && b.w > 0 && b.h > 0)
 	return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
 }
 
+// tigerstyle: pure
 point_in_rect :: proc(point: fit.Point, rect: fit.Rect) -> bool {
 	assert(rect.w > 0 && rect.h > 0)
 	return(

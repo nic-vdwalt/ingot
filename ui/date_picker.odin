@@ -44,6 +44,7 @@ CALENDAR_MONTH_NAMES := [12]string {
 }
 
 // calendar_days_in_month returns the day count, honoring leap years.
+// tigerstyle: pure
 calendar_days_in_month :: proc(year, month: i32) -> i32 {
 	lengths := [12]i32{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 	assert(month >= 1 && int(month) <= len(lengths), "calendar_days_in_month: bad month")

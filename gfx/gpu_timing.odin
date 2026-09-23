@@ -880,6 +880,7 @@ _gpu_timing_drain :: proc(
 	return count, health
 }
 
+// tigerstyle: pure
 _gpu_timing_record_matches_slot :: proc(
 	record: Gpu_Timing_Map_Request,
 	slot: ^Gpu_Timing_Slot,
