@@ -115,6 +115,22 @@ test_ws_connection_owns_url_components :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_ws_connection_owns_query_only_path_and_ca_file :: proc(t: ^testing.T) {
+	ws := ws_init()
+	raw_url := strings.clone("ws://127.0.0.1:65534?room=1")
+	ca_file := strings.clone("/tmp/ca.pem")
+	started := ws_start_connect_url(&ws, raw_url, WS_Options{max_attempts = 1, ca_file = ca_file})
+	delete(raw_url)
+	delete(ca_file)
+	free_all(context.temp_allocator)
+	testing.expect(t, started)
+	testing.expect_value(t, ws.path, "/?room=1")
+	testing.expect_value(t, ws.ca_file, "/tmp/ca.pem")
+	ws_close(&ws)
+	testing.expect_value(t, ws.ca_file, "")
+}
+
+@(test)
 test_ws_parse_16bit_length :: proc(t: ^testing.T) {
 	n := 300
 	buf := make([dynamic]u8, context.temp_allocator)

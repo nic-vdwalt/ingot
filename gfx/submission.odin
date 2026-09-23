@@ -182,7 +182,8 @@ _submission_track :: proc(tracker: ^Submission_Tracker) -> u64 {
 	ticket := _submission_reserve(tracker)
 	if ticket == 0 do return 0
 	if !_submission_commit(tracker, ticket) {
-		assert(_submission_rollback(tracker, ticket))
+		rolled_back := _submission_rollback(tracker, ticket)
+		assert(rolled_back, "_submission_track: rollback failed")
 		return 0
 	}
 	return ticket

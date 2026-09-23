@@ -41,7 +41,7 @@ from pathlib import Path
 import check_odin_style
 
 PACKAGE = "gfx/"
-# Test sources are scanned too: an @(init) in api_tests.odin would break the
+# Test sources are scanned too: an @(init) in api_test.odin would break the
 # invariant in the test build exactly as one in api.odin breaks the real build.
 ALLOWED_PATH = "gfx/context.odin"
 ALLOWED_NAME = "_default_context_init"

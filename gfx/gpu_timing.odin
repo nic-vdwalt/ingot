@@ -487,7 +487,8 @@ _gpu_timing_frame_submitted :: proc(ctx: ^Context) {
 	}
 	assert(slot.phase == .Resolved, "gpu timing: submit before frame close")
 	assert(slot.query_count <= GPU_TIMING_QUERY_COUNT && slot.query_count % 2 == 0)
-	assert(_gpu_timing_sample_arm(&ctx.gpu_timing, index))
+	armed := _gpu_timing_sample_arm(&ctx.gpu_timing, index)
+	assert(armed, "gpu timing: sample arm failed")
 	record := &ctx.gpu_timing.sample_requests[index]
 	wg.QueueOnSubmittedWorkDone(
 		ctx.queue,

@@ -312,14 +312,18 @@ Web_Socket :: struct {
 	secure:            bool,
 	ca_file:           string,
 
-	// host/path above point into url_storage, which owns the only copy of the
-	// URL. It is a raw string rather than a [dynamic], so unlike recv_queue it
-	// does not carry its own allocator - url_allocator records the one that
-	// produced it. ws_start_connect_url and ws_close can run under different
+	// host points into url_storage, which owns the only copy of the URL; path
+	// points at path_storage, and ca_file and headers are owned clones. A
+	// query-only URL's parsed path is built in the caller's temp allocator, so
+	// borrowing it would leave the worker thread reading a reset arena. These
+	// are raw strings rather than [dynamic]s, so unlike recv_queue they do not
+	// carry their own allocator - url_allocator records the one that produced
+	// all of them. ws_start_connect_url and ws_close can run under different
 	// ambient allocators (a consumer may connect on one and tear down on
 	// another), and freeing a block from an allocator that did not produce it
 	// is undefined, not merely a leak.
 	url_storage:       string,
+	path_storage:      string,
 	url_allocator:     mem.Allocator,
 	headers:           []Http_Header,
 	connect_timeout:   time.Duration,
@@ -408,9 +412,11 @@ ws_start_connect_url :: proc(ws: ^Web_Socket, raw_url: string, options: WS_Optio
 	assert(parse_err == .None, "cloned WebSocket URL failed to parse")
 	ws.host = parsed.host
 	ws.port = int(parsed.port)
-	ws.path = parsed.path
+	ws.path_storage = strings.clone(parsed.path, ws.url_allocator)
+	ws.path = ws.path_storage
 	ws.secure = parsed.scheme == .Wss
-	ws.ca_file = options.ca_file
+	ws.ca_file = ""
+	if len(options.ca_file) > 0 do ws.ca_file = strings.clone(options.ca_file, ws.url_allocator)
 	ws.connect_timeout = options.connect_timeout
 	if ws.connect_timeout <= 0 do ws.connect_timeout = WS_CONNECT_TIMEOUT
 	ws.handshake_timeout = options.handshake_timeout
@@ -1027,6 +1033,7 @@ ws_close :: proc(ws: ^Web_Socket) {
 	assert(ws.recv_thread == nil)
 	assert(len(ws.recv_queue) == 0)
 	assert(len(ws.url_storage) == 0)
+	assert(len(ws.path_storage) == 0)
 	assert(sync.atomic_load(&ws.state) == .Disconnected)
 }
 
@@ -1040,8 +1047,15 @@ _ws_url_storage_free :: proc(ws: ^Web_Socket) {
 	// url_storage and url_allocator are only ever assigned together, so a
 	// live string with no recorded allocator means that pairing was broken.
 	assert(ws.url_allocator.procedure != nil, "_ws_url_storage_free: url storage has no allocator")
+	// path_storage is assigned together with url_storage, and a parsed path
+	// always starts with '/', so it cannot be empty while the URL is live.
+	assert(len(ws.path_storage) > 0, "_ws_url_storage_free: url storage has no path")
 	delete(ws.url_storage, ws.url_allocator)
 	ws.url_storage = ""
+	delete(ws.path_storage, ws.url_allocator)
+	ws.path_storage = ""
+	if len(ws.ca_file) > 0 do delete(ws.ca_file, ws.url_allocator)
+	ws.ca_file = ""
 	for header in ws.headers {
 		delete(header.name, ws.url_allocator)
 		delete(header.value, ws.url_allocator)

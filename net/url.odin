@@ -87,7 +87,17 @@ Http_Request_Options :: struct {
 	ca_file:   string,
 }
 
-http_url_parse :: proc(raw: string) -> (url: Http_URL, err: Http_Error) {
+// http_url_parse returns views into raw. The one exception is a query-only
+// target ("https://h?q"), which needs a leading '/' and is therefore built in
+// allocator. Callers that keep the result beyond raw's or allocator's lifetime
+// must clone the fields they keep.
+http_url_parse :: proc(
+	raw: string,
+	allocator := context.temp_allocator,
+) -> (
+	url: Http_URL,
+	err: Http_Error,
+) {
 	if len(raw) == 0 ||
 	   strings.contains(raw, "\r") ||
 	   strings.contains(raw, "\n") ||
@@ -118,10 +128,7 @@ http_url_parse :: proc(raw: string) -> (url: Http_URL, err: Http_Error) {
 		authority = rest[:target_index]
 		url.request_target = rest[target_index:]
 		if url.request_target[0] == '?' {
-			url.request_target = strings.concatenate(
-				{"/", url.request_target},
-				context.temp_allocator,
-			)
+			url.request_target = strings.concatenate({"/", url.request_target}, allocator)
 		}
 	}
 	if len(authority) == 0 || strings.contains(authority, "@") do return {}, .Invalid_URL
@@ -166,7 +173,17 @@ http_url_resolve :: proc(base: Http_URL, location: string) -> (Http_URL, Http_Er
 	return resolved, .None
 }
 
-ws_url_parse :: proc(raw: string) -> (url: WS_URL, err: WS_URL_Error) {
+// ws_url_parse returns views into raw. The one exception is a query-only path
+// ("ws://h?q"), which needs a leading '/' and is therefore built in allocator.
+// Callers that keep the result beyond raw's or allocator's lifetime must clone
+// the fields they keep.
+ws_url_parse :: proc(
+	raw: string,
+	allocator := context.temp_allocator,
+) -> (
+	url: WS_URL,
+	err: WS_URL_Error,
+) {
 	if len(raw) == 0 ||
 	   strings.contains(raw, "\r") ||
 	   strings.contains(raw, "\n") ||
@@ -197,7 +214,7 @@ ws_url_parse :: proc(raw: string) -> (url: WS_URL, err: WS_URL_Error) {
 		authority = rest[:target_index]
 		url.path = rest[target_index:]
 		if url.path[0] == '?' {
-			url.path = strings.concatenate({"/", url.path}, context.temp_allocator)
+			url.path = strings.concatenate({"/", url.path}, allocator)
 		}
 	}
 	if strings.contains(authority, "@") do return {}, .Credentials_Forbidden

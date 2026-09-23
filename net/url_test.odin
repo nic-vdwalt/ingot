@@ -12,6 +12,19 @@ test_query_component_encode :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_url_parse_query_only_target_uses_given_allocator :: proc(t: ^testing.T) {
+	http, http_err := http_url_parse("https://example.com?q=1", context.allocator)
+	testing.expect_value(t, http_err, Http_Error.None)
+	testing.expect_value(t, http.request_target, "/?q=1")
+	delete(http.request_target)
+
+	ws, ws_err := ws_url_parse("wss://example.test?room=1", context.allocator)
+	testing.expect_value(t, ws_err, WS_URL_Error.None)
+	testing.expect_value(t, ws.path, "/?room=1")
+	delete(ws.path)
+}
+
+@(test)
 test_http_url_parse :: proc(t: ^testing.T) {
 	url, err := http_url_parse("https://example.com:8443/a?q=1")
 	testing.expect_value(t, err, Http_Error.None)

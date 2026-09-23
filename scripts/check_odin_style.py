@@ -178,6 +178,105 @@ def procedures(source: str) -> list[Procedure]:
 WAIVER = re.compile(r"^\s*//\s*tigerstyle:\s*allow-unbounded-loop\s*--\s*(.+?)\s*$")
 INVALID_WAIVER = re.compile(r"^\s*//\s*tigerstyle:\s*allow-unbounded-loop(?:\s*--\s*)?$")
 
+# `assert` and `assert_contextless` are @(disabled=ODIN_DISABLE_ASSERT): under
+# -disable-assert the compiler drops the whole call, including its arguments.
+# A condition that does work (uploads, commits, fills a buffer) silently stops
+# doing it, so conditions may only call procedures known to be pure. `ensure`
+# is never disabled and is deliberately not matched.
+ASSERT_CALL = re.compile(r"(?<![A-Za-z0-9_#.])(?:assert_contextless|assert)\s*\(")
+CONDITION_CALL = re.compile(r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*)\s*\(")
+ASSERT_WAIVER = re.compile(r"^\s*//\s*tigerstyle:\s*allow-assert-call\s*--\s*(.+?)\s*$")
+PURE_BUILTINS = frozenset(
+    {
+        "abs", "align_of", "auto_cast", "cap", "card", "cast", "clamp", "imag", "len", "max",
+        "min", "offset_of", "raw_data", "real", "size_of", "transmute", "type_info_of",
+        "type_of", "typeid_of", "bool", "b8", "b16", "b32", "b64", "int", "uint", "i8", "i16",
+        "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "uintptr", "f16", "f32",
+        "f64", "rune", "string", "cstring", "rawptr", "c_int", "c_long", "c_uint",
+    }
+)
+PURE_PATTERNS = (
+    re.compile(r"(?:^|_)(?:is|has|can)_"),
+    re.compile(r"^prepared_[a-z_]+$"),
+    re.compile(r"^terrain_recipe_validate_v[0-9]+$"),
+    re.compile(r"^[A-Z][A-Za-z0-9]*_Id$"),
+    re.compile(r"_IsValid$"),
+    re.compile(
+        r"_(?:valid|finite|settled|fits|matches|active|ready|balanced|open|kind|count"
+        r"|capacity|size|format|phase|epoch|in_flight|available|focused|nodes"
+        r"|is_ancestor|child_count|schema|length|contains|equal|equals)$"
+    ),
+)
+# Queries whose names do not follow a pure-predicate convention. Each body was
+# read and has no side effects; add a name here only after doing the same.
+PURE_NAMES = frozenset(
+    {
+        "Matrix", "_audio_handle_gen", "_audio_handle_pack", "_audio_handle_slot", "_gpu_timing_record_matches_slot",
+        "_terrain_dot_v4", "_top", "atomic_load", "atomic_load_explicit", "builder_len",
+        "calendar_days_in_month", "context_epoch", "context_ready", "frame_available",
+        "frame_owner", "frame_z", "has_prefix", "has_suffix", "layout_kind", "map_advance_progress",
+        "map_ease", "map_edge_amount", "map_segment_clear", "memory", "modal_owner_current",
+        "point_in_rect", "rects_overlap", "spell_menu_active", "theme_palette_colors_present",
+        "ti_inactive_candidate", "to_string", "ui_frame_phase", "valid_request", "walk_balanced",
+        "ws_transport_open",
+    }
+)
+
+
+def condition_call_is_pure(qualified: str) -> bool:
+    name = qualified.split(".")[-1].strip()
+    if name in PURE_BUILTINS or name in PURE_NAMES:
+        return True
+    return any(pattern.search(name) for pattern in PURE_PATTERNS)
+
+
+def assert_condition_end(masked: str, start: int) -> int:
+    depth = 0
+    index = start
+    while index < len(masked):
+        char = masked[index]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            if depth == 0:
+                return index
+            depth -= 1
+        elif char == "," and depth == 0:
+            return index
+        index += 1
+    return index
+
+
+def assert_side_effect_violations(source: str) -> list[Violation]:
+    masked = mask_source(source)
+    original_lines = source.splitlines()
+    result: list[Violation] = []
+    for match in ASSERT_CALL.finditer(masked):
+        condition_start = match.end()
+        condition = masked[condition_start : assert_condition_end(masked, condition_start)]
+        impure = [
+            call.group(1)
+            for call in CONDITION_CALL.finditer(condition)
+            if not condition_call_is_pure(call.group(1))
+        ]
+        if not impure:
+            continue
+        line = line_number(masked, match.start())
+        previous = line - 2
+        while previous >= 0 and not original_lines[previous].strip():
+            previous -= 1
+        if previous >= 0 and ASSERT_WAIVER.match(original_lines[previous]):
+            continue
+        name = " ".join(impure[0].split())
+        result.append(
+            Violation(
+                line,
+                f"assert condition calls '{name}'; -disable-assert elides it. "
+                "Hoist the call into a local",
+            )
+        )
+    return result
+
 
 def procedure_source(source: str, procedure: Procedure) -> str:
     return "\n".join(source.splitlines()[procedure.start_line - 1 : procedure.end_line])
@@ -256,6 +355,7 @@ def check_source(source: str, baseline: dict[str, int] | None = None, path: str 
                 )
             )
         violations.extend(control_flow_violations(source, procedure))
+    violations.extend(assert_side_effect_violations(source))
     return sorted(violations, key=lambda violation: (violation.line, violation.message))
 
 

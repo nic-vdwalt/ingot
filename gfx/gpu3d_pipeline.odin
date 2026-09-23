@@ -2258,7 +2258,8 @@ _gpu_3d_pass_submit :: proc(pass: ^Gpu_3D_Pass) {
 	uploaded := _gpu_3d_should_upload_stream(allow_submit)
 	if uploaded {
 		upload_started := platform_now()
-		assert(_stream_slot_upload(ctx, &ctx.rend))
+		slot_uploaded := _stream_slot_upload(ctx, &ctx.rend)
+		assert(slot_uploaded, "_gpu_3d_pass_submit: stream upload failed")
 		upload_elapsed = platform_now() - upload_started
 	}
 	cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(ctx, pass.encoder, allow_submit)
@@ -2275,13 +2276,17 @@ _gpu_3d_pass_submit :: proc(pass: ^Gpu_3D_Pass) {
 	if allow_submit && cmd != nil {
 		_stats_queue_submission(ctx)
 		if pass.owns_stream {
-			assert(_submission_commit(&ctx.submissions, retirement))
+			committed := _submission_commit(&ctx.submissions, retirement)
+			assert(committed, "_gpu_3d_pass_submit: submission commit failed")
 			if !_stream_slot_submitted(&ctx.rend, retirement) {
 				_stats_stream_retirement_failure(ctx)
 			}
 		}
 	} else if pass.owns_stream {
-		if retirement != 0 do assert(_submission_rollback(&ctx.submissions, retirement))
+		if retirement != 0 {
+			rolled_back := _submission_rollback(&ctx.submissions, retirement)
+			assert(rolled_back, "_gpu_3d_pass_submit: submission rollback failed")
+		}
 		_stream_slot_abandon(&ctx.rend)
 		_stats_stream_retirement_failure(ctx)
 	}

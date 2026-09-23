@@ -1021,7 +1021,10 @@ context_end_drawing :: proc(ctx: ^Context) {
 
 		retirement := _submission_reserve(&ctx.submissions)
 		upload_started := platform_now()
-		if retirement != 0 do assert(_stream_slot_upload(ctx, &ctx.rend))
+		if retirement != 0 {
+			slot_uploaded := _stream_slot_upload(ctx, &ctx.rend)
+			assert(slot_uploaded, "frame end: stream upload failed")
+		}
 		upload_elapsed := platform_now() - upload_started
 		_stats_frame_boundary_cpu(ctx, 0, 0, 0, 0, upload_elapsed, 0, 0, 0)
 		_gpu_timing_encoder_end(ctx, ctx.frame.encoder, ctx.frame.timing)
@@ -1044,13 +1047,21 @@ context_end_drawing :: proc(ctx: ^Context) {
 		if retirement != 0 && cmd != nil {
 			_gpu_timing_frame_submitted(ctx)
 			_stats_queue_submission(ctx)
-			assert(_submission_commit(&ctx.submissions, retirement, ctx.stats_current.frame_index))
+			committed := _submission_commit(
+				&ctx.submissions,
+				retirement,
+				ctx.stats_current.frame_index,
+			)
+			assert(committed, "frame end: submission commit failed")
 			if !_stream_slot_submitted(&ctx.rend, retirement) {
 				_stats_stream_retirement_failure(ctx)
 			}
 		} else {
 			_gpu_timing_frame_abandon(ctx)
-			if retirement != 0 do assert(_submission_rollback(&ctx.submissions, retirement))
+			if retirement != 0 {
+				rolled_back := _submission_rollback(&ctx.submissions, retirement)
+				assert(rolled_back, "frame end: submission rollback failed")
+			}
 			_stream_slot_abandon(&ctx.rend)
 			_stats_stream_retirement_failure(ctx)
 		}

@@ -70,10 +70,10 @@ other :: proc "contextless" () {
         allowed = check_init_order.Init_Procedure(
             "gfx/context.odin", "_default_context_init", 325
         )
-        extra = check_init_order.Init_Procedure("gfx/api_tests.odin", "_seed", 8)
+        extra = check_init_order.Init_Procedure("gfx/api_test.odin", "_seed", 8)
         failures = check_init_order.check_procedures([allowed, extra])
         self.assertEqual(len(failures), 1)
-        self.assertIn("gfx/api_tests.odin:8", failures[0])
+        self.assertIn("gfx/api_test.odin:8", failures[0])
 
     def test_a_differently_named_init_in_context_odin_fails(self):
         renamed = check_init_order.Init_Procedure(

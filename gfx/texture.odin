@@ -346,7 +346,8 @@ _to_rgba_into :: proc(out: []byte, src: [^]byte, w, h: i32, format: PixelFormat)
 _to_rgba :: proc(src: [^]byte, w, h: i32, format: PixelFormat) -> []byte {
 	n := int(w) * int(h)
 	out := make([]byte, n * 4)
-	assert(_to_rgba_into(out, src, w, h, format))
+	converted := _to_rgba_into(out, src, w, h, format)
+	assert(converted, "_to_rgba: conversion failed")
 	return out
 }
 

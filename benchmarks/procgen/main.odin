@@ -46,7 +46,8 @@ main :: proc() {
 	}
 	start := time.now()
 	for _ in 0 ..< BENCHMARK_ITERATIONS {
-		assert(procgen.terrain_generate_field_v2(&recipe, request, buffer))
+		generated := procgen.terrain_generate_field_v2(&recipe, request, buffer)
+		assert(generated, "terrain_generate_field_v2 failed")
 	}
 	elapsed := time.since(start)
 	fmt.printf(

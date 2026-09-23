@@ -218,7 +218,8 @@ context_end_texture_mode :: proc(ctx: ^Context) {
 		wg.RenderPassEncoderRelease(ctx.frame.rt_pass)
 		_gpu_timing_encoder_end(ctx, ctx.frame.rt_encoder, ctx.frame.rt_timing)
 		upload_started := platform_now()
-		assert(_stream_slot_upload(ctx, &ctx.rend))
+		slot_uploaded := _stream_slot_upload(ctx, &ctx.rend)
+		assert(slot_uploaded, "render target end: stream upload failed")
 		upload_elapsed := platform_now() - upload_started
 		cmd, encode_elapsed, submit_elapsed := _stats_finish_submit(
 			ctx,

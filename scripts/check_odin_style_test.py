@@ -95,6 +95,79 @@ class OdinStyleTest(unittest.TestCase):
         violations = check_odin_style.check_source(source)
         self.assertEqual(len(violations), 2)
 
+    def test_assert_condition_with_side_effecting_call_is_rejected(self):
+        source = "p :: proc(out: []u8) {\n\tassert(_to_rgba_into(out, nil, 1, 1, .R8))\n}\n"
+        violations = check_odin_style.check_source(source)
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].line, 2)
+        self.assertIn("'_to_rgba_into'", violations[0].message)
+
+    def test_multiline_and_qualified_assert_conditions_are_rejected(self):
+        source = (
+            "p :: proc() {\n"
+            "\tassert(\n"
+            "\t\tprocgen.terrain_generate_field_v2(&recipe, request, buffer),\n"
+            "\t\t\"generate failed\",\n"
+            "\t)\n"
+            "\tif ticket != 0 do assert_contextless(_submission_rollback(tracker, ticket))\n"
+            "}\n"
+        )
+        violations = check_odin_style.check_source(source)
+        self.assertEqual([violation.line for violation in violations], [2, 6])
+        self.assertIn("'procgen.terrain_generate_field_v2'", violations[0].message)
+        self.assertIn("'_submission_rollback'", violations[1].message)
+
+    def test_pure_assert_conditions_are_accepted(self):
+        source = (
+            "p :: proc(items: []int, frame: ^Frame) {\n"
+            "\tassert(len(items) > 0 && u32(len(items)) < max(u32))\n"
+            "\tassert(text_metrics_valid(metrics), \"invalid: \" + describe(metrics))\n"
+            "\tassert(layout_kind(&u.layout) == .Row && is_ready(frame))\n"
+            "\tassert(prepared_capacity(&builder.prepared) == len(outputs))\n"
+            "\tuploaded := _stream_slot_upload(ctx, &ctx.rend)\n"
+            "\tassert(uploaded, \"upload failed\")\n"
+            "\t#assert(size_of(Node) == 16)\n"
+            "}\n"
+        )
+        self.assertEqual(check_odin_style.check_source(source), [])
+
+    def test_ensure_and_testing_expect_are_not_assert_calls(self):
+        source = (
+            "p :: proc(t: ^testing.T) {\n"
+            "\tensure(_submission_commit(tracker, ticket))\n"
+            "\ttesting.expect(t, _submission_commit(tracker, ticket))\n"
+            "\ttesting.expect_assert_message(t, \"x\")\n"
+            "}\n"
+        )
+        self.assertEqual(check_odin_style.check_source(source), [])
+
+    def test_assert_calls_in_comments_and_strings_are_ignored(self):
+        source = (
+            "p :: proc() {\n"
+            "\t// assert(_stream_slot_upload(ctx, &ctx.rend))\n"
+            "\tmessage := \"assert(_stream_slot_upload(ctx))\"\n"
+            "}\n"
+        )
+        self.assertEqual(check_odin_style.check_source(source), [])
+
+    def test_assert_call_waiver_requires_a_rationale(self):
+        accepted = (
+            "p :: proc() {\n"
+            "\t// tigerstyle: allow-assert-call -- debug-only probe, skipped work is intended\n"
+            "\tassert(probe_counters(ctx))\n"
+            "}\n"
+        )
+        self.assertEqual(check_odin_style.check_source(accepted), [])
+        rejected = (
+            "p :: proc() {\n"
+            "\t// tigerstyle: allow-assert-call --\n"
+            "\tassert(probe_counters(ctx))\n"
+            "}\n"
+        )
+        violations = check_odin_style.check_source(rejected)
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].line, 3)
+
 
 if __name__ == "__main__":
     unittest.main()
