@@ -17,7 +17,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 source "$root/scripts/odin-toolchain.sh"
 ingot_use_pinned_odin "$root"
 
-ODIN_WINDOWS_ASSET=539931267
+ODIN_WINDOWS_ASSET=504098430
 WGPU_WINDOWS_ASSET=455571718
 WGPU_LINUX_X64_ASSET=455571719
 WGPU_LINUX_ARM64_ASSET=455571722

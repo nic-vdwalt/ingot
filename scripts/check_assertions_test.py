@@ -342,10 +342,6 @@ class PackageSelectionTest(unittest.TestCase):
         self.assertNotIn("client/src/b_test.odin", sources)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ContextlessAssertionTest(unittest.TestCase):
     # assert_contextless is the only assertion form available inside a
     # `proc "contextless"`, which is what every platform event callback must
@@ -378,6 +374,37 @@ class ContextlessAssertionTest(unittest.TestCase):
 '''
         findings = self.findings(source)
         self.assertTrue(any("index" in f.risks for f in findings), findings)
+
+
+class BaselineRatchetTest(unittest.TestCase):
+    """The consumer ratchet: accepted debt passes, change against it fails."""
+
+    def finding(self, *risks: str) -> check_assertions.Finding:
+        return check_assertions.Finding("src/a.odin", "p", 1, risks, 0)
+
+    def test_without_baseline_every_finding_fails(self):
+        failures = check_assertions.check_findings({"src/a.odin:p": self.finding("index")})
+        self.assertEqual(failures, ["src/a.odin:p: uncovered assertion risks: index"])
+
+    def test_recorded_debt_passes(self):
+        current = {"src/a.odin:p": self.finding("index")}
+        self.assertEqual(check_assertions.check_findings(current, {"src/a.odin:p": ["index"]}), [])
+
+    def test_new_risk_fails(self):
+        current = {"src/a.odin:p": self.finding("index", "queue")}
+        failures = check_assertions.check_findings(current, {"src/a.odin:p": ["index"]})
+        self.assertEqual(failures, ["src/a.odin:p: uncovered assertion risks added: queue"])
+
+    def test_paid_debt_must_leave_the_baseline(self):
+        failures = check_assertions.check_findings({}, {"src/a.odin:p": ["index"]})
+        self.assertEqual(failures, ["src/a.odin:p: stale assertion baseline entry; remove it"])
+
+    def test_baseline_rejects_unknown_risks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "baseline.json"
+            path.write_text('{"src/a.odin:p": ["indx"]}', encoding="utf-8")
+            with self.assertRaises(ValueError):
+                check_assertions.read_baseline(path)
 
 
 if __name__ == "__main__":
