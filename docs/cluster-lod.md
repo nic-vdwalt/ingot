@@ -2,7 +2,7 @@
 
 A cooked mesh may carry a directed acyclic graph of triangle clusters instead
 of, or alongside, a discrete LOD chain. The graph is built offline by
-`ingot:procgen` and validated by `ingot:asset`; `ingot:scene` selects from it at
+`ingot:mesh` and validated by `ingot:asset`; `ingot:scene` selects from it at
 runtime. The file encoding is in [cooked-mesh-v2.md](cooked-mesh-v2.md).
 
 ## What this is and is not
@@ -67,14 +67,14 @@ become degenerate. The protection is re-derived from the base lock every pass
 rather than accumulated, so the frozen region tracks the current geometry
 instead of growing without bound.
 
-`procgen/mesh_cluster_test.odin` verifies this directly: it recomputes group
+`mesh/mesh_cluster_test.odin` verifies this directly: it recomputes group
 membership from the finished DAG — independently of the builder's own
 bookkeeping — and asserts every shared position exists bit-identically in the
 parent level.
 
 ## Build
 
-`procgen.cluster_build` runs four steps:
+`mesh.cluster_build` runs four steps:
 
 1. **Partition.** Triangles are sorted by the Morton code of their centroid and
    cut into runs of at most `CLUSTER_MAX_TRIANGLES` (128). Morton order is a
@@ -100,7 +100,7 @@ equal errors would make the selection rule ambiguous.
 
 ## The simplifier
 
-`procgen.simplify_mesh` is Garland-Heckbert with two deliberate departures:
+`mesh.simplify_mesh` is Garland-Heckbert with two deliberate departures:
 
 - **Collapses move onto an existing vertex**, not to the optimal point. That
   costs a little quality and buys a lot of safety: no matrix inversion, no

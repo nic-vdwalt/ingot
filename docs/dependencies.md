@@ -14,10 +14,10 @@ linked. These are compile-time compositions, not runtime profiles.
 | Networked tool | GUI packages plus `ingot:net` | Native libcurl; browser Fetch/WebSocket APIs |
 | Terminal tool | GUI packages plus `ingot:term` | `ingot:pty`, `ingot:libvterm`, platform PTY/ConPTY |
 | Graphics application | `ingot:gfx` | WebGPU/wgpu-native and exactly one native host: GLFW or SDL3 |
-| Engine application | Explicit `asset`, `ecs`, `procgen`, `scene`, or `scene_gfx` imports | No GUI dependency is implied |
+| Engine application | Explicit `asset`, `ecs`, `mesh`, `noise`, `scene`, or `scene_gfx` imports | No GUI dependency is implied |
 
 A minimal GUI must not import `net`, `term`, `pty`, `libvterm`, `accesskit`,
-`ecs`, `procgen`, `scene`, or `scene_gfx` directly. `ui_gfx` owns the optional
+`ecs`, `mesh`, `noise`, `scene`, or `scene_gfx` directly. `ui_gfx` owns the optional
 accessibility host integration; applications do not start with the binding
 package.
 

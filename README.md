@@ -188,6 +188,7 @@ odin run examples/gallery -collection:ingot=.
 - [Testing](docs/testing.md)
 - [Compatibility](docs/compatibility.md)
 - [Rendering](docs/rendering.md)
+- [Mesh pipeline](docs/mesh-pipeline.md)
 - [Networking](docs/networking.md)
 - [Migrating from raylib](docs/raylib-migration.md)
 - [Production readiness](docs/production-readiness.md)

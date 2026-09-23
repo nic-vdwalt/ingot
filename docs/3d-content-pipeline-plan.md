@@ -109,9 +109,10 @@ does not block on it.
 ## Phases
 
 Procedural content establishes the cooked-data and scene contracts before file
-import. `examples/procgen_world` is the first end-to-end consumer: deterministic
-terrain chunks, biome placements, bounded draw-list construction, residency,
-and explicit GPU 3D replay. glTF import follows once generated and imported
+import. The first end-to-end consumers are the forgecore demos, whose
+`forgecore:worldgen` package generates deterministic terrain chunks and biome
+placements for bounded draw-list construction, residency, and explicit GPU 3D
+replay. glTF import follows once generated and imported
 content can converge on the same validated cooked representation.
 
 The initial terrain renderer uses the existing scalar two-color material.

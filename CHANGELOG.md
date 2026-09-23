@@ -25,6 +25,42 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   or write through a parameter, and in-tree procedures listed in
   `EXTERNAL_PURE_NAMES`, which is reserved for `core:`/`base:` queries. Calls
   to declared types (`Asset_Id(x)`, `Matrix(…)`) count as pure conversions.
+- `ingot:noise`: seeded value noise (`noise_2d`, `noise_3d`), fractal and
+  domain-warped variants, and `Noise_Config`, extracted from `ingot:procgen`.
+  The lattice hash is now public as `noise_hash` (was `_noise_hash`).
+- `scripts/check.sh` and `scripts/check.ps1` vet `net` with
+  `-define:INGOT_WS_SIM=true`, so imports used only by the real transport cannot
+  hide behind the default build.
+
+### Changed
+
+- **Breaking:** `ingot:procgen` is renamed `ingot:mesh` and keeps only the mesh
+  pipeline: `simplify_*`, `optimize_*`, `cluster_build`, `cook_*`,
+  `mesh_scale_variant`, `mesh_deform_variant` and their types. Replace
+  `import "ingot:procgen"` with `import "ingot:mesh"` for these symbols.
+- **Breaking:** world generation moved out of Ingot into the forgecore
+  repository as `forgecore:worldgen` (terrain V1–V4, biome regions, sampled and
+  volume terrain meshing, water, feature placement, creature morphology). Its
+  API is unchanged apart from the package name; build with
+  `-collection:forgecore=<forgecore>`.
+
+  | Old symbol | New package |
+  |---|---|
+  | `procgen.simplify_*`, `optimize_*`, `cluster_*`, `cook_*`, `Mesh_*`, `mesh_*_variant` | `ingot:mesh` |
+  | `procgen.noise_2d`, `noise_3d`, `fractal_*`, `warped_fractal_*`, `Noise_Config` | `ingot:noise` |
+  | `procgen.terrain_*`, `Terrain_*`, `TERRAIN_*`, `water_*`, `feature_placement_*`, `Feature_Placement*`, `creature_mesh_*`, `Creature_*` | `forgecore:worldgen` |
+
+- The mesh pipeline documentation moved to `docs/mesh-pipeline.md`; the
+  world-generation half of `docs/procedural-generation.md` moved to
+  `forgecore/worldgen/README.md`.
+- README pins now name `0.2.1`, the latest source tag.
+
+### Removed
+
+- `examples/procgen_world`, `fuzz/procgen` and `benchmarks/procgen`. The fuzzer
+  and benchmark moved to forgecore as `bash build.sh worldgen-fuzz` and
+  `bash build.sh worldgen-bench`; `fuzz/run.sh procgen` no longer exists.
+- The tracked `.DS_Store` and the empty `ui/legacy_metrics.odin`.
 
 ### Fixed
 
@@ -38,8 +74,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - Builds with `-disable-assert` no longer skip real work in `gfx`. Stream
   uploads, submission commit and rollback, GPU timing sample arming and texture
   RGBA conversion ran inside `assert` conditions and were compiled out, leaving
-  zeroed textures and unsubmitted or untracked frames. The procgen benchmark
-  had the same pattern.
+  zeroed textures and unsubmitted or untracked frames. The terrain benchmark
+  (then `benchmarks/procgen`, now forgecore's `worldgen-bench`) had the same
+  pattern.
 
 ## [0.2.1] - 2026-09-15
 

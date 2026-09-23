@@ -20,7 +20,8 @@ worked example applied to a subsystem before it is written.
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ingot:asset`         | Validated cooked mesh data. Must not import `ingot:gfx`.                                                                                                          |
 | `ingot:ecs`           | Sparse-set ECS: generational `Entity_Pool`, typed `Set(T)` registered via `Set_Header`, join iterators, bounded `Deferred` buffer, blittable snapshots. Zero non-`base` imports. |
-| `ingot:procgen`       | Seeded bounded generators. Imports `asset`, never `gfx`.                                                                                                          |
+| `ingot:mesh`          | Mesh pipeline: simplify, optimize, cluster DAG, LOD cooking, variants. Imports `asset`/`noise`, never `gfx`.                                                      |
+| `ingot:noise`         | Seeded 2D/3D value noise and fractal/warped variants. Zero non-`core` imports.                                                                                    |
 | `ingot:scene`         | Visibility, LOD, sorting, and draw lists. Must not import `gfx`.                                                                                                  |
 | `ingot:scene_gfx`     | The only scene-to-`gfx` upload and replay bridge.                                                                                                                 |
 | `ingot:gfx`           | graphics core (raylib-shaped): window/context, 2D shapes, textures, text atlas, input, math, cameras, `rlgl` shim                                                 |

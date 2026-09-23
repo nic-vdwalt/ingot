@@ -165,9 +165,9 @@ additionally checked byte for byte against the independent test writer in
 `cooked_mesh_v2_test.odin`, so agreeing with the format is distinguishable from
 agreeing with itself.
 
-`ingot:procgen` supplies the geometry half through `cook_chain_from_policy` and
+`ingot:mesh` supplies the geometry half through `cook_chain_from_policy` and
 `cook_chain_from_clusters`; see
-[procedural-generation.md](procedural-generation.md).
+[mesh-pipeline.md](mesh-pipeline.md).
 
 ## Index order is part of the contract
 
@@ -177,11 +177,11 @@ because each pass assumes the previous one has run. Level 0 is included even
 though it is the source geometry rather than a simplification of it.
 
 Two implementations produce that order and they must agree:
-`procgen/mesh_optimize.odin` for the runtime cook and `tools/mesh_cook.py` for
+`mesh/mesh_optimize.odin` for the runtime cook and `tools/mesh_cook.py` for
 the offline one. Neither can call the other — the offline cook runs inside
 Blender's bundled interpreter — so the duplication is structural rather than
 accidental, and the only thing keeping it honest is that
-`procgen/mesh_optimize_test.odin` and `tools/test_mesh_cook.py` assert the same
+`mesh/mesh_optimize_test.odin` and `tools/test_mesh_cook.py` assert the same
 golden index order for the same input grid. Change one implementation and the
 other's test fails.
 
