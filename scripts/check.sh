@@ -76,6 +76,12 @@ for pkg in $(manifest_values check_packages); do
 	odin check "$root/$pkg" $col $vet_flags "$@"
 done
 
+# The simulated WebSocket transport compiles a different import set; vet it so
+# an import used only by the real transport cannot hide behind the default mode.
+echo "== checking net (INGOT_WS_SIM=true, vet) =="
+# shellcheck disable=SC2086
+odin check "$root/net" $col $vet_flags -define:INGOT_WS_SIM=true "$@"
+
 # Simulated-transport builds are a separate compilation of the same packages:
 # a `when !INGOT_*_SIM` block hides code from one mode and reveals it in the
 # other, so a default-mode check cannot see breakage in the sim mode. This is

@@ -1,10 +1,10 @@
 #+build !js
 package ingotnet
 
-import "core:c"
-import "core:fmt"
+@(require) import "core:c"
+@(require) import "core:fmt"
 import cnet "core:net"
-import "core:strings"
+@(require) import "core:strings"
 import "core:sync"
 import "core:time"
 

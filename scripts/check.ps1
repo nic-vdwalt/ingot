@@ -45,6 +45,9 @@ foreach ($Package in $Manifest.check_packages) {
     & odin check "$Root/$Package" $Collection -vet -strict-style -vet-shadowing -no-entry-point @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
+Write-Host "== checking net (INGOT_WS_SIM=true, vet) =="
+& odin check "$Root/net" $Collection -vet -strict-style -vet-shadowing -no-entry-point -define:INGOT_WS_SIM=true @OdinFlags
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($Mode in $Manifest.simulation_modes) {
     $Package = $Mode[0]
     $Define = $Mode[1]

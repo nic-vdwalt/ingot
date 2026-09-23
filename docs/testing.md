@@ -194,6 +194,24 @@ fuzz/run.sh net 12345
 fuzz/run.sh net 12345 100000
 ```
 
+`fuzz/run.sh` targets:
+
+| Target | Surface |
+|---|---|
+| `net` | HTTP/WebSocket parsing and simulated transport |
+| `ui` | Widget tree and frame lifecycle |
+| `view` | `.ingv` decoder: random bytes, mutated files, and forged length fields |
+| `term` | In-package terminal fuzz tests (`odin test`, `INGOT_PTY_SIM`) |
+| `interact` | Widget interaction sequences with synthetic input (`INGOT_INPUT_SIM`) |
+| `input` | Text-input edit operations (in-package, high iteration count) |
+| `wsreconn` | WebSocket reconnect state machine against a real worker thread (`INGOT_WS_SIM`) |
+| `procgen` | Terrain chunk and volume generation |
+| `gpu3d` | Headless 3D mesh, camera, frustum, and picking checks |
+| `tsan` | ThreadSanitizer pass over `wsreconn`, net tests, and the accessibility queue |
+| `gfx-frame` | Windowed GPU lifecycle; needs a display and is not part of `all` |
+| `corpus` | Replays the minimized regression corpus in `testdata/seeds` |
+| `all` / `soak` | Every headless target plus `tsan`; `soak` repeats with fresh seeds |
+
 Headless targets build with debug information and AddressSanitizer by default.
 Harnesses use `mem.Tracking_Allocator` where applicable so leaks and invalid
 ownership transitions fail the run.

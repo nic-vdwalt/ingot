@@ -9,6 +9,32 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+### Added
+
+- `http_url_parse` and `ws_url_parse` take an optional `allocator` (default
+  `context.temp_allocator`) for the one field they allocate: the `"/"`-prefixed
+  target of a query-only URL such as `wss://host?room=1`. Other fields still
+  borrow the input string. Existing calls compile unchanged.
+- `scripts/check_odin_style.py` rejects `assert`/`assert_contextless`
+  conditions that call procedures not known to be pure, because
+  `-disable-assert` drops the whole call including its arguments. Waive a
+  deliberate case with `// tigerstyle: allow-assert-call -- reason`.
+
+### Fixed
+
+- `Web_Socket` now owns its request path and `ca_file`. A query-only URL's path
+  was previously borrowed from the caller's temp allocator and `ca_file` from
+  the caller's string, so the connect worker could read freed memory during the
+  handshake or TLS setup.
+- `gfx` test code no longer ships in library builds: `gfx/api_tests.odin` is now
+  `gfx/api_test.odin`, so native builds stop linking its test globals,
+  `core:testing` import and QuartzCore test binding.
+- Builds with `-disable-assert` no longer skip real work in `gfx`. Stream
+  uploads, submission commit and rollback, GPU timing sample arming and texture
+  RGBA conversion ran inside `assert` conditions and were compiled out, leaving
+  zeroed textures and unsubmitted or untracked frames. The procgen benchmark
+  had the same pattern.
+
 ## [0.2.1] - 2026-09-15
 
 This is a source-only release; no binaries, installers, or web bundles are attached.

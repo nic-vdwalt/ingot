@@ -184,7 +184,9 @@ INVALID_WAIVER = re.compile(r"^\s*//\s*tigerstyle:\s*allow-unbounded-loop(?:\s*-
 # doing it, so conditions may only call procedures known to be pure. `ensure`
 # is never disabled and is deliberately not matched.
 ASSERT_CALL = re.compile(r"(?<![A-Za-z0-9_#.])(?:assert_contextless|assert)\s*\(")
-CONDITION_CALL = re.compile(r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*)\s*\(")
+CONDITION_CALL = re.compile(
+    r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*)\s*\("
+)
 ASSERT_WAIVER = re.compile(r"^\s*//\s*tigerstyle:\s*allow-assert-call\s*--\s*(.+?)\s*$")
 PURE_BUILTINS = frozenset(
     {
@@ -211,7 +213,8 @@ PURE_PATTERNS = (
 # read and has no side effects; add a name here only after doing the same.
 PURE_NAMES = frozenset(
     {
-        "Matrix", "_audio_handle_gen", "_audio_handle_pack", "_audio_handle_slot", "_gpu_timing_record_matches_slot",
+        "Matrix", "_audio_handle_gen", "_audio_handle_pack", "_audio_handle_slot",
+        "_gpu_timing_record_matches_slot",
         "_terrain_dot_v4", "_top", "atomic_load", "atomic_load_explicit", "builder_len",
         "calendar_days_in_month", "context_epoch", "context_ready", "frame_available",
         "frame_owner", "frame_z", "has_prefix", "has_suffix", "layout_kind", "map_advance_progress",
