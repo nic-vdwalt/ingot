@@ -9,9 +9,9 @@
 // logic. The sim maintains its own held state and input.odin's *Down
 // queries consult it under `when INGOT_INPUT_SIM`.
 //
-// Contract: the harness drives frames itself - call SimBeginFrame() at the
+// Contract: the harness drives frames itself - call sim_begin_frame() at the
 // top of each simulated frame (mirrors input_poll's clear phase), then
-// SimMouse/SimButton/SimKey/SimChar to stage events. Never call EndDrawing
+// sim_mouse/sim_button/sim_key/sim_char to stage events. Never call EndDrawing
 // or input_poll (they touch the platform layer, which has no window).
 package gfx
 
@@ -39,8 +39,13 @@ when INGOT_INPUT_SIM {
 		ctx.inp.wheel_pending = {}
 	}
 
-	SimBeginFrame :: proc() {
+	sim_begin_frame :: proc() {
 		context_sim_begin_frame(default_context())
+	}
+
+	@(deprecated = "use sim_begin_frame")
+	SimBeginFrame :: proc() {
+		sim_begin_frame()
 	}
 
 	context_sim_pointer :: proc(ctx: ^Context, event: Pointer_Event) -> bool {
@@ -59,8 +64,13 @@ when INGOT_INPUT_SIM {
 		return true
 	}
 
-	SimPointer :: proc(event: Pointer_Event) -> bool {
+	sim_pointer :: proc(event: Pointer_Event) -> bool {
 		return context_sim_pointer(default_context(), event)
+	}
+
+	@(deprecated = "use sim_pointer")
+	SimPointer :: proc(event: Pointer_Event) -> bool {
+		return sim_pointer(event)
 	}
 
 	context_sim_mouse :: proc(ctx: ^Context, x, y: f32) {
@@ -70,8 +80,13 @@ when INGOT_INPUT_SIM {
 		ctx.inp.mouse = {x, y}
 	}
 
-	SimMouse :: proc(x, y: f32) {
+	sim_mouse :: proc(x, y: f32) {
 		context_sim_mouse(default_context(), x, y)
+	}
+
+	@(deprecated = "use sim_mouse")
+	SimMouse :: proc(x, y: f32) {
+		sim_mouse(x, y)
 	}
 
 	context_sim_button :: proc(ctx: ^Context, button: MouseButton, down: bool) {
@@ -83,8 +98,13 @@ when INGOT_INPUT_SIM {
 		ctx.inp.mb_down[b] = down
 	}
 
-	SimButton :: proc(button: MouseButton, down: bool) {
+	sim_button :: proc(button: MouseButton, down: bool) {
 		context_sim_button(default_context(), button, down)
+	}
+
+	@(deprecated = "use sim_button")
+	SimButton :: proc(button: MouseButton, down: bool) {
+		sim_button(button, down)
 	}
 
 	context_sim_key :: proc(ctx: ^Context, key: KeyboardKey, down: bool, repeat := false) {
@@ -100,8 +120,13 @@ when INGOT_INPUT_SIM {
 		ctx.inp.key_down[i] = down
 	}
 
-	SimKey :: proc(key: KeyboardKey, down: bool, repeat := false) {
+	sim_key :: proc(key: KeyboardKey, down: bool, repeat := false) {
 		context_sim_key(default_context(), key, down, repeat)
+	}
+
+	@(deprecated = "use sim_key")
+	SimKey :: proc(key: KeyboardKey, down: bool, repeat := false) {
+		sim_key(key, down, repeat)
 	}
 
 	context_sim_char :: proc(ctx: ^Context, r: rune) {
@@ -109,8 +134,13 @@ when INGOT_INPUT_SIM {
 		_push_char_input(&ctx.inp, r)
 	}
 
-	SimChar :: proc(r: rune) {
+	sim_char :: proc(r: rune) {
 		context_sim_char(default_context(), r)
+	}
+
+	@(deprecated = "use sim_char")
+	SimChar :: proc(r: rune) {
+		sim_char(r)
 	}
 
 	context_sim_wheel :: proc(ctx: ^Context, dx, dy: f32) {
@@ -119,8 +149,13 @@ when INGOT_INPUT_SIM {
 		ctx.inp.wheel.y += dy
 	}
 
-	SimWheel :: proc(dx, dy: f32) {
+	sim_wheel :: proc(dx, dy: f32) {
 		context_sim_wheel(default_context(), dx, dy)
+	}
+
+	@(deprecated = "use sim_wheel")
+	SimWheel :: proc(dx, dy: f32) {
+		sim_wheel(dx, dy)
 	}
 
 	context_sim_reset :: proc(ctx: ^Context) {
@@ -128,7 +163,12 @@ when INGOT_INPUT_SIM {
 		ctx.inp = {}
 	}
 
-	SimReset :: proc() {
+	sim_reset :: proc() {
 		context_sim_reset(default_context())
+	}
+
+	@(deprecated = "use sim_reset")
+	SimReset :: proc() {
+		sim_reset()
 	}
 }

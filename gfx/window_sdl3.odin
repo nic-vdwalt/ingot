@@ -69,7 +69,12 @@ when INGOT_GFX_SDL3 {
 		if .WINDOW_UNFOCUSED not_in ctx.config_flags do context_focus_window(ctx)
 	}
 
-	ShowWindow :: proc() {context_show_window(default_context())}
+	show_window :: proc() {context_show_window(default_context())}
+
+	@(deprecated = "use show_window")
+	ShowWindow :: proc() {
+		show_window()
+	}
 
 	context_focus_window :: proc(ctx: ^Context) {
 		if ctx == nil || ctx.win == nil do return
@@ -77,7 +82,12 @@ when INGOT_GFX_SDL3 {
 		_ = sdl.RaiseWindow(_sdl_window(ctx))
 	}
 
-	FocusWindow :: proc() {context_focus_window(default_context())}
+	focus_window :: proc() {context_focus_window(default_context())}
+
+	@(deprecated = "use focus_window")
+	FocusWindow :: proc() {
+		focus_window()
+	}
 
 	@(private)
 	_drop_paths_clear_context :: proc(ctx: ^Context) {
@@ -146,8 +156,13 @@ when INGOT_GFX_SDL3 {
 		return data
 	}
 
-	GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
+	get_dropped_file_data :: proc(index: i32, allocator := context.allocator) -> []byte {
 		return context_get_dropped_file_data(default_context(), index, allocator)
+	}
+
+	@(deprecated = "use get_dropped_file_data")
+	GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
+		return get_dropped_file_data(index, allocator)
 	}
 
 	@(private)

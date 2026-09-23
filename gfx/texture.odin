@@ -116,8 +116,13 @@ context_set_texture_sampling_checked :: proc(
 	return true
 }
 
-SetTextureSamplingChecked :: proc(texture: Texture2D, sampling: Texture_Sampling) -> bool {
+set_texture_sampling_checked :: proc(texture: Texture2D, sampling: Texture_Sampling) -> bool {
 	return context_set_texture_sampling_checked(default_context(), texture, sampling)
+}
+
+@(deprecated = "use set_texture_sampling_checked")
+SetTextureSamplingChecked :: proc(texture: Texture2D, sampling: Texture_Sampling) -> bool {
+	return set_texture_sampling_checked(texture, sampling)
 }
 
 context_load_texture_mips_checked :: proc(
@@ -158,11 +163,19 @@ context_load_texture_mips_checked :: proc(
 	return texture
 }
 
-LoadTextureMipsChecked :: proc(
+load_texture_mips_checked :: proc(
 	levels: []Texture_Mip_Data,
 	sampling: Texture_Sampling,
 ) -> Texture2D {
 	return context_load_texture_mips_checked(default_context(), levels, sampling)
+}
+
+@(deprecated = "use load_texture_mips_checked")
+LoadTextureMipsChecked :: proc(
+	levels: []Texture_Mip_Data,
+	sampling: Texture_Sampling,
+) -> Texture2D {
+	return load_texture_mips_checked(levels, sampling)
 }
 
 texture_mip_chain_valid :: proc(levels: []Texture_Mip_Data, expected_count: u32) -> bool {
@@ -365,7 +378,7 @@ _new_rt_color :: proc(ctx: ^Context, w, h: i32, format: wg.TextureFormat) -> Tex
 	e.sample_count = 1
 	e.mip_count = 1
 	e.usage = {.RenderAttachment, .TextureBinding, .CopyDst, .CopySrc}
-	// CopySrc is what makes SaveRenderTexturePng (screenshot.odin) possible: the
+	// CopySrc is what makes save_render_texture_png (screenshot.odin) possible: the
 	// swapchain is configured RenderAttachment-only (context.odin), so every
 	// readback must route through a render target. The flag is free on an
 	// already-renderable colour format.
@@ -496,7 +509,7 @@ _unload_depth :: proc(ctx: ^Context, depth: Texture2D) {
 
 // LoadTextureFromImage uploads `image` and registers it in the context's
 // texture pool. Returns a zero Texture2D when the pool is full (see
-// TextureSlotsUsed) or the image is empty - a full pool is an operating
+// texture_slots_used) or the image is empty - a full pool is an operating
 // condition, so callers must check IsTextureValid rather than assume success.
 context_load_texture_from_image :: proc(ctx: ^Context, image: Image) -> Texture2D {
 	assert(ctx != nil, "context_load_texture_from_image: nil context")
@@ -652,17 +665,32 @@ context_update_texture_mips_checked :: proc(
 	return true
 }
 
-UpdateTextureMipsChecked :: proc(texture: Texture2D, levels: []Texture_Mip_Data) -> bool {
+update_texture_mips_checked :: proc(texture: Texture2D, levels: []Texture_Mip_Data) -> bool {
 	return context_update_texture_mips_checked(default_context(), texture, levels)
 }
 
-UpdateTextureChecked :: proc(
+@(deprecated = "use update_texture_mips_checked")
+UpdateTextureMipsChecked :: proc(texture: Texture2D, levels: []Texture_Mip_Data) -> bool {
+	return update_texture_mips_checked(texture, levels)
+}
+
+update_texture_checked :: proc(
 	texture: Texture2D,
 	pixels: rawptr,
 	byte_count: int,
 	format: PixelFormat,
 ) -> bool {
 	return context_update_texture_checked(default_context(), texture, pixels, byte_count, format)
+}
+
+@(deprecated = "use update_texture_checked")
+UpdateTextureChecked :: proc(
+	texture: Texture2D,
+	pixels: rawptr,
+	byte_count: int,
+	format: PixelFormat,
+) -> bool {
+	return update_texture_checked(texture, pixels, byte_count, format)
 }
 
 context_update_texture :: proc(ctx: ^Context, texture: Texture2D, pixels: rawptr) {
@@ -716,7 +744,7 @@ UnloadTexture :: proc(texture: Texture2D) {
 	context_unload_texture(default_context(), texture)
 }
 
-// TextureSlotsUsed reports how many of the context's texture slots are
+// texture_slots_used reports how many of the context's texture slots are
 // occupied. Consumers that cache many textures (tile maps, sprite streamers)
 // need this to size their own budget: the pool is shared with fonts, UI icons
 // and render targets (capacity is MAX_TEXTURES), and LoadTextureFromImage
@@ -730,8 +758,13 @@ context_texture_slots_used :: proc(ctx: ^Context) -> int {
 	return count
 }
 
-TextureSlotsUsed :: proc() -> int {
+texture_slots_used :: proc() -> int {
 	return context_texture_slots_used(default_context())
+}
+
+@(deprecated = "use texture_slots_used")
+TextureSlotsUsed :: proc() -> int {
+	return texture_slots_used()
 }
 
 // IsTextureValid reports whether `texture` refers to a live slot. A loader

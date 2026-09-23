@@ -26,10 +26,15 @@ _screenshot_retire :: proc(ctx: ^Context, wait: bool) -> bool {
 	return true
 }
 
-// SaveRenderTexturePng always fails on web: there is no filesystem destination.
+// save_render_texture_png always fails on web: there is no filesystem destination.
 // Native behaviour is documented in screenshot.odin.
-SaveRenderTexturePng :: proc(target: RenderTexture2D, path: string) -> bool {
-	assert(len(path) >= 0, "SaveRenderTexturePng: invalid path slice")
-	assert(target.id == target.texture.id, "SaveRenderTexturePng: torn target handle")
+save_render_texture_png :: proc(target: RenderTexture2D, path: string) -> bool {
+	assert(len(path) >= 0, "save_render_texture_png: invalid path slice")
+	assert(target.id == target.texture.id, "save_render_texture_png: torn target handle")
 	return false
+}
+
+@(deprecated = "use save_render_texture_png")
+SaveRenderTexturePng :: proc(target: RenderTexture2D, path: string) -> bool {
+	return save_render_texture_png(target, path)
 }

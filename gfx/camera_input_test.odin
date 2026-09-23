@@ -29,12 +29,12 @@ when INGOT_INPUT_SIM {
 	@(private = "file")
 	sim_lock :: proc() {
 		gfx_shared_test_lock()
-		SimReset()
+		sim_reset()
 	}
 
 	@(private = "file")
 	sim_unlock :: proc() {
-		SimReset()
+		sim_reset()
 		gfx_shared_test_unlock()
 	}
 
@@ -44,18 +44,18 @@ when INGOT_INPUT_SIM {
 		defer sim_unlock()
 		bindings := orbit_camera_bindings_default()
 
-		SimBeginFrame()
-		SimKey(.A, true)
-		SimKey(.S, true)
+		sim_begin_frame()
+		sim_key(.A, true)
+		sim_key(.S, true)
 		left := orbit_camera_input_poll(bindings)
 		testing.expect_value(t, left.rotate_rate.x, f32(1))
 		testing.expect_value(t, left.zoom_rate, f32(1))
 
-		SimBeginFrame()
-		SimKey(.A, false)
-		SimKey(.S, false)
-		SimKey(.RIGHT, true)
-		SimKey(.UP, true)
+		sim_begin_frame()
+		sim_key(.A, false)
+		sim_key(.S, false)
+		sim_key(.RIGHT, true)
+		sim_key(.UP, true)
 		right := orbit_camera_input_poll(bindings)
 		testing.expect_value(t, right.rotate_rate.x, f32(-1))
 		testing.expect_value(t, right.zoom_rate, f32(-1))
@@ -66,11 +66,11 @@ when INGOT_INPUT_SIM {
 	orbit_camera_input_poll_cancels_opposed_keys :: proc(t: ^testing.T) {
 		sim_lock()
 		defer sim_unlock()
-		SimBeginFrame()
-		SimKey(.A, true)
-		SimKey(.D, true)
-		SimKey(.W, true)
-		SimKey(.S, true)
+		sim_begin_frame()
+		sim_key(.A, true)
+		sim_key(.D, true)
+		sim_key(.W, true)
+		sim_key(.S, true)
 		input := orbit_camera_input_poll(orbit_camera_bindings_default())
 		testing.expect_value(t, input.rotate_rate.x, f32(0))
 		testing.expect_value(t, input.zoom_rate, f32(0))
@@ -82,16 +82,16 @@ when INGOT_INPUT_SIM {
 		defer sim_unlock()
 		bindings := orbit_camera_bindings_default()
 
-		SimBeginFrame()
-		SimMouse(10, 20)
-		SimBeginFrame()
-		SimMouse(14, 26)
+		sim_begin_frame()
+		sim_mouse(10, 20)
+		sim_begin_frame()
+		sim_mouse(14, 26)
 		released := orbit_camera_input_poll(bindings)
 		testing.expect_value(t, released.pointer_drag, Vector2{0, 0})
 
-		SimBeginFrame()
-		SimButton(.LEFT, true)
-		SimMouse(18, 32)
+		sim_begin_frame()
+		sim_button(.LEFT, true)
+		sim_mouse(18, 32)
 		held := orbit_camera_input_poll(bindings)
 		// Scale is {-1, -1}, so a +4/+6 cursor move drags -4/-6.
 		testing.expect_value(t, held.pointer_drag, Vector2{-4, -6})
@@ -110,8 +110,8 @@ when INGOT_INPUT_SIM {
 			bound  = true,
 		}
 
-		SimBeginFrame()
-		SimButton(.LEFT, true)
+		sim_begin_frame()
+		sim_button(.LEFT, true)
 		testing.expect_value(
 			t,
 			orbit_camera_pointer_intent(bindings),
@@ -120,8 +120,8 @@ when INGOT_INPUT_SIM {
 		// A modifier-less drag must not leak into the rotation channel.
 		testing.expect_value(t, orbit_camera_input_poll(bindings).pointer_drag, Vector2{0, 0})
 
-		SimBeginFrame()
-		SimKey(.LEFT_ALT, true)
+		sim_begin_frame()
+		sim_key(.LEFT_ALT, true)
 		testing.expect_value(
 			t,
 			orbit_camera_pointer_intent(bindings),
@@ -133,8 +133,8 @@ when INGOT_INPUT_SIM {
 	orbit_camera_input_poll_takes_vertical_wheel :: proc(t: ^testing.T) {
 		sim_lock()
 		defer sim_unlock()
-		SimBeginFrame()
-		SimWheel(3, -2)
+		sim_begin_frame()
+		sim_wheel(3, -2)
 		input := orbit_camera_input_poll(orbit_camera_bindings_default())
 		// Horizontal wheel is not a dolly; only the vertical axis is read.
 		testing.expect_value(t, input.scroll, f32(-2))
@@ -146,9 +146,9 @@ when INGOT_INPUT_SIM {
 	orbit_camera_input_poll_feeds_the_camera_step :: proc(t: ^testing.T) {
 		sim_lock()
 		defer sim_unlock()
-		SimBeginFrame()
-		SimKey(.A, true)
-		SimWheel(0, 1)
+		sim_begin_frame()
+		sim_key(.A, true)
+		sim_wheel(0, 1)
 		state := Orbit_Camera_State {
 			target   = {0, 0, 0},
 			yaw      = 0,

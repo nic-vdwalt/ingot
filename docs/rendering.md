@@ -112,7 +112,7 @@ textures are bottom-left-origin and are displayed upright by using a negative
 source height when blitting. Apply the same convention at every pass in a
 ping-pong or bloom chain; do not alternate flips based on pass count.
 
-`LoadRenderTextureEx(width, height, format, with_depth)` creates explicit color
+`load_render_texture_ex(width, height, format, with_depth)` creates explicit color
 formats and optional depth storage. Prefer `.RGBA16Float` for HDR passes that
 need blending. A 32-bit float target is not blendable unless the WebGPU device
 exposes the optional `float32-blendable` feature; Ingot uses overwrite behavior
@@ -127,7 +127,7 @@ platform that exposes only unpremultiplied surface composition.
 
 Depth attachments are fixed when a render pass begins. `BeginMode3D` therefore
 flushes pending 2D work and opens a compatibility-owned depth pass for the cube
-helpers and `DrawGrid`. `DrawCubeTransform` and `DrawCubeWiresTransform` accept
+helpers and `DrawGrid`. `draw_cube_transform` and `draw_cube_wires_transform` accept
 complete model matrices for rigid-body or other transformed cubes. `EndMode3D`
 composites that transparent pass before later 2D draws. Resources are lazy,
 resize with the render size, and are released by `CloseWindow`.
@@ -297,13 +297,13 @@ window between monitors updates the target on a later `app_tick`. A positive
 hosting remains paced by `requestAnimationFrame` rather than native sleeping.
 
 The default strategy is `.Continuous`. Applications may call
-`SetFrameStrategy(.Event_Driven)` or the compatibility alias
+`set_frame_strategy(.Event_Driven)` or the compatibility alias
 `EnableEventWaiting()` to avoid building or submitting frames while idle. The
 last swapchain image remains presented.
 
 After activity, a bounded settle burst allows hover and release visuals to
-finish. `RequestRedraw()` is thread-safe and schedules an immediate frame;
-`RequestRedrawIn(seconds)` schedules a timed frame, with the earliest deadline
+finish. `request_redraw()` is thread-safe and schedules an immediate frame;
+`request_redraw_in(seconds)` schedules a timed frame, with the earliest deadline
 winning. Use these calls when background work or animation state changes without
 platform input. Generic UI transitions request immediate redraw only while their
 caller-owned state is unsettled and snap without another deadline under reduced

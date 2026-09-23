@@ -8,8 +8,13 @@ context_is_file_drag_over :: proc(ctx: ^Context) -> bool {
 	return ctx != nil && ctx.drop.hover_frame
 }
 
-IsFileDragOver :: proc() -> bool {
+is_file_drag_over :: proc() -> bool {
 	return context_is_file_drag_over(default_context())
+}
+
+@(deprecated = "use is_file_drag_over")
+IsFileDragOver :: proc() -> bool {
+	return is_file_drag_over()
 }
 
 @(private)

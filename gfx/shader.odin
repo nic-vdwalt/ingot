@@ -657,7 +657,7 @@ EndShaderMode :: proc() {
 	context_end_shader_mode(default_context())
 }
 
-// ShaderBindRaw / ShaderUnbindRaw back rlgl.EnableShader/DisableShader: the raw
+// shader_bind_raw / shader_unbind_raw back rlgl.EnableShader/DisableShader: the raw
 // program id equals the registry id assigned by LoadShaderFromMemory.
 context_shader_bind_raw :: proc(ctx: ^Context, id: u32) {
 	assert(ctx != nil, "context_shader_bind_raw: nil context")
@@ -667,8 +667,13 @@ context_shader_bind_raw :: proc(ctx: ^Context, id: u32) {
 	ctx.rend.active_shader = id
 }
 
-ShaderBindRaw :: proc(id: u32) {
+shader_bind_raw :: proc(id: u32) {
 	context_shader_bind_raw(default_context(), id)
+}
+
+@(deprecated = "use shader_bind_raw")
+ShaderBindRaw :: proc(id: u32) {
+	shader_bind_raw(id)
 }
 
 context_shader_unbind_raw :: proc(ctx: ^Context) {
@@ -679,8 +684,13 @@ context_shader_unbind_raw :: proc(ctx: ^Context) {
 	ctx.rend.active_shader = 0
 }
 
-ShaderUnbindRaw :: proc() {
+shader_unbind_raw :: proc() {
 	context_shader_unbind_raw(default_context())
+}
+
+@(deprecated = "use shader_unbind_raw")
+ShaderUnbindRaw :: proc() {
+	shader_unbind_raw()
 }
 
 @(private)

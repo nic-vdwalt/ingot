@@ -747,14 +747,19 @@ context_focus_window :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_focus_window: nil context")
 	assert(_web_context_is_owner(ctx), "context_focus_window: context does not own web canvas")
 }
-FocusWindow :: proc() {context_focus_window(default_context())}
+focus_window :: proc() {context_focus_window(default_context())}
+
+@(deprecated = "use focus_window")
+FocusWindow :: proc() {
+	focus_window()
+}
 
 // --- drag & drop (web) ------------------------------------------------------
 //
 // JS (ingot_web.js attachDrop) stages dropped file names + bytes and calls the
 // ingot_web_drop_notify export; the queries below pull the staged names into
 // fixed buffers so FilePathList needs no allocation. Browsers never expose
-// real paths - "paths" here are bare file names; use GetDroppedFileData for
+// real paths - "paths" here are bare file names; use get_dropped_file_data for
 // the contents.
 
 context_is_file_dropped :: proc(ctx: ^Context) -> bool {
@@ -800,7 +805,7 @@ UnloadDroppedFiles :: proc(files: FilePathList) {
 	context_unload_dropped_files(default_context(), files)
 }
 
-// GetDroppedFileData returns the contents of dropped file `index`, allocated
+// get_dropped_file_data returns the contents of dropped file `index`, allocated
 // from `allocator` (caller frees), or nil when the index is empty. This is
 // the target-portable way to read a drop: on web there is no path to open.
 context_get_dropped_file_data :: proc(
@@ -810,7 +815,7 @@ context_get_dropped_file_data :: proc(
 ) -> []byte {
 	if ctx == nil || index < 0 || index >= _js_drop_count() do return nil
 	length := _js_drop_data_len(index)
-	assert(length >= 0, "GetDroppedFileData: negative length")
+	assert(length >= 0, "get_dropped_file_data: negative length")
 	if length <= 0 do return nil
 	buffer := make([]byte, int(length), allocator)
 	copied := _js_drop_data_copy(index, raw_data(buffer), length)
@@ -821,6 +826,11 @@ context_get_dropped_file_data :: proc(
 	return buffer[:copied]
 }
 
-GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
+get_dropped_file_data :: proc(index: i32, allocator := context.allocator) -> []byte {
 	return context_get_dropped_file_data(default_context(), index, allocator)
+}
+
+@(deprecated = "use get_dropped_file_data")
+GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
+	return get_dropped_file_data(index, allocator)
 }

@@ -6,7 +6,7 @@
 // hand-cropped screenshots.
 //
 // Why a render target: the swapchain is RenderAttachment-only (gfx/context.odin),
-// so gfx.SaveRenderTexturePng can only read a render target. Rendering into a
+// so gfx.save_render_texture_png can only read a render target. Rendering into a
 // fixed CAPTURE_WIDTH x CAPTURE_HEIGHT target also decouples the output from the
 // host window size and HiDPI factor.
 //
@@ -178,7 +178,7 @@ when CAPTURE {
 		if capture_state_frame < CAPTURE_SETTLE_FRAMES do return
 		shot := script[capture_step_index]
 		path := fmt.tprintf("%s/%s", capture_dir, shot.file)
-		if !rl.SaveRenderTexturePng(capture_target, path) {
+		if !rl.save_render_texture_png(capture_target, path) {
 			fmt.eprintfln("capture: failed to write %s", path)
 			os.exit(1)
 		}
@@ -196,7 +196,7 @@ when CAPTURE {
 			os.exit(1)
 		}
 		path := fmt.tprintf("%s/frame_%05d.png", capture_dir, capture_sequence_frame)
-		if !rl.SaveRenderTexturePng(capture_target, path) {
+		if !rl.save_render_texture_png(capture_target, path) {
 			fmt.eprintfln("capture: failed to write %s", path)
 			os.exit(1)
 		}

@@ -5,7 +5,7 @@
 // firstRectForCharacterRange: to the window frame, so the IME candidate list
 // (Pinyin / Japanese conversion) pops up at the window corner instead of the
 // caret. We replace that one method on the view's class with an IMP returning
-// the caret rect the UI reports via SetTextInputRect each frame.
+// the caret rect the UI reports via set_text_input_rect each frame.
 package gfx
 
 import "base:intrinsics"

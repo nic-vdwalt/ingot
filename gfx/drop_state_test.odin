@@ -11,11 +11,11 @@ drop_lifecycle_is_bounded_and_consumed :: proc(t: ^testing.T) {
 	defer _drop_native_shutdown_context(g)
 
 	_drop_hover_stage_context(g, true)
-	testing.expect(t, !IsFileDragOver())
+	testing.expect(t, !is_file_drag_over())
 	_drop_hover_publish(g)
-	testing.expect(t, IsFileDragOver())
+	testing.expect(t, is_file_drag_over())
 	_drop_complete_context(g)
-	testing.expect(t, !IsFileDragOver())
+	testing.expect(t, !is_file_drag_over())
 	testing.expect(t, IsFileDropped())
 
 	paths := [2]string{"/tmp/one", "/tmp/two"}
@@ -37,7 +37,7 @@ drop_lifecycle_is_bounded_and_consumed :: proc(t: ^testing.T) {
 	_drop_hover_stage_context(g, true)
 	_drop_hover_publish(g)
 	_drop_state_reset_context(g)
-	testing.expect(t, !IsFileDragOver())
+	testing.expect(t, !is_file_drag_over())
 	testing.expect(t, !IsFileDropped())
 }
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
+import tempfile
 import unittest
+from pathlib import Path
 
 import check_gfx_context
 
@@ -155,6 +157,65 @@ second :: proc(scope: ^Context_Scope) {
         self.assertTrue("gfx/x_test.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))
         self.assertTrue("gfx/x_tests.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))
         self.assertTrue("gfx/x_fuzz_test.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))
+
+
+class PascalCaseLayerTest(unittest.TestCase):
+    RAYLIB = frozenset({"DrawRectangle", "BeginMode3D", "RlLoadVertexArray"})
+
+    def violations(self, source):
+        return check_gfx_context.pascal_case_violations(source, "gfx/x.odin", self.RAYLIB)
+
+    def test_raylib_named_facade_is_accepted(self):
+        source = "DrawRectangle :: proc() {\n\tcontext_draw_rectangle(default_context())\n}\n"
+        self.assertEqual(self.violations(source), [])
+
+    def test_ingot_only_pascal_case_is_rejected(self):
+        source = "SetFrameStrategy :: proc(s: Frame_Strategy) {\n\tx := s\n}\n"
+        failures = self.violations(source)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("gfx/x.odin:1: SetFrameStrategy", failures[0])
+        self.assertIn("Ingot-only PascalCase API", failures[0])
+
+    def test_deprecated_and_private_forwarders_are_accepted(self):
+        source = (
+            '@(deprecated = "use set_frame_strategy")\n'
+            "SetFrameStrategy :: proc(s: Frame_Strategy) {\n\tset_frame_strategy(s)\n}\n"
+            '@(private = "package")\n'
+            "HelperThing :: proc() {\n}\n"
+        )
+        self.assertEqual(self.violations(source), [])
+
+    def test_snake_case_and_types_are_ignored(self):
+        source = (
+            "set_frame_strategy :: proc(s: Frame_Strategy) {\n}\n"
+            "Frame_Strategy :: enum u8 {\n\tContinuous,\n}\n"
+        )
+        self.assertEqual(self.violations(source), [])
+
+    def test_procedure_type_is_not_a_procedure(self):
+        source = "Run_Proc :: proc()\nRun_Callback :: struct {\n\tproc_: Run_Proc,\n}\n"
+        self.assertEqual(self.violations(source), [])
+
+    def test_file_private_sources_are_skipped(self):
+        source = "#+private\npackage gfx\nSomething :: proc() {\n}\n"
+        self.assertEqual(self.violations(source), [])
+
+    def test_raylib_vocabulary_is_read_from_vendor_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            vendor = Path(directory)
+            (vendor / "rlgl").mkdir()
+            (vendor / "raylib.odin").write_text("DrawRectangle :: proc() ---\nColor :: struct {}\n")
+            (vendor / "raymath.odin").write_text("Vector2Add :: proc() {}\n")
+            (vendor / "rlgl" / "rlgl.odin").write_text("LoadVertexArray :: proc() -> u32 ---\n")
+            names = check_gfx_context.raylib_names(vendor)
+        self.assertIn("DrawRectangle", names)
+        self.assertIn("Vector2Add", names)
+        self.assertIn("RlLoadVertexArray", names)
+
+    def test_missing_vendor_source_is_an_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(FileNotFoundError):
+                check_gfx_context.raylib_names(Path(directory))
 
 
 if __name__ == "__main__":

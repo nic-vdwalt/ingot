@@ -76,7 +76,7 @@ when !INGOT_GFX_SDL3 {
 		context_restore_window(default_context())
 	}
 
-	// ShowWindow reveals a window created with the WINDOW_HIDDEN config flag. It
+	// show_window reveals a window created with the WINDOW_HIDDEN config flag. It
 	// pairs with that flag's deferred-show contract: create hidden, install any
 	// state that must precede the first show (e.g. the Windows AccessKit adapter),
 	// then call this exactly once to make the window visible.
@@ -86,16 +86,26 @@ when !INGOT_GFX_SDL3 {
 		glfw.ShowWindow(glfw.WindowHandle(ctx.win))
 		if _window_should_focus_on_show(ctx.config_flags) do context_focus_window(ctx)
 	}
-	ShowWindow :: proc() {
+	show_window :: proc() {
 		context_show_window(default_context())
+	}
+
+	@(deprecated = "use show_window")
+	ShowWindow :: proc() {
+		show_window()
 	}
 	context_focus_window :: proc(ctx: ^Context) {
 		if ctx == nil || ctx.win == nil do return
 		_platform_activate_window(ctx)
 		glfw.FocusWindow(glfw.WindowHandle(ctx.win))
 	}
-	FocusWindow :: proc() {
+	focus_window :: proc() {
 		context_focus_window(default_context())
+	}
+
+	@(deprecated = "use focus_window")
+	FocusWindow :: proc() {
+		focus_window()
 	}
 
 	// --- drag & drop -----------------------------------------------------------
@@ -169,7 +179,7 @@ when !INGOT_GFX_SDL3 {
 		context_unload_dropped_files(default_context(), files)
 	}
 
-	// GetDroppedFileData returns the contents of dropped file `index`, allocated
+	// get_dropped_file_data returns the contents of dropped file `index`, allocated
 	// from `allocator` (caller frees), or nil on a bad index / read failure.
 	// Web parity: browsers deliver bytes without real paths, so target-portable
 	// consumers should read drops through this instead of opening paths.
@@ -180,14 +190,19 @@ when !INGOT_GFX_SDL3 {
 	) -> []byte {
 		if ctx == nil || index < 0 || int(index) >= len(ctx.drop.paths) do return nil
 		path := string(ctx.drop.paths[index])
-		assert(len(path) > 0, "GetDroppedFileData: empty dropped path")
+		assert(len(path) > 0, "get_dropped_file_data: empty dropped path")
 		data, err := os.read_entire_file(path, allocator)
 		if err != nil do return nil
 		return data
 	}
 
-	GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
+	get_dropped_file_data :: proc(index: i32, allocator := context.allocator) -> []byte {
 		return context_get_dropped_file_data(default_context(), index, allocator)
+	}
+
+	@(deprecated = "use get_dropped_file_data")
+	GetDroppedFileData :: proc(index: i32, allocator := context.allocator) -> []byte {
+		return get_dropped_file_data(index, allocator)
 	}
 
 	@(private)

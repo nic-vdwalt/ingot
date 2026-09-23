@@ -12,7 +12,7 @@ Submission_Class :: enum u8 {
 // Flush_Cause tags why a batch flush (== one draw call) happened, so hosts
 // can see which state changes fragment their batches.
 Flush_Cause :: enum u8 {
-	Manual, // FlushBatch / rlgl VAO ordering / uncategorized
+	Manual, // flush_batch / rlgl VAO ordering / uncategorized
 	Pipeline, // pipeline kind switch (unified UI <-> image)
 	Texture, // font atlas or image bind-group switch within one pipeline
 	Blend, // blend-mode switch

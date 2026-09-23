@@ -24,33 +24,36 @@ FUNC_ADD :: 0x8006
 // --- batch / culling (real) ------------------------------------------------
 
 ContextDrawRenderBatchActive :: proc(ctx: ^gfx.Context) {gfx.context_flush_batch(ctx)}
-DrawRenderBatchActive :: proc() {gfx.FlushBatch()}
+DrawRenderBatchActive :: proc() {gfx.flush_batch()}
 EnableBackfaceCulling :: proc() {}
 DisableBackfaceCulling :: proc() {}
 
 // --- matrix stack (2D model translation) -----------------------------------
 
 ContextPushMatrix :: proc(ctx: ^gfx.Context) {gfx.context_matrix_mode_push(ctx)}
-PushMatrix :: proc() {gfx.MatrixModePush()}
+PushMatrix :: proc() {gfx.matrix_mode_push()}
 ContextPopMatrix :: proc(ctx: ^gfx.Context) {gfx.context_matrix_mode_pop(ctx)}
-PopMatrix :: proc() {gfx.MatrixModePop()}
+PopMatrix :: proc() {gfx.matrix_mode_pop()}
 ContextTranslatef :: proc(ctx: ^gfx.Context, x, y, z: f32) {gfx.context_matrix_mode_translate(
 		ctx,
 		x,
 		y,
 	)}
-Translatef :: proc(x, y, z: f32) {gfx.MatrixModeTranslate(x, y)}
+Translatef :: proc(x, y, z: f32) {gfx.matrix_mode_translate(x, y)}
 ContextGetMatrixProjection :: proc(ctx: ^gfx.Context) -> gfx.Matrix {
 	return gfx.context_get_projection_matrix(ctx)
 }
-GetMatrixProjection :: proc() -> gfx.Matrix {return gfx.GetProjectionMatrix()}
+GetMatrixProjection :: proc() -> gfx.Matrix {return gfx.get_projection_matrix()}
 
 // --- shader / clip ---------------------------------------------------------
 
-ContextEnableShader :: proc(ctx: ^gfx.Context, id: u32) {gfx.ContextRlEnableInstShader(ctx, id)}
-EnableShader :: proc(id: u32) {gfx.RlEnableInstShader(id)}
-ContextDisableShader :: proc(ctx: ^gfx.Context) {gfx.ContextRlDisableInstShader(ctx)}
-DisableShader :: proc() {gfx.RlDisableInstShader()}
+ContextEnableShader :: proc(ctx: ^gfx.Context, id: u32) {gfx.context_rl_enable_inst_shader(
+		ctx,
+		id,
+	)}
+EnableShader :: proc(id: u32) {gfx.rl_enable_inst_shader(id)}
+ContextDisableShader :: proc(ctx: ^gfx.Context) {gfx.context_rl_disable_inst_shader(ctx)}
+DisableShader :: proc() {gfx.rl_disable_inst_shader()}
 SetClipPlanes :: proc(near, far: f64) {}
 
 // SetBlendFactors records custom blend factors for the Custom blend slot (used
@@ -66,7 +69,7 @@ ContextSetBlendFactors :: proc(ctx: ^gfx.Context, glSrcFactor, glDstFactor, glEq
 }
 
 SetBlendFactors :: proc(glSrcFactor, glDstFactor, glEquation: i32) {
-	gfx.SetCustomBlend(
+	gfx.set_custom_blend(
 		gfx.BlendFactorRL(glSrcFactor),
 		gfx.BlendFactorRL(glDstFactor),
 		gfx.BlendOpRL(glEquation),
@@ -75,18 +78,20 @@ SetBlendFactors :: proc(glSrcFactor, glDstFactor, glEquation: i32) {
 
 // --- vertex arrays / buffers (deferred: no-op) -----------------------------
 
-ContextLoadVertexArray :: proc(ctx: ^gfx.Context) -> u32 {return gfx.ContextRlLoadVertexArray(ctx)}
+ContextLoadVertexArray :: proc(ctx: ^gfx.Context) -> u32 {return gfx.context_rl_load_vertex_array(
+		ctx,
+	)}
 LoadVertexArray :: proc() -> u32 {return gfx.RlLoadVertexArray()}
 ContextEnableVertexArray :: proc(ctx: ^gfx.Context, vaoId: u32) -> bool {
-	return gfx.ContextRlEnableVertexArray(ctx, vaoId)
+	return gfx.context_rl_enable_vertex_array(ctx, vaoId)
 }
 EnableVertexArray :: proc(vaoId: u32) -> bool {return gfx.RlEnableVertexArray(vaoId)}
-ContextDisableVertexArray :: proc(ctx: ^gfx.Context) {gfx.ContextRlDisableVertexArray(ctx)}
+ContextDisableVertexArray :: proc(ctx: ^gfx.Context) {gfx.context_rl_disable_vertex_array(ctx)}
 DisableVertexArray :: proc() {gfx.RlDisableVertexArray()}
-ContextUnloadVertexArray :: proc(ctx: ^gfx.Context, vaoId: u32) {gfx.ContextRlUnloadVertexArray(
-		ctx,
-		vaoId,
-	)}
+ContextUnloadVertexArray :: proc(
+	ctx: ^gfx.Context,
+	vaoId: u32,
+) {gfx.context_rl_unload_vertex_array(ctx, vaoId)}
 UnloadVertexArray :: proc(vaoId: u32) {gfx.RlUnloadVertexArray(vaoId)}
 LoadVertexBuffer :: proc(
 	buffer: rawptr,
@@ -98,7 +103,7 @@ ContextLoadVertexBuffer :: proc(
 	buffer: rawptr,
 	size: i32,
 	is_dynamic: bool,
-) -> u32 {return gfx.ContextRlLoadVertexBuffer(ctx, buffer, size, is_dynamic)}
+) -> u32 {return gfx.context_rl_load_vertex_buffer(ctx, buffer, size, is_dynamic)}
 UpdateVertexBuffer :: proc(
 	bufferId: u32,
 	data: rawptr,
@@ -111,11 +116,11 @@ ContextUpdateVertexBuffer :: proc(
 	data: rawptr,
 	dataSize: i32,
 	offset: i32,
-) {gfx.ContextRlUpdateVertexBuffer(ctx, bufferId, data, dataSize, offset)}
-ContextUnloadVertexBuffer :: proc(ctx: ^gfx.Context, vboId: u32) {gfx.ContextRlUnloadVertexBuffer(
-		ctx,
-		vboId,
-	)}
+) {gfx.context_rl_update_vertex_buffer(ctx, bufferId, data, dataSize, offset)}
+ContextUnloadVertexBuffer :: proc(
+	ctx: ^gfx.Context,
+	vboId: u32,
+) {gfx.context_rl_unload_vertex_buffer(ctx, vboId)}
 UnloadVertexBuffer :: proc(vboId: u32) {gfx.RlUnloadVertexBuffer(vboId)}
 EnableVertexAttribute :: proc(index: u32) {gfx.RlEnableVertexAttribute(index)}
 SetVertexAttribute :: proc(
@@ -134,16 +139,16 @@ ContextSetVertexAttribute :: proc(
 	normalized: bool,
 	stride: i32,
 	offset: i32,
-) {gfx.ContextRlSetVertexAttribute(ctx, index, compSize, type, normalized, stride, offset)}
+) {gfx.context_rl_set_vertex_attribute(ctx, index, compSize, type, normalized, stride, offset)}
 ContextSetVertexAttributeDivisor :: proc(ctx: ^gfx.Context, index: u32, divisor: i32) {
-	gfx.ContextRlSetVertexAttributeDivisor(ctx, index, divisor)
+	gfx.context_rl_set_vertex_attribute_divisor(ctx, index, divisor)
 }
 SetVertexAttributeDivisor :: proc(index: u32, divisor: i32) {gfx.RlSetVertexAttributeDivisor(
 		index,
 		divisor,
 	)}
 ContextDrawVertexArrayInstanced :: proc(ctx: ^gfx.Context, offset, count, instances: i32) {
-	gfx.ContextRlDrawVertexArrayInstanced(ctx, offset, count, instances)
+	gfx.context_rl_draw_vertex_array_instanced(ctx, offset, count, instances)
 }
 DrawVertexArrayInstanced :: proc(offset, count, instances: i32) {gfx.RlDrawVertexArrayInstanced(
 		offset,
@@ -170,20 +175,23 @@ ContextLoadTexture :: proc(
 	data: rawptr,
 	width, height, format, mipmapCount: i32,
 ) -> u32 {
-	return gfx.ContextRlLoadColorTexture(ctx, width, height, gfx.PixelFormat(format))
+	return gfx.context_rl_load_color_texture(ctx, width, height, gfx.PixelFormat(format))
 }
 LoadTexture :: proc(data: rawptr, width, height, format, mipmapCount: i32) -> u32 {
-	return gfx.RlLoadColorTexture(width, height, gfx.PixelFormat(format))
+	return gfx.rl_load_color_texture(width, height, gfx.PixelFormat(format))
 }
 ContextLoadTextureDepth :: proc(
 	ctx: ^gfx.Context,
 	width, height: i32,
 	useRenderBuffer: bool,
 ) -> u32 {
-	return gfx.ContextRlLoadDepthTexture(ctx, width, height)
+	return gfx.context_rl_load_depth_texture(ctx, width, height)
 }
 LoadTextureDepth :: proc(width, height: i32, useRenderBuffer: bool) -> u32 {
-	return gfx.RlLoadDepthTexture(width, height)
+	return gfx.rl_load_depth_texture(width, height)
 }
-ContextUnloadTexture :: proc(ctx: ^gfx.Context, id: u32) {gfx.ContextRlUnloadTextureId(ctx, id)}
-UnloadTexture :: proc(id: u32) {gfx.RlUnloadTextureId(id)}
+ContextUnloadTexture :: proc(ctx: ^gfx.Context, id: u32) {gfx.context_rl_unload_texture_id(
+		ctx,
+		id,
+	)}
+UnloadTexture :: proc(id: u32) {gfx.rl_unload_texture_id(id)}

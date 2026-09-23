@@ -320,8 +320,8 @@ test_transform_primitives_skip_without_mode :: proc(t: ^testing.T) {
 	gfx_shared_test_lock()
 	defer gfx_shared_test_unlock()
 	transform := MatrixTranslate(1, 2, 3) * MatrixScale(4, 5, 6)
-	DrawCubeTransform(transform, WHITE)
-	DrawCubeWiresTransform(transform, WHITE)
+	draw_cube_transform(transform, WHITE)
+	draw_cube_wires_transform(transform, WHITE)
 	testing.expect(t, !g.resources.gpu_3d.compat.pass_available)
 }
 

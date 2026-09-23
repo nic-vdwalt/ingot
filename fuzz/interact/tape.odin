@@ -178,19 +178,19 @@ frame_apply :: proc(frame: Frame_Op) {
 		action := frame.actions[index]
 		#partial switch action.kind {
 		case .Mouse:
-			rl.SimMouse(f32(action.a), f32(action.b))
+			rl.sim_mouse(f32(action.a), f32(action.b))
 		case .Left:
-			rl.SimButton(.LEFT, action.a != 0)
+			rl.sim_button(.LEFT, action.a != 0)
 		case .Right:
-			rl.SimButton(.RIGHT, action.a != 0)
+			rl.sim_button(.RIGHT, action.a != 0)
 		case .Key:
 			key := rl.KeyboardKey(action.a)
-			if key == .TAB do rl.SimKey(.LEFT_SHIFT, action.b != 0)
-			rl.SimKey(key, true)
-			rl.SimKey(key, false)
-			if key == .TAB do rl.SimKey(.LEFT_SHIFT, false)
+			if key == .TAB do rl.sim_key(.LEFT_SHIFT, action.b != 0)
+			rl.sim_key(key, true)
+			rl.sim_key(key, false)
+			if key == .TAB do rl.sim_key(.LEFT_SHIFT, false)
 		case .Wheel:
-			rl.SimWheel(0, f32(action.a) / 100)
+			rl.sim_wheel(0, f32(action.a) / 100)
 		case:
 			return
 		}
@@ -218,7 +218,7 @@ interact_tape_execute :: proc(tape: ^fuzzx.Tape, userdata: rawptr = nil) -> fuzz
 	output := new(ui.Ui_Output)
 	defer free(output)
 	frame.output = output
-	rl.SimReset()
+	rl.sim_reset()
 	overlay_free_frames := 0
 	for op_index in 0 ..< len(tape.ops) {
 		op := tape.ops[op_index]
@@ -237,7 +237,7 @@ interact_tape_execute :: proc(tape: ^fuzzx.Tape, userdata: rawptr = nil) -> fuzz
 				"malformed frame operation",
 			)
 		}
-		rl.SimBeginFrame()
+		rl.sim_begin_frame()
 		frame_apply(frame_op)
 		capture_sim_input(&input)
 		ui.ui_frame_begin(&frame, &runtime, &input)

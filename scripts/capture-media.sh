@@ -3,7 +3,7 @@
 #
 # Builds examples/gallery with -define:INGOT_CAPTURE=true, which makes the
 # gallery render itself into a fixed 1600x1000 offscreen render target and write
-# PNGs through gfx.SaveRenderTexturePng (see examples/gallery/capture.odin).
+# PNGs through gfx.save_render_texture_png (see examples/gallery/capture.odin).
 # Two passes run:
 #
 #   stills   -> docs/media/*.png   committed, optimised, byte-reproducible

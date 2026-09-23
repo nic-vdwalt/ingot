@@ -52,12 +52,12 @@ apply_platform_output_context :: proc(ctx: ^rl.Context, output: ^ui.Platform_Out
 	when ODIN_OS == .JS {
 		if output.toggle_fullscreen do rl.context_toggle_fullscreen(ctx)
 	}
-	// Strategy before the redraw requests: SetFrameStrategy marks activity, so
+	// Strategy before the redraw requests: set_frame_strategy marks activity, so
 	// applying it after would let a settle burst outlive a deadline set this
 	// frame. Producers only publish this on a transition (see ui.pacer_frame).
 	if output.frame_strategy_requested {
 		rl.context_set_frame_strategy(ctx, rl.Frame_Strategy(output.frame_strategy))
 	}
-	if output.request_redraw do rl.RequestRedrawContext(ctx)
-	if output.redraw_after > 0 do rl.RequestRedrawInContext(ctx, output.redraw_after)
+	if output.request_redraw do rl.context_request_redraw(ctx)
+	if output.redraw_after > 0 do rl.context_request_redraw_in(ctx, output.redraw_after)
 }

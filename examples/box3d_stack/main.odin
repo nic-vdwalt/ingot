@@ -86,8 +86,8 @@ frame :: proc() {
 
 	for transform in state.transforms {
 		model := linalg.matrix4_from_trs_f32(transform.p, transform.q, [3]f32{2, 2, 2})
-		rl.DrawCubeTransform(model, rl.BLUE)
-		rl.DrawCubeWiresTransform(model, rl.DARKBLUE)
+		rl.draw_cube_transform(model, rl.BLUE)
+		rl.draw_cube_wires_transform(model, rl.DARKBLUE)
 	}
 
 	rl.DrawGrid(20, 5)

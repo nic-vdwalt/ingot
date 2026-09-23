@@ -4,7 +4,7 @@
 // GLFW delivers final composed characters via WM_CHAR but never positions the
 // IME composition/candidate window, so it floats at a default location. We
 // point it at the caret with ImmSetCompositionWindow (CFS_POINT) using the
-// rect the UI reports via SetTextInputRect each frame.
+// rect the UI reports via set_text_input_rect each frame.
 package gfx
 
 import win32 "core:sys/windows"

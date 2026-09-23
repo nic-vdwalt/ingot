@@ -70,7 +70,7 @@ _cube_transform :: proc(position, size: Vector3) -> Matrix {
 context_draw_cube_transform :: proc(ctx: ^Context, transform: Matrix, color: Color) {
 	assert(ctx != nil, "context_draw_cube_transform: nil context")
 	if !ctx.cam3d_active do return
-	assert(_camera_matrix_is_finite(transform), "DrawCubeTransform: non-finite transform")
+	assert(_camera_matrix_is_finite(transform), "draw_cube_transform: non-finite transform")
 	compat := &ctx.resources.gpu_3d.compat
 	if !compat.pass_available do return
 	draw_gpu_mesh(&compat.pass, compat.cube, transform, {color = color})
@@ -88,14 +88,19 @@ DrawCubeV :: proc(position, size: Vector3, color: Color) {
 	context_draw_cube_transform(default_context(), _cube_transform(position, size), color)
 }
 
-DrawCubeTransform :: proc(transform: Matrix, color: Color) {
+draw_cube_transform :: proc(transform: Matrix, color: Color) {
 	context_draw_cube_transform(default_context(), transform, color)
+}
+
+@(deprecated = "use draw_cube_transform")
+DrawCubeTransform :: proc(transform: Matrix, color: Color) {
+	draw_cube_transform(transform, color)
 }
 
 context_draw_cube_wires_transform :: proc(ctx: ^Context, transform: Matrix, color: Color) {
 	assert(ctx != nil, "context_draw_cube_wires_transform: nil context")
 	if !ctx.cam3d_active do return
-	assert(_camera_matrix_is_finite(transform), "DrawCubeWiresTransform: non-finite transform")
+	assert(_camera_matrix_is_finite(transform), "draw_cube_wires_transform: non-finite transform")
 	compat := &ctx.resources.gpu_3d.compat
 	if !compat.pass_available do return
 	draw_gpu_mesh(
@@ -118,8 +123,13 @@ DrawCubeWiresV :: proc(position, size: Vector3, color: Color) {
 	context_draw_cube_wires_transform(default_context(), _cube_transform(position, size), color)
 }
 
-DrawCubeWiresTransform :: proc(transform: Matrix, color: Color) {
+draw_cube_wires_transform :: proc(transform: Matrix, color: Color) {
 	context_draw_cube_wires_transform(default_context(), transform, color)
+}
+
+@(deprecated = "use draw_cube_wires_transform")
+DrawCubeWiresTransform :: proc(transform: Matrix, color: Color) {
+	draw_cube_wires_transform(transform, color)
 }
 
 context_draw_grid :: proc(ctx: ^Context, slices: i32, spacing: f32) {

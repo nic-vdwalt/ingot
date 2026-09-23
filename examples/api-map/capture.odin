@@ -157,7 +157,7 @@ when MAP_CAPTURE {
 		if capture_sequence {
 			if capture_tick % CAPTURE_SEQUENCE_STRIDE == 0 {
 				path := fmt.tprintf("%s/frame_%05d.png", capture_dir, capture_written)
-				if !rl.SaveRenderTexturePng(capture_target, path) {
+				if !rl.save_render_texture_png(capture_target, path) {
 					fmt.eprintfln("capture: failed to write %s", path)
 					os.exit(1)
 				}
@@ -171,7 +171,7 @@ when MAP_CAPTURE {
 		if capture_shot_frame < CAPTURE_SETTLE_FRAMES do return
 		shot := CAPTURE_SHOTS[capture_shot_index]
 		path := fmt.tprintf("%s/%s", capture_dir, shot.file)
-		if !rl.SaveRenderTexturePng(capture_target, path) {
+		if !rl.save_render_texture_png(capture_target, path) {
 			fmt.eprintfln("capture: failed to write %s", path)
 			os.exit(1)
 		}

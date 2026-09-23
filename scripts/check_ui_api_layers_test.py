@@ -119,6 +119,11 @@ class ConsumerPolicyTests(unittest.TestCase):
         self.assertTrue(any("retired UI API" in failure for failure in failures))
         self.assertTrue(any("retired graphics API" in failure for failure in failures))
 
+    def test_frame_layer_drawing_is_not_retired(self) -> None:
+        source = "package app\nf :: proc(frame: ^rl.Frame) { rl.frame_draw_rectangle(frame, {}, {}) }\n"
+        failures = self.check(source)
+        self.assertFalse(any("retired graphics API" in failure for failure in failures))
+
     def test_repository_examples_allow_advanced_ui_imports(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()

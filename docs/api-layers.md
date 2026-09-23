@@ -29,6 +29,11 @@ calls an explicit implementation with the default owner. The narrow owner-bound
 `Frame` seam exists for framework bridges and documented multi-context hosts; it
 is not a second general drawing vocabulary and never changes ambient state.
 
+PascalCase is reserved for names `vendor:raylib` declares. Ingot-only graphics
+capabilities are snake_case: `context_*` for an explicit owner, `frame_*` for
+the frame seam, and plain wrappers such as `set_frame_strategy` or
+`request_redraw` for the default owner.
+
 ## `ingot:fit`
 
 Start with the [Fit guide](fit-guide.md) for executable timing, lifetime,

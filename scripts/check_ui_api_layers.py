@@ -132,9 +132,10 @@ FIT_PUBLIC_ALIAS_ALLOW = {
 }
 FIT_SPLIT_SESSION = re.compile(r"\b(?:Session_Begin|Session_End|session_acquire_frame|session_present_frame)\b")
 RETIRED_UI = re.compile(r"\b(?:Fit_Node|Fit_Prepared|fit_tree|fit_nodes|prepared_[a-z_0-9]+)\b")
+# frame_draw_* is the owner-bound Frame layer (docs/compatibility.md), not a
+# retired name: ui_gfx and multi-context hosts draw through it.
 RETIRED_GFX = re.compile(
-    r"\b(?:begin_frame|context_begin_frame|end_frame|clear_frame|draw_rect|draw_circle|"
-    r"frame_draw_[a-z_0-9]+)\s*\("
+    r"\b(?:begin_frame|context_begin_frame|end_frame|clear_frame|draw_rect|draw_circle)\s*\("
 )
 
 

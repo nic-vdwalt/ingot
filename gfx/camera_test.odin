@@ -272,10 +272,10 @@ world_to_screen_visible_reports_camera_hemisphere_without_mutation :: proc(t: ^t
 	g.cam3d_view = Matrix(3)
 	g.cam3d_vp = Matrix(4)
 	camera := camera_test_value()
-	point, visible := WorldToScreenVisible({0, 0, 0}, camera)
+	point, visible := world_to_screen_visible({0, 0, 0}, camera)
 	testing.expect(t, visible)
 	testing.expect(t, abs(point.x - 400) < 1e-4 && abs(point.y - 300) < 1e-4)
-	_, behind_visible := WorldToScreenVisible(camera.position - CAMERA_WORLD_FORWARD, camera)
+	_, behind_visible := world_to_screen_visible(camera.position - CAMERA_WORLD_FORWARD, camera)
 	testing.expect(t, !behind_visible)
 	testing.expect_value(t, g.cam3d_proj, Matrix(2))
 	testing.expect_value(t, g.cam3d_view, Matrix(3))
@@ -302,7 +302,7 @@ world_to_screen_pro_uses_arbitrary_matrix :: proc(t: ^testing.T) {
 	view_projection := Matrix(1)
 	view_projection[0, 3] = 0.5
 	view_projection[1, 3] = -0.5
-	point := GetWorldToScreenPro({0, 0, 0}, view_projection)
+	point := get_world_to_screen_pro({0, 0, 0}, view_projection)
 	testing.expect_value(t, point, Vector2{600, 450})
 	testing.expect_value(t, g.cam3d_proj, Matrix(2))
 	testing.expect_value(t, g.cam3d_view, Matrix(3))

@@ -97,8 +97,8 @@ draw_3d_primitive_surface :: proc() {
 	rl.DrawCubeWires({0, 0, 1}, 2, 2, 2, rl.DARKBLUE)
 	rl.DrawCubeWiresV({0, 3, 0.5}, {1, 1, 1}, rl.DARKBLUE)
 	transform := rl.MatrixTranslate(3, 0, 1) * rl.MatrixScale(2, 1, 1)
-	rl.DrawCubeTransform(transform, rl.BLUE)
-	rl.DrawCubeWiresTransform(transform, rl.DARKBLUE)
+	rl.draw_cube_transform(transform, rl.BLUE)
+	rl.draw_cube_wires_transform(transform, rl.DARKBLUE)
 	rl.DrawGrid(20, 1)
 	rl.EndMode3D()
 }

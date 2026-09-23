@@ -2,11 +2,11 @@
 // File dialogs (web): browsers cannot open synchronous native file dialogs,
 // and file access is user-gesture-gated - ok = false always. The web path
 // for getting file contents into an ingot app is drag-and-drop onto the
-// canvas (gfx IsFileDropped / GetDroppedFileData), which works today.
+// canvas (gfx IsFileDropped / get_dropped_file_data), which works today.
 package sys
 
 // open_file_dialog on web reports "no dialog available". Use canvas
-// drag-and-drop instead (see gfx.GetDroppedFileData).
+// drag-and-drop instead (see gfx.get_dropped_file_data).
 open_file_dialog :: proc(
 	title: string,
 	allocator := context.allocator,

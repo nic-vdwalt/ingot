@@ -20,11 +20,11 @@ Pacer_Mode :: enum u8 {
 	// continuously and only needs to cost less, not stop.
 	Throttle,
 	// Stop rendering; the native pump blocks in platform_wait_events and the
-	// web step() early-outs. Wakes on input, OS damage, RequestRedraw from a
-	// worker, or a RequestRedrawIn deadline. Costs approximately zero while
+	// web step() early-outs. Wakes on input, OS damage, request_redraw from a
+	// worker, or a request_redraw_in deadline. Costs approximately zero while
 	// idle, which Throttle cannot reach.
 	//
-	// Every asynchronous source the app owns must call RequestRedraw when it
+	// Every asynchronous source the app owns must call request_redraw when it
 	// produces work, or that work lands with no frame to display it.
 	Event_Driven,
 }
@@ -70,7 +70,7 @@ pacer_note_activity :: proc(p: ^Frame_Pacer, now: f64) {
 //
 // In .Event_Driven mode it also publishes the frame strategy through the
 // frame's Platform_Output, but only when the strategy changes. That guard is
-// load-bearing rather than an optimization: the renderer's SetFrameStrategy
+// load-bearing rather than an optimization: the renderer's set_frame_strategy
 // marks activity internally, so re-requesting the same strategy every frame
 // refills the settle burst forever and the app never actually idles.
 pacer_frame :: proc(p: ^Frame_Pacer, frame: ^Ui_Frame, busy: bool = false) -> i32 {

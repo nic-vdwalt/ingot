@@ -100,7 +100,7 @@ ShaderLocationIndex :: enum i32 {
 
 // --- render targets --------------------------------------------------------
 // Implemented in render_target.odin (real offscreen WebGPU passes):
-//   LoadRenderTexture / LoadRenderTextureEx / UnloadRenderTexture
+//   LoadRenderTexture / load_render_texture_ex / UnloadRenderTexture
 //   BeginTextureMode / EndTextureMode
 
 // --- meshes / materials ----------------------------------------------------

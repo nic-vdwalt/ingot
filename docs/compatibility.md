@@ -81,7 +81,7 @@ legacy `GenMeshSphere`/`DrawMesh` remains an approximation and is reported
 separately as unsupported raylib mesh compatibility.
 
 `UpdateTexture` accepts RGBA8 data, matching the raylib facade. Code receiving
-RGB, grayscale, or gray-alpha buffers uses `UpdateTextureChecked`, which requires
+RGB, grayscale, or gray-alpha buffers uses `update_texture_checked`, which requires
 an explicit byte count and `PixelFormat` and rejects mismatched sizes.
 
 ## Compatibility and binding layers
@@ -143,6 +143,15 @@ New Ingot-native code should use `Frame` and `Context`. PascalCase remains
 supported for the documented raylib migration subset, but is not a second
 context-capable API and is not extended merely to mirror each explicit
 capability.
+
+The naming rule follows from the layers. A PascalCase procedure in `ingot:gfx`
+must carry a name that `vendor:raylib` declares; Ingot-only capabilities use
+`context_*` (explicit owner), `frame_*` (owner-bound frame), or a plain
+snake_case wrapper over the default owner, such as `set_frame_strategy`,
+`request_redraw`, or `update_texture_checked`. Former Ingot-only PascalCase
+names remain as `@(deprecated)` forwarders for one release.
+`scripts/check_gfx_context.py` reads the raylib vocabulary from the pinned
+toolchain and rejects any other exported PascalCase procedure.
 
 Native 3D picking follows the same rule: `screen_to_world_ray`,
 `intersect_plane`, `intersect_sphere`, and `intersect_bounds` are snake_case

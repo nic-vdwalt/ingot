@@ -276,12 +276,12 @@ a11y_snapshot_equal :: proc(a, b: ^ui.Sem_Frame) -> bool {
 adapter_a11y_publish :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	assert(adapter != nil && adapter.initialized, "adapter_a11y_publish: invalid adapter")
 	assert(frame != nil && frame.finalized, "adapter_a11y_publish: frame not finalized")
-	// The JS loop stays unconditional: SyncWebControl both mirrors the tree
+	// The JS loop stays unconditional: sync_web_control both mirrors the tree
 	// into the DOM and harvests activations, so skipping it would drop clicks.
 	when ODIN_OS == .JS {
 		for index in 0 ..< frame.semantics.cur.count {
 			node := &frame.semantics.cur.nodes[index]
-			result := rl.SyncWebControl(
+			result := rl.sync_web_control(
 				i32(node.role),
 				node.id,
 				ui.sem_node_label(node),
@@ -301,7 +301,7 @@ adapter_a11y_publish :: proc(adapter: ^Adapter, frame: ^ui.Ui_Frame) {
 	}
 	if !adapter.a11y_initialized do return
 	// Publish only when the tree actually changed. An unconditional per-frame
-	// snapshot copy and PushAccessibilityUpdate made every animation frame do
+	// snapshot copy and push_accessibility_update made every animation frame do
 	// accessibility work (and provoked platform-side re-reads) even when the
 	// semantics were byte-identical.
 	if adapter.a11y_published &&

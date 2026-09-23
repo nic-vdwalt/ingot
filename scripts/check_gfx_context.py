@@ -31,6 +31,87 @@ DEFAULT_CONTEXT_CALL = re.compile(
 CONTEXT_ESCAPE = re.compile(
     r"(?<![A-Za-z0-9_.])(?:active_context|default_context|context_scope_enter)\s*\("
 )
+# PascalCase in ingot:gfx is reserved for the raylib migration facade: an
+# exported PascalCase procedure must carry a name that vendor:raylib declares.
+# Ingot-native capabilities use snake_case (`context_*`, `frame_*`, or a plain
+# default-owner wrapper). The raylib vocabulary is read from the pinned
+# toolchain, never from a hand-kept list, so a missing vendor file is an error.
+RAYLIB_DECLARATION = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*::", re.M)
+RAYLIB_SOURCES = (("raylib.odin", ""), ("raymath.odin", ""), ("rlgl/rlgl.odin", "Rl"))
+PASCAL_CASE_EXCLUDED_PREFIXES = ("gfx/rlgl/",)
+
+
+def odin_root() -> Path:
+    process = subprocess.run(["odin", "root"], check=True, capture_output=True, text=True)
+    return Path(process.stdout.strip())
+
+
+def raylib_names(vendor_root: Path) -> frozenset[str]:
+    names: set[str] = set()
+    for relative, prefix in RAYLIB_SOURCES:
+        path = vendor_root / relative
+        if not path.is_file():
+            raise FileNotFoundError(f"raylib vocabulary source missing: {path}")
+        names.update(prefix + name for name in RAYLIB_DECLARATION.findall(path.read_text()))
+    return frozenset(names)
+
+
+def _declaration_attributes(lines: list[str], declaration_index: int) -> list[str]:
+    attributes: list[str] = []
+    index = declaration_index - 1
+    while index >= 0:
+        stripped = lines[index].strip()
+        if stripped.startswith("@("):
+            attributes.append(stripped)
+        elif not stripped.startswith("//"):
+            break
+        index -= 1
+    return attributes
+
+
+def pascal_case_violations(source: str, path: str, allowed: frozenset[str]) -> list[str]:
+    lines = source.splitlines()
+    if any(line.startswith("#+private") for line in lines[:8]):
+        return []
+    masked_lines = check_odin_style.mask_source(source).splitlines()
+    failures: list[str] = []
+    for procedure in check_odin_style.procedures(source):
+        if not procedure.name[:1].isupper() or procedure.name in allowed:
+            continue
+        declaration = re.compile(rf"^\s*{re.escape(procedure.name)}\s*::")
+        index = next(
+            (
+                line
+                for line in range(procedure.start_line - 1, procedure.end_line)
+                if declaration.match(lines[line])
+            ),
+            procedure.start_line - 1,
+        )
+        # A procedure type (`Run_Proc :: proc()`) has no body; the shared parser
+        # runs on to the next declaration's brace, so reject any span that
+        # crosses another top-level declaration before its opening brace.
+        signature = "\n".join(masked_lines[index:procedure.end_line])
+        signature = signature[: signature.find("{") if "{" in signature else len(signature)]
+        if RAYLIB_DECLARATION.search(signature.split("\n", 1)[1] if "\n" in signature else ""):
+            continue
+        attributes = _declaration_attributes(lines, index)
+        if any("private" in attribute or "deprecated" in attribute for attribute in attributes):
+            continue
+        failures.append(
+            f"{path}:{index + 1}: {procedure.name}: Ingot-only PascalCase API; "
+            "use snake_case (context_*, frame_*, or a default-owner wrapper)"
+        )
+    return failures
+
+
+def pascal_case_layer_failures(root: Path, allowed: frozenset[str]) -> list[str]:
+    failures: list[str] = []
+    for relative in tracked_sources(root, ["gfx/*.odin"]):
+        if relative.startswith(PASCAL_CASE_EXCLUDED_PREFIXES):
+            continue
+        source = (root / relative).read_text(encoding="utf-8")
+        failures.extend(pascal_case_violations(source, relative, allowed))
+    return failures
 
 
 def tracked_sources(root: Path, patterns: list[str]) -> list[str]:
@@ -116,8 +197,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default=".")
     parser.add_argument("--measure", action="store_true")
+    parser.add_argument(
+        "--raylib-vendor",
+        type=Path,
+        help="vendor/raylib directory; defaults to $(odin root)/vendor/raylib",
+    )
     arguments = parser.parse_args()
     root = Path(arguments.root).resolve()
+    vendor_root = arguments.raylib_vendor or odin_root() / "vendor" / "raylib"
+    pascal_case_failures = pascal_case_layer_failures(root, raylib_names(vendor_root))
     globals_debt = current_counts(root)
     active_context_debt = current_counts(
         root,
@@ -142,6 +230,7 @@ def main() -> int:
     failures += zero_debt_failures("active-context API", active_context_debt)
     failures += zero_debt_failures("internal default-context escape", default_context_escapes)
     failures += zero_debt_failures("ui_gfx implicit graphics routing", implicit_draws)
+    failures += pascal_case_failures
     for failure in failures:
         print(failure)
     return 1 if failures else 0

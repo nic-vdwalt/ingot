@@ -318,11 +318,11 @@ texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
 	// track registration exactly and IsTextureValid must reject a zero handle.
 	testing.expect(t, !IsTextureValid(Texture2D{}))
 
-	before := TextureSlotsUsed()
+	before := texture_slots_used()
 	entry: Tex_Entry
 	id := _texture_register_context(g.id, &g.resources.textures, &entry)
 	testing.expect(t, id != 0)
-	testing.expect_value(t, TextureSlotsUsed(), before + 1)
+	testing.expect_value(t, texture_slots_used(), before + 1)
 	testing.expect(t, IsTextureValid(Texture2D{id = id}))
 
 	// Release the slot by hand: UnloadTexture would retire all-nil GPU
@@ -332,7 +332,7 @@ texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
 	slot.entry = nil
 	slot.occupied = false
 	g.resources.textures.count -= 1
-	testing.expect_value(t, TextureSlotsUsed(), before)
+	testing.expect_value(t, texture_slots_used(), before)
 	testing.expect(t, !IsTextureValid(Texture2D{id = id}))
 }
 

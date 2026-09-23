@@ -2,7 +2,7 @@
 package gfx
 
 // Oracle for the animation/redraw contract: as long as a widget keeps
-// honoring "unsettled => RequestRedraw", the event-driven pump must grant a
+// honoring "unsettled => request_redraw", the event-driven pump must grant a
 // frame every iteration (no mid-animation freeze), and once the ease snaps
 // to target the pump must idle within IDLE_SETTLE_FRAMES (no spin).
 
@@ -21,7 +21,7 @@ fuzz_idle_animation_lifecycle :: proc(t: ^testing.T) {
 		anim: f32 = 0
 		frames := 0
 		for anim != 1 && frames < 100_000 {
-			_idle_note_activity(&s) // the widget's RequestRedraw
+			_idle_note_activity(&s) // the widget's request_redraw
 			testing.expect(t, _idle_take_frame(&s, 0), "frame denied mid-animation")
 			// Mirror of ui.eased(&anim, 1, dt, speed).
 			k := clamp(speed * dt, 0, 1)
@@ -51,7 +51,7 @@ fuzz_idle_deadline_wakeups :: proc(t: ^testing.T) {
 			if !_idle_take_frame(&s, now) do break
 		}
 		delay := f64(testx.int_range(&p, 0, 2_000)) / 1000.0
-		_idle_request_in(&s, now, delay) // RequestRedrawIn
+		_idle_request_in(&s, now, delay) // request_redraw_in
 		testing.expect(t, delay == 0 || !_idle_take_frame(&s, now), "woke before deadline")
 		now += delay
 		testing.expect(t, _idle_take_frame(&s, now), "deadline wakeup missed")

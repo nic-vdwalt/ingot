@@ -53,7 +53,7 @@ Platform_Output :: struct {
 
 // platform_set_frame_strategy publishes a pacing decision for the adapter to
 // apply at end of frame. Callers should only call this on a transition: the
-// renderer's SetFrameStrategy marks activity internally, so re-requesting the
+// renderer's set_frame_strategy marks activity internally, so re-requesting the
 // same strategy every frame refills the settle burst and the app never idles.
 platform_set_frame_strategy :: proc(output: ^Platform_Output, strategy: Frame_Strategy) {
 	assert(output != nil, "platform_set_frame_strategy: nil output")

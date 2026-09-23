@@ -217,7 +217,10 @@ nobody modelled. Writing to these rules is what makes the harnesses in
 - Get the nouns and verbs right; great names are the essence of great code.
 - `ingot` and Odin both use `snake_case` for procedures, variables, and files -
   keep it. The underscore is our stand-in for a space; use it for descriptive
-  names.
+  names. The one exception is the `ingot:gfx` raylib migration facade: a
+  PascalCase procedure there must carry a name that `vendor:raylib` declares.
+  Ingot-only graphics capabilities use `context_*`, `frame_*`, or a plain
+  snake_case default-owner wrapper; `scripts/check_gfx_context.py` enforces it.
 - Do not abbreviate, except a primitive integer used as a sort/loop index.
 - Proper capitalization for acronyms in types (`DPIScale`, not `DpiScale`).
 - Put **units and qualifiers last, most-significant first**: `latency_ms_max`,

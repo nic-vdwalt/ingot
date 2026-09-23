@@ -83,61 +83,61 @@ inject_scenario :: proc(iteration: int, s: ^Scene) -> bool {
 	if iteration >= DETERMINISTIC_FRAMES do return false
 	switch iteration {
 	case 0:
-		rl.SimMouse(40, 35)
-		rl.SimButton(.LEFT, true)
+		rl.sim_mouse(40, 35)
+		rl.sim_button(.LEFT, true)
 	case 1:
-		rl.SimMouse(400, 400)
+		rl.sim_mouse(400, 400)
 	case 2:
-		rl.SimButton(.LEFT, false)
+		rl.sim_button(.LEFT, false)
 	case 3:
-		rl.SimMouse(30, 190)
-		rl.SimButton(.LEFT, true)
+		rl.sim_mouse(30, 190)
+		rl.sim_button(.LEFT, true)
 	case 4:
-		rl.SimMouse(215, 190)
+		rl.sim_mouse(215, 190)
 	case 5:
-		rl.SimMouse(40, 35)
+		rl.sim_mouse(40, 35)
 	case 6:
-		rl.SimButton(.LEFT, false)
+		rl.sim_button(.LEFT, false)
 	case 7:
 		s.focus = FOCUS_COUNT
-		rl.SimKey(.TAB, true)
-		rl.SimKey(.TAB, false)
+		rl.sim_key(.TAB, true)
+		rl.sim_key(.TAB, false)
 	case 8:
-		rl.SimKey(.LEFT_SHIFT, true)
-		rl.SimKey(.TAB, true)
-		rl.SimKey(.TAB, false)
-		rl.SimKey(.LEFT_SHIFT, false)
+		rl.sim_key(.LEFT_SHIFT, true)
+		rl.sim_key(.TAB, true)
+		rl.sim_key(.TAB, false)
+		rl.sim_key(.LEFT_SHIFT, false)
 	case 9:
 		ui.context_menu_open(&s.menu, 300, 100)
 	case 10, 11, 12:
-		rl.SimKey(.DOWN, true)
-		rl.SimKey(.DOWN, false)
+		rl.sim_key(.DOWN, true)
+		rl.sim_key(.DOWN, false)
 	case 13:
-		rl.SimKey(.ENTER, true)
-		rl.SimKey(.ENTER, false)
+		rl.sim_key(.ENTER, true)
+		rl.sim_key(.ENTER, false)
 	case 14:
-		rl.SimMouse(40, 230)
-		rl.SimButton(.LEFT, true)
+		rl.sim_mouse(40, 230)
+		rl.sim_button(.LEFT, true)
 	case 15:
-		rl.SimButton(.LEFT, false)
+		rl.sim_button(.LEFT, false)
 	case 16, 17, 18:
-		rl.SimKey(.DOWN, true)
-		rl.SimKey(.DOWN, false)
+		rl.sim_key(.DOWN, true)
+		rl.sim_key(.DOWN, false)
 	case 19:
-		rl.SimKey(.ENTER, true)
-		rl.SimKey(.ENTER, false)
+		rl.sim_key(.ENTER, true)
+		rl.sim_key(.ENTER, false)
 	case 20:
-		rl.SimMouse(40, 230)
-		rl.SimButton(.LEFT, true)
+		rl.sim_mouse(40, 230)
+		rl.sim_button(.LEFT, true)
 	case 21:
-		rl.SimButton(.LEFT, false)
+		rl.sim_button(.LEFT, false)
 	case 22:
-		rl.SimKey(.ENTER, true)
-		rl.SimKey(.ENTER, false)
+		rl.sim_key(.ENTER, true)
+		rl.sim_key(.ENTER, false)
 	case 23:
 		s.modal.open = true
-		rl.SimKey(.ESCAPE, true)
-		rl.SimKey(.ESCAPE, false)
+		rl.sim_key(.ESCAPE, true)
+		rl.sim_key(.ESCAPE, false)
 	}
 	return true
 }
@@ -151,39 +151,39 @@ inject_events :: proc(p: ^Prng) {
 			// Mouse move: 2/3 biased into a widget rect, else anywhere.
 			if fuzzx.int_range(p, 0, 3) != 0 {
 				r := RECTS[fuzzx.int_range(p, 0, len(RECTS))]
-				rl.SimMouse(
+				rl.sim_mouse(
 					f32(r.x + i32(fuzzx.int_range(p, -4, int(r.w) + 4))),
 					f32(r.y + i32(fuzzx.int_range(p, -4, int(r.h) + 4))),
 				)
 			} else {
-				rl.SimMouse(
+				rl.sim_mouse(
 					f32(fuzzx.int_range(p, 0, SCREEN_W)),
 					f32(fuzzx.int_range(p, 0, SCREEN_H)),
 				)
 			}
 		case 3, 4:
-			rl.SimButton(.LEFT, fuzzx.int_range(p, 0, 2) == 0)
+			rl.sim_button(.LEFT, fuzzx.int_range(p, 0, 2) == 0)
 		case 5:
 			// Tab, with or without shift held.
 			shift := fuzzx.int_range(p, 0, 2) == 0
-			rl.SimKey(.LEFT_SHIFT, shift)
-			rl.SimKey(.TAB, true)
-			rl.SimKey(.TAB, false)
-			rl.SimKey(.LEFT_SHIFT, false)
+			rl.sim_key(.LEFT_SHIFT, shift)
+			rl.sim_key(.TAB, true)
+			rl.sim_key(.TAB, false)
+			rl.sim_key(.LEFT_SHIFT, false)
 		case 6:
 			acts := [?]rl.KeyboardKey{.SPACE, .ENTER, .ESCAPE}
 			k := acts[fuzzx.int_range(p, 0, 3)]
-			rl.SimKey(k, true)
-			rl.SimKey(k, false)
+			rl.sim_key(k, true)
+			rl.sim_key(k, false)
 		case 7:
 			arrows := [?]rl.KeyboardKey{.LEFT, .RIGHT, .UP, .DOWN}
 			k := arrows[fuzzx.int_range(p, 0, 4)]
-			rl.SimKey(k, true)
-			rl.SimKey(k, false)
+			rl.sim_key(k, true)
+			rl.sim_key(k, false)
 		case 8:
-			rl.SimWheel(0, f32(fuzzx.int_range(p, -300, 301)) / 100.0)
+			rl.sim_wheel(0, f32(fuzzx.int_range(p, -300, 301)) / 100.0)
 		case 9:
-			rl.SimButton(.RIGHT, fuzzx.int_range(p, 0, 2) == 0)
+			rl.sim_button(.RIGHT, fuzzx.int_range(p, 0, 2) == 0)
 		}
 	}
 }
@@ -438,12 +438,12 @@ main :: proc() {
 		input: ui.Ui_Input
 		output := new(ui.Ui_Output)
 		frame.output = output
-		rl.SimReset()
+		rl.sim_reset()
 		overlay_free_frames := 0
 
 		for i in 0 ..< iterations {
 			c.iteration = i
-			rl.SimBeginFrame()
+			rl.sim_begin_frame()
 			deterministic := inject_scenario(i, &s)
 			if !deterministic do inject_events(&p)
 			capture_sim_input(&input)

@@ -290,7 +290,7 @@ context_screenshot_pixels :: proc(
 	return out, true
 }
 
-// SaveRenderTexturePng reads `target` back from the GPU and writes it to `path`
+// save_render_texture_png reads `target` back from the GPU and writes it to `path`
 // as an upright RGBA8 PNG. Returns false when the target is invalid, its format
 // is not encodable, the readback fails, or the file cannot be written.
 //
@@ -328,6 +328,11 @@ context_save_render_texture_png :: proc(
 	return written != 0
 }
 
-SaveRenderTexturePng :: proc(target: RenderTexture2D, path: string) -> bool {
+save_render_texture_png :: proc(target: RenderTexture2D, path: string) -> bool {
 	return context_save_render_texture_png(default_context(), target, path)
+}
+
+@(deprecated = "use save_render_texture_png")
+SaveRenderTexturePng :: proc(target: RenderTexture2D, path: string) -> bool {
+	return save_render_texture_png(target, path)
 }

@@ -3,7 +3,7 @@
 // The overlay shows a frame counter and FPS: when you stop interacting the
 // counter freezes within IDLE_SETTLE_FRAMES frames (~0% CPU; check with a
 // process monitor), and resumes instantly on mouse/keyboard input. The caret
-// box keeps blinking while focused via RequestRedrawIn - timed repaints work
+// box keeps blinking while focused via request_redraw_in - timed repaints work
 // without continuous rendering. Click the button to toggle back to
 // .Continuous and watch the counter free-run again.
 //
@@ -52,7 +52,7 @@ frame :: proc() {
 	mouse := rl.GetMousePosition()
 	hovered := rl.CheckCollisionPointRec(mouse, btn)
 	if hovered && rl.IsMouseButtonPressed(.LEFT) {
-		if rl.GetFrameStrategy() == .Event_Driven {
+		if rl.get_frame_strategy() == .Event_Driven {
 			rl.DisableEventWaiting()
 		} else {
 			rl.EnableEventWaiting()
@@ -66,7 +66,7 @@ frame :: proc() {
 	bg := hovered ? rl.Color{70, 90, 140, 255} : rl.Color{50, 62, 96, 255}
 	rl.DrawRectangleRec(btn, bg)
 	label: cstring =
-		rl.GetFrameStrategy() == .Event_Driven ? "strategy: Event_Driven" : "strategy: Continuous"
+		rl.get_frame_strategy() == .Event_Driven ? "strategy: Event_Driven" : "strategy: Continuous"
 	rl.DrawTextEx(font, label, {32, 30}, 20, 0, rl.RAYWHITE)
 
 	// Text input box with a blinking caret (timed repaints while idle).
@@ -76,7 +76,7 @@ frame :: proc() {
 	txt := strings.clone_to_cstring(strings.to_string(text_buf), context.temp_allocator)
 	rl.DrawTextEx(font, txt, {28, 90}, 20, 0, rl.RAYWHITE)
 	tw := rl.MeasureTextEx(font, txt, 20, 0).x
-	rl.RequestRedrawIn(0.5) // schedule the next blink toggle
+	rl.request_redraw_in(0.5) // schedule the next blink toggle
 	if int(rl.GetTime() * 2) % 2 == 0 {
 		rl.DrawRectangleRec({28 + tw + 2, 88, 2, 24}, rl.Color{120, 180, 255, 255})
 	}

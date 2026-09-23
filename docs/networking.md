@@ -40,7 +40,7 @@ undrained result bodies:
 6. Call `fetcher_stop` before destroying dependent application state.
 
 Native uses eight worker threads with at most 64 pending jobs and 64 total
-result slots. A contextless `wake` hook such as `gfx.RequestRedraw` lets a worker
+result slots. A contextless `wake` hook such as `gfx.request_redraw` lets a worker
 wake an event-driven frame loop after queueing a result. Web is single-threaded,
 keeps at most six requests in flight, polls completions from the browser frame
 loop, and never invokes the wake hook.
@@ -121,7 +121,7 @@ The browser supplies framing, TLS, and certificate validation.
 
 ## Event-driven applications
 
-Set `Fetcher.wake` and `WebSocket.wake` to `gfx.RequestRedraw` before starting
+Set `Fetcher.wake` and `WebSocket.wake` to `gfx.request_redraw` before starting
 native networking. Drain results/messages during the resulting frame and derive
 UI state from them. Browser completions are polled by the active animation-frame
 session, so the managed web session must remain alive until networking is

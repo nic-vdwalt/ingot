@@ -66,7 +66,7 @@ when !INGOT_GFX_SDL3 {
 		// that must exist before the window is visible. Windows' AccessKit
 		// subclassing adapter is the motivating case: it must be installed before
 		// the window is shown for the first time or it panics. Reveal with
-		// ShowWindow once that state is live.
+		// show_window once that state is live.
 		glfw.WindowHint(glfw.VISIBLE, .WINDOW_HIDDEN in flags ? 0 : 1)
 		win := glfw.CreateWindow(width, height, title, nil, nil)
 		if win == nil {

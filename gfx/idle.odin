@@ -1,7 +1,7 @@
 // ingot:gfx - event-driven frame scheduling (power-save) policy.
 //
 // Immediate-mode apps rebuild and present every frame even when nothing
-// changes. With SetFrameStrategy(.Event_Driven) the engine instead idles
+// changes. With set_frame_strategy(.Event_Driven) the engine instead idles
 // between frames: the native pump blocks in platform_wait_events until input
 // or OS damage arrives, and the web step() early-outs without running the app
 // frame (the browser's rAF keeps ticking cheaply). The policy here is
@@ -10,8 +10,8 @@
 //
 // A frame runs when:
 //   - input or OS damage arrives (platform callbacks call _idle_note_activity)
-//   - the app calls RequestRedraw() (thread-safe; wakes a blocked native wait)
-//   - a RequestRedrawIn(seconds) deadline falls due
+//   - the app calls request_redraw() (thread-safe; wakes a blocked native wait)
+//   - a request_redraw_in(seconds) deadline falls due
 // After any activity a burst of IDLE_SETTLE_FRAMES full frames runs before
 // idling again, so hover/release/focus visuals settle (standard immediate-mode
 // practice; egui does the same).
@@ -43,38 +43,63 @@ Idle_State :: struct {
 	surface_unavailable: bool,
 	strategy:            Frame_Strategy,
 	settle_frames:       i32, // full frames still owed after the last activity
-	redraw_deadline:     f64, // absolute _now() time of earliest RequestRedrawIn; 0 = none
+	redraw_deadline:     f64, // absolute _now() time of earliest request_redraw_in; 0 = none
 	redraw_pending:      bool, // worker-published redraw request; accessed atomically
 	last_frame_time:     f64, // _now() of the last granted frame (web idle floor)
 }
 
 // --- public API -------------------------------------------------------------
 
-SetFrameStrategy :: proc(s: Frame_Strategy) {
+set_frame_strategy :: proc(s: Frame_Strategy) {
 	context_set_frame_strategy(default_context(), s)
 }
 
-GetFrameStrategy :: proc() -> Frame_Strategy {
+@(deprecated = "use set_frame_strategy")
+SetFrameStrategy :: proc(s: Frame_Strategy) {
+	set_frame_strategy(s)
+}
+
+get_frame_strategy :: proc() -> Frame_Strategy {
 	return context_get_frame_strategy(default_context())
 }
 
-// RequestRedraw schedules an immediate frame (plus settle burst). Safe to call
-// from any thread ("c"/contextless): platform_wake unblocks a native wait in
-// progress, so background work (net callbacks, timers) can trigger a repaint.
-RequestRedraw :: proc "contextless" () {
-	RequestRedrawContext(&default_context_storage)
+@(deprecated = "use get_frame_strategy")
+GetFrameStrategy :: proc() -> Frame_Strategy {
+	return get_frame_strategy()
 }
 
-RequestRedrawContext :: proc "contextless" (ctx: ^Context) {
+// request_redraw schedules an immediate frame (plus settle burst). Safe to call
+// from any thread ("c"/contextless): platform_wake unblocks a native wait in
+// progress, so background work (net callbacks, timers) can trigger a repaint.
+request_redraw :: proc "contextless" () {
+	context_request_redraw(&default_context_storage)
+}
+
+@(deprecated = "use request_redraw")
+RequestRedraw :: proc "contextless" () {
+	request_redraw()
+}
+
+context_request_redraw :: proc "contextless" (ctx: ^Context) {
 	if ctx == nil do return
 	_idle_request_redraw(&ctx.idle)
 	platform_wake()
 }
 
-// RequestRedrawIn schedules a frame after `seconds` (caret blink, delayed
+@(deprecated = "use context_request_redraw")
+RequestRedrawContext :: proc "contextless" (ctx: ^Context) {
+	context_request_redraw(ctx)
+}
+
+// request_redraw_in schedules a frame after `seconds` (caret blink, delayed
 // animations). Multiple pending requests keep the earliest deadline.
-RequestRedrawIn :: proc(seconds: f64) {
+request_redraw_in :: proc(seconds: f64) {
 	context_request_redraw_in(default_context(), seconds)
+}
+
+@(deprecated = "use request_redraw_in")
+RequestRedrawIn :: proc(seconds: f64) {
+	request_redraw_in(seconds)
 }
 
 context_request_redraw_in :: proc(ctx: ^Context, seconds: f64) {
@@ -85,17 +110,18 @@ context_request_redraw_in :: proc(ctx: ^Context, seconds: f64) {
 	_idle_request_in(&ctx.idle, now, seconds)
 }
 
+@(deprecated = "use context_request_redraw_in")
 RequestRedrawInContext :: proc(ctx: ^Context, seconds: f64) {
 	context_request_redraw_in(ctx, seconds)
 }
 
 // raylib-compat aliases.
 EnableEventWaiting :: proc() {
-	SetFrameStrategy(.Event_Driven)
+	set_frame_strategy(.Event_Driven)
 }
 
 DisableEventWaiting :: proc() {
-	SetFrameStrategy(.Continuous)
+	set_frame_strategy(.Continuous)
 }
 
 // --- policy core (pure; unit-tested headless) -------------------------------

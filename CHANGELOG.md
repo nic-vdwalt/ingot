@@ -55,14 +55,100 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   `forgecore/worldgen/README.md`.
 - README pins now name `0.2.1`, the latest source tag.
 
+### Deprecated
+
+- Ingot-only PascalCase procedures in `ingot:gfx` are renamed to snake_case.
+  PascalCase is now reserved for names `vendor:raylib` declares, and
+  `scripts/check_gfx_context.py` enforces it against the pinned toolchain. The
+  old names remain as `@(deprecated)` forwarders for one release and will be
+  removed in the next minor release:
+
+  | Deprecated | Replacement |
+  |---|---|
+  | `BeginMode3DPro` | `begin_mode_3d_pro` |
+  | `CloseAccessibility` | `close_accessibility` |
+  | `ContextRlDisableInstShader` | `context_rl_disable_inst_shader` |
+  | `ContextRlDisableVertexArray` | `context_rl_disable_vertex_array` |
+  | `ContextRlDrawVertexArrayInstanced` | `context_rl_draw_vertex_array_instanced` |
+  | `ContextRlEnableInstShader` | `context_rl_enable_inst_shader` |
+  | `ContextRlEnableVertexArray` | `context_rl_enable_vertex_array` |
+  | `ContextRlLoadColorTexture` | `context_rl_load_color_texture` |
+  | `ContextRlLoadDepthTexture` | `context_rl_load_depth_texture` |
+  | `ContextRlLoadVertexArray` | `context_rl_load_vertex_array` |
+  | `ContextRlLoadVertexBuffer` | `context_rl_load_vertex_buffer` |
+  | `ContextRlSetVertexAttribute` | `context_rl_set_vertex_attribute` |
+  | `ContextRlSetVertexAttributeDivisor` | `context_rl_set_vertex_attribute_divisor` |
+  | `ContextRlUnloadTextureId` | `context_rl_unload_texture_id` |
+  | `ContextRlUnloadVertexArray` | `context_rl_unload_vertex_array` |
+  | `ContextRlUnloadVertexBuffer` | `context_rl_unload_vertex_buffer` |
+  | `ContextRlUpdateVertexBuffer` | `context_rl_update_vertex_buffer` |
+  | `DrawCubeTransform` | `draw_cube_transform` |
+  | `DrawCubeWiresTransform` | `draw_cube_wires_transform` |
+  | `FlushBatch` | `flush_batch` |
+  | `FocusWindow` | `focus_window` |
+  | `GetDroppedFileData` | `get_dropped_file_data` |
+  | `GetFrameStrategy` | `get_frame_strategy` |
+  | `GetPreedit` | `get_preedit` |
+  | `GetProjectionMatrix` | `get_projection_matrix` |
+  | `GetWorldToScreenPro` | `get_world_to_screen_pro` |
+  | `InitAccessibility` | `init_accessibility` |
+  | `IsFileDragOver` | `is_file_drag_over` |
+  | `IsWindowOccluded` | `window_occluded` |
+  | `LoadRenderTextureEx` | `load_render_texture_ex` |
+  | `LoadTextureMipsChecked` | `load_texture_mips_checked` |
+  | `MatrixModePop` | `matrix_mode_pop` |
+  | `MatrixModePush` | `matrix_mode_push` |
+  | `MatrixModeTranslate` | `matrix_mode_translate` |
+  | `PollAccessibilityAction` | `poll_accessibility_action` |
+  | `PushAccessibilityUpdate` | `push_accessibility_update` |
+  | `RequestRedraw` | `request_redraw` |
+  | `RequestRedrawContext` | `context_request_redraw` |
+  | `RequestRedrawIn` | `request_redraw_in` |
+  | `RequestRedrawInContext` | `context_request_redraw_in` |
+  | `RlDisableInstShader` | `rl_disable_inst_shader` |
+  | `RlEnableInstShader` | `rl_enable_inst_shader` |
+  | `RlLoadColorTexture` | `rl_load_color_texture` |
+  | `RlLoadDepthTexture` | `rl_load_depth_texture` |
+  | `RlUnloadTextureId` | `rl_unload_texture_id` |
+  | `SaveRenderTexturePng` | `save_render_texture_png` |
+  | `SetCustomBlend` | `set_custom_blend` |
+  | `SetFrameStrategy` | `set_frame_strategy` |
+  | `SetTextInputRect` | `set_text_input_rect` |
+  | `SetTextureSamplingChecked` | `set_texture_sampling_checked` |
+  | `ShaderBindRaw` | `shader_bind_raw` |
+  | `ShaderUnbindRaw` | `shader_unbind_raw` |
+  | `ShowWindow` | `show_window` |
+  | `SimBeginFrame` | `sim_begin_frame` |
+  | `SimButton` | `sim_button` |
+  | `SimChar` | `sim_char` |
+  | `SimKey` | `sim_key` |
+  | `SimMouse` | `sim_mouse` |
+  | `SimPointer` | `sim_pointer` |
+  | `SimReset` | `sim_reset` |
+  | `SimWheel` | `sim_wheel` |
+  | `SyncWebControl` | `sync_web_control` |
+  | `SyncWebSubmitButton` | `sync_web_submit_button` |
+  | `SyncWebTextInput` | `sync_web_text_input` |
+  | `TextureSlotsUsed` | `texture_slots_used` |
+  | `UpdateTextureChecked` | `update_texture_checked` |
+  | `UpdateTextureMipsChecked` | `update_texture_mips_checked` |
+  | `WorldToScreenVisible` | `world_to_screen_visible` |
+
 ### Removed
 
 - `examples/procgen_world`, `fuzz/procgen` and `benchmarks/procgen`. The fuzzer
   and benchmark moved to forgecore as `bash build.sh worldgen-fuzz` and
   `bash build.sh worldgen-bench`; `fuzz/run.sh procgen` no longer exists.
 - The tracked `.DS_Store` and the empty `ui/legacy_metrics.odin`.
+- `renderer_init`, `renderer_shutdown`, `renderer_frame_begin`,
+  `renderer_flush` and `input_poll` are now package-private; they were never
+  usable outside `gfx`.
 
 ### Fixed
+
+- `frame_draw_*` is no longer reported as a retired graphics API by
+  `scripts/check_ui_api_layers.py`. It is the owner-bound Frame layer that
+  `ui_gfx` and multi-context hosts draw through.
 
 - `Web_Socket` now owns its request path and `ca_file`. A query-only URL's path
   was previously borrowed from the caller's temp allocator and `ca_file` from

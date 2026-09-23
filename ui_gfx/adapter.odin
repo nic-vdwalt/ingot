@@ -125,7 +125,7 @@ adapter_web_form_sync_text :: proc(
 ) -> ui.Web_Form_Text_Result {
 	adapter := cast(^Adapter)data
 	assert(adapter != nil && adapter.initialized, "adapter_web_form_sync_text: invalid adapter")
-	result := rl.SyncWebTextInput(
+	result := rl.sync_web_text_input(
 		form_id,
 		field_id,
 		name,
@@ -151,7 +151,7 @@ adapter_web_form_sync_submit :: proc(
 ) -> bool {
 	adapter := cast(^Adapter)data
 	assert(adapter != nil && adapter.initialized, "adapter_web_form_sync_submit: invalid adapter")
-	return rl.SyncWebSubmitButton(form_id, label, x, y, w, h, style, font_size, enabled)
+	return rl.sync_web_submit_button(form_id, label, x, y, w, h, style, font_size, enabled)
 }
 
 adapter_destroy :: proc(adapter: ^Adapter) {

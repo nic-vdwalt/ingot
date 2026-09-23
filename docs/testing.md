@@ -390,7 +390,7 @@ target to cover both GLFW event paths and close-frame pacing.
 
 `scripts/capture-media.sh` is the third windowed tool outside `scripts/test.sh`.
 It renders the gallery into a fixed 1600x1000 offscreen target and reads it back
-with `gfx.SaveRenderTexturePng`, writing the committed stills in `docs/media/`
+with `gfx.save_render_texture_png`, writing the committed stills in `docs/media/`
 and the demo GIF/MP4 in `dist/media/`:
 
 ```sh

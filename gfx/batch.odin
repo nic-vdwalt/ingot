@@ -519,6 +519,7 @@ _neutral_texture_shutdown :: proc(r: ^Renderer) {
 // renderer_init builds the pipelines and stream pools. Returns false when the
 // device cannot supply even floor-sized stream buffers, so the caller can
 // close the context instead of running with an unusable renderer.
+@(private = "package")
 renderer_init :: proc(ctx: ^Context, r: ^Renderer) -> bool {
 	assert(ctx != nil, "renderer_init: nil context")
 	assert(r == &ctx.rend, "renderer_init: foreign renderer")
@@ -610,6 +611,7 @@ renderer_init :: proc(ctx: ^Context, r: ^Renderer) -> bool {
 	return true
 }
 
+@(private = "package")
 renderer_shutdown :: proc(r: ^Renderer) {
 	for buffer in r.transient_buffers do wg.BufferRelease(buffer)
 	clear(&r.transient_buffers)
@@ -654,6 +656,7 @@ renderer_state_reset :: proc(r: ^Renderer) {
 	r.cur_blend = .Alpha
 }
 
+@(private = "package")
 renderer_frame_begin :: proc(ctx: ^Context, r: ^Renderer) -> bool {
 	assert(ctx != nil, "renderer_frame_begin: nil context")
 	assert(r == &ctx.rend, "renderer_frame_begin: foreign renderer")
@@ -912,14 +915,29 @@ context_matrix_mode_translate :: proc(ctx: ^Context, x, y: f32) {
 	r.model_xf = _affine_translated(r.model_xf, x, y)
 }
 
-MatrixModePush :: proc() {
+matrix_mode_push :: proc() {
 	context_matrix_mode_push(default_context())
 }
-MatrixModePop :: proc() {
+
+@(deprecated = "use matrix_mode_push")
+MatrixModePush :: proc() {
+	matrix_mode_push()
+}
+matrix_mode_pop :: proc() {
 	context_matrix_mode_pop(default_context())
 }
-MatrixModeTranslate :: proc(x, y: f32) {
+
+@(deprecated = "use matrix_mode_pop")
+MatrixModePop :: proc() {
+	matrix_mode_pop()
+}
+matrix_mode_translate :: proc(x, y: f32) {
 	context_matrix_mode_translate(default_context(), x, y)
+}
+
+@(deprecated = "use matrix_mode_translate")
+MatrixModeTranslate :: proc(x, y: f32) {
+	matrix_mode_translate(x, y)
 }
 
 // _batch_record_peak folds one flush's batch size into the renderer's
@@ -946,6 +964,7 @@ _stream_record_peak :: proc(r: ^Renderer, geometry_bytes, uniform_bytes: u64) {
 	assert(r.peak_uniform_bytes <= r.uniform_bytes)
 }
 
+@(private = "package")
 renderer_flush :: proc(
 	ctx: ^Context,
 	r: ^Renderer,
@@ -1042,7 +1061,6 @@ renderer_flush :: proc(
 	when GPU_TIMING_DIAGNOSTICS {
 		_gpu_timing_diagnostic_batch_draw(ctx, r, pass, u32(index_count))
 	}
-
 	clear(&r.verts)
 	clear(&r.indices)
 }
@@ -1523,7 +1541,7 @@ col_f :: proc(c: Color) -> [4]f32 {
 	return {f32(c.r) / 255.0, f32(c.g) / 255.0, f32(c.b) / 255.0, f32(c.a) / 255.0}
 }
 
-// SetCustomBlend records custom blend factors and rebuilds the Custom-slot
+// set_custom_blend records custom blend factors and rebuilds the Custom-slot
 // pipelines. Called by rlgl.SetBlendFactors (GL enums already mapped to wgpu).
 context_set_custom_blend :: proc(ctx: ^Context, src, dst: BlendFactorRL, op: BlendOpRL) {
 	assert(ctx != nil, "context_set_custom_blend: nil context")
@@ -1538,8 +1556,13 @@ context_set_custom_blend :: proc(ctx: ^Context, src, dst: BlendFactorRL, op: Ble
 	_rebuild_custom_pipes(ctx, r)
 }
 
-SetCustomBlend :: proc(src, dst: BlendFactorRL, op: BlendOpRL) {
+set_custom_blend :: proc(src, dst: BlendFactorRL, op: BlendOpRL) {
 	context_set_custom_blend(default_context(), src, dst, op)
+}
+
+@(deprecated = "use set_custom_blend")
+SetCustomBlend :: proc(src, dst: BlendFactorRL, op: BlendOpRL) {
+	set_custom_blend(src, dst, op)
 }
 
 // GL blend enum aliases (values match rlgl / OpenGL) so rlgl can forward raw

@@ -458,7 +458,7 @@ when !INGOT_NET_SIM {
 		jobs_cond:       sync.Cond,
 		// Optional wake hook, called from a worker after a result is queued so an
 		// event-driven-idle frame loop repaints promptly instead of waiting for
-		// its idle-floor tick (gfx.RequestRedraw fits). Set before fetcher_start.
+		// its idle-floor tick (gfx.request_redraw fits). Set before fetcher_start.
 		wake:            proc "contextless" (),
 		sock_mutex:      sync.Mutex,
 		active_socks:    [FETCH_WORKERS]cnet.TCP_Socket,

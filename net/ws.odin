@@ -348,7 +348,7 @@ Web_Socket :: struct {
 
 	// Optional wake hook, called from the worker thread after a message is
 	// queued or the state changes, so an event-driven-idle frame loop repaints
-	// promptly instead of waiting for its idle-floor tick (gfx.RequestRedraw
+	// promptly instead of waiting for its idle-floor tick (gfx.request_redraw
 	// fits the signature). Set before ws_start_connect; nil means no-op.
 	wake:              proc "contextless" (),
 

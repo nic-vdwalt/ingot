@@ -110,7 +110,7 @@ pacer_deduplicates_steady_state :: proc(t: ^testing.T) {
 	defer pace_harness_destroy(h)
 	pacer := pacer_init(60, 15, 2.5, .Event_Driven)
 
-	// This is the load-bearing case: SetFrameStrategy marks activity, so a
+	// This is the load-bearing case: set_frame_strategy marks activity, so a
 	// pacer that re-requests every frame refills the settle burst forever and
 	// the app never actually idles.
 	_, _, _, _ = pace_step(h, &pacer, 5.0) // transition into Event_Driven

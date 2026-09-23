@@ -374,20 +374,25 @@ orbit_camera_apply :: proc(state: Orbit_Camera_State, camera: ^Camera3D) {
 	assert(_camera_vector_is_finite(camera.position), "orbit_camera_apply: invalid position")
 }
 
-// GetProjectionMatrix returns the last 3D projection matrix (rlgl parity for
+// get_projection_matrix returns the last 3D projection matrix (rlgl parity for
 // GetMatrixProjection). Identity before any BeginMode3D.
 context_get_projection_matrix :: proc(ctx: ^Context) -> Matrix {
 	assert(ctx != nil, "context_get_projection_matrix: nil context")
 	assert(
 		ctx.cam3d_projection_available,
-		"GetProjectionMatrix: unavailable in matrix-only Pro mode",
+		"get_projection_matrix: unavailable in matrix-only Pro mode",
 	)
 	if ctx.cam3d_proj == (Matrix{}) do return Matrix(1)
 	return ctx.cam3d_proj
 }
 
-GetProjectionMatrix :: proc() -> Matrix {
+get_projection_matrix :: proc() -> Matrix {
 	return context_get_projection_matrix(default_context())
+}
+
+@(deprecated = "use get_projection_matrix")
+GetProjectionMatrix :: proc() -> Matrix {
+	return get_projection_matrix()
 }
 
 // --- 2D camera -------------------------------------------------------------
@@ -498,9 +503,12 @@ BeginMode3D :: proc(camera: Camera3D) {
 
 context_begin_mode_3d_pro :: proc(ctx: ^Context, view_projection: Matrix) {
 	assert(ctx != nil, "context_begin_mode_3d_pro: nil context")
-	assert(!ctx.cam3d_active, "BeginMode3DPro: already inside a 3D camera mode")
-	assert(view_projection != (Matrix{}), "BeginMode3DPro: zero view-projection")
-	assert(_camera_matrix_is_finite(view_projection), "BeginMode3DPro: non-finite view-projection")
+	assert(!ctx.cam3d_active, "begin_mode_3d_pro: already inside a 3D camera mode")
+	assert(view_projection != (Matrix{}), "begin_mode_3d_pro: zero view-projection")
+	assert(
+		_camera_matrix_is_finite(view_projection),
+		"begin_mode_3d_pro: non-finite view-projection",
+	)
 	ctx.cam3d_view = {}
 	ctx.cam3d_proj = {}
 	ctx.cam3d_vp = view_projection
@@ -514,8 +522,13 @@ context_begin_mode_3d_pro :: proc(ctx: ^Context, view_projection: Matrix) {
 	assert(ctx.cam3d_active)
 }
 
-BeginMode3DPro :: proc(view_projection: Matrix) {
+begin_mode_3d_pro :: proc(view_projection: Matrix) {
 	context_begin_mode_3d_pro(default_context(), view_projection)
+}
+
+@(deprecated = "use begin_mode_3d_pro")
+BeginMode3DPro :: proc(view_projection: Matrix) {
+	begin_mode_3d_pro(view_projection)
 }
 
 context_end_mode_3d :: proc(ctx: ^Context) {
@@ -584,7 +597,10 @@ context_get_world_to_screen :: proc(
 	camera: Camera3D,
 ) -> Vector2 {
 	assert(ctx != nil, "context_get_world_to_screen: nil context")
-	return GetWorldToScreenPro(position, _camera_view_projection(camera, ctx.width, ctx.height))
+	return get_world_to_screen_pro(
+		position,
+		_camera_view_projection(camera, ctx.width, ctx.height),
+	)
 }
 
 GetWorldToScreen :: proc(position: Vector3, camera: Camera3D) -> Vector2 {
@@ -608,14 +624,24 @@ context_world_to_screen_visible :: proc(
 	return _project_dims(view_projection, position, f32(ctx.width), f32(ctx.height))
 }
 
-WorldToScreenVisible :: proc(position: Vector3, camera: Camera3D) -> (Vector2, bool) {
+world_to_screen_visible :: proc(position: Vector3, camera: Camera3D) -> (Vector2, bool) {
 	return context_world_to_screen_visible(default_context(), position, camera)
 }
 
-GetWorldToScreenPro :: proc(position: Vector3, view_projection: Matrix) -> Vector2 {
-	assert(_camera_vector_is_finite(position), "GetWorldToScreenPro: non-finite position")
-	assert(_camera_matrix_is_finite(view_projection), "GetWorldToScreenPro: non-finite matrix")
+@(deprecated = "use world_to_screen_visible")
+WorldToScreenVisible :: proc(position: Vector3, camera: Camera3D) -> (Vector2, bool) {
+	return world_to_screen_visible(position, camera)
+}
+
+get_world_to_screen_pro :: proc(position: Vector3, view_projection: Matrix) -> Vector2 {
+	assert(_camera_vector_is_finite(position), "get_world_to_screen_pro: non-finite position")
+	assert(_camera_matrix_is_finite(view_projection), "get_world_to_screen_pro: non-finite matrix")
 	return _world_to_screen_pro(position, view_projection, GetScreenWidth(), GetScreenHeight())
+}
+
+@(deprecated = "use get_world_to_screen_pro")
+GetWorldToScreenPro :: proc(position: Vector3, view_projection: Matrix) -> Vector2 {
+	return get_world_to_screen_pro(position, view_projection)
 }
 
 @(private)

@@ -113,6 +113,7 @@ input_service_events :: proc(ctx: ^Context, should_wait := false, timeout: f64 =
 	platform_drop_finish_events()
 }
 
+@(private = "package")
 input_poll :: proc(ctx: ^Context) {
 	assert(ctx != nil, "input_poll: nil context")
 	inp := &ctx.inp
@@ -553,7 +554,7 @@ Web_Input_Result :: struct {
 	focused: bool,
 }
 
-SyncWebTextInput :: proc(
+sync_web_text_input :: proc(
 	form_id, field_id, name, placeholder, value: string,
 	x, y, w, h, input_type, autocomplete: i32,
 	active: bool,
@@ -574,12 +575,43 @@ SyncWebTextInput :: proc(
 	)
 }
 
-SyncWebSubmitButton :: proc(
+@(deprecated = "use sync_web_text_input")
+SyncWebTextInput :: proc(
+	form_id, field_id, name, placeholder, value: string,
+	x, y, w, h, input_type, autocomplete: i32,
+	active: bool,
+) -> Web_Input_Result {
+	return sync_web_text_input(
+		form_id,
+		field_id,
+		name,
+		placeholder,
+		value,
+		x,
+		y,
+		w,
+		h,
+		input_type,
+		autocomplete,
+		active,
+	)
+}
+
+sync_web_submit_button :: proc(
 	form_id, label: string,
 	x, y, w, h, style, font_size: i32,
 	enabled: bool,
 ) -> bool {
 	return platform_sync_web_submit_button(form_id, label, x, y, w, h, style, font_size, enabled)
+}
+
+@(deprecated = "use sync_web_submit_button")
+SyncWebSubmitButton :: proc(
+	form_id, label: string,
+	x, y, w, h, style, font_size: i32,
+	enabled: bool,
+) -> bool {
+	return sync_web_submit_button(form_id, label, x, y, w, h, style, font_size, enabled)
 }
 
 Web_Control_Result :: struct {
@@ -588,13 +620,13 @@ Web_Control_Result :: struct {
 	changed:   bool,
 }
 
-// SyncWebControl mirrors one semantic node (ui/semantics.odin) into a real
+// sync_web_control mirrors one semantic node (ui/semantics.odin) into a real
 // DOM control with an ARIA role - buttons, checkboxes, radios, sliders,
 // dropdowns become genuine browser elements assistive tech can reach, which
 // is stronger than a canvas-side accessibility tree. No-op on native targets
 // (AccessKit covers those). `role` is the Sem_Role ordinal; `state` is the
 // Sem_State bit_set transmuted to its u8 backing.
-SyncWebControl :: proc(
+sync_web_control :: proc(
 	role: i32,
 	id: u64,
 	label: string,
@@ -604,6 +636,33 @@ SyncWebControl :: proc(
 	position_in_set, size_of_set: i32,
 ) -> Web_Control_Result {
 	return platform_sync_web_control(
+		role,
+		id,
+		label,
+		x,
+		y,
+		w,
+		h,
+		state,
+		value,
+		lo,
+		hi,
+		position_in_set,
+		size_of_set,
+	)
+}
+
+@(deprecated = "use sync_web_control")
+SyncWebControl :: proc(
+	role: i32,
+	id: u64,
+	label: string,
+	x, y, w, h: i32,
+	state: u8,
+	value, lo, hi: f32,
+	position_in_set, size_of_set: i32,
+) -> Web_Control_Result {
+	return sync_web_control(
 		role,
 		id,
 		label,
@@ -670,7 +729,7 @@ context_is_cursor_on_screen :: proc(ctx: ^Context) -> bool {
 
 IsCursorOnScreen :: proc() -> bool {return context_is_cursor_on_screen(default_context())}
 
-// SetTextInputRect reports the focused text field's caret rect (UI logical
+// set_text_input_rect reports the focused text field's caret rect (UI logical
 // pixels, top-left origin). Call every frame while a field is active; the OS
 // input method uses it to place the composition candidate window (macOS /
 // Windows) or the hidden IME proxy element (web). Cheap; safe to call even
@@ -683,11 +742,16 @@ context_set_text_input_rect_impl :: proc(ctx: ^Context, x, y, w, h: i32) {
 	platform_set_text_input_rect(ctx, x, y, w, h)
 }
 
-SetTextInputRect :: proc(x, y, w, h: i32) {
-	context_set_text_input_rect_impl(default_context(), x, y, w, h)
+set_text_input_rect :: proc(x, y, w, h: i32) {
+	context_set_text_input_rect(default_context(), x, y, w, h)
 }
 
-// GetPreedit returns the in-progress IME composition string (empty when not
+@(deprecated = "use set_text_input_rect")
+SetTextInputRect :: proc(x, y, w, h: i32) {
+	set_text_input_rect(x, y, w, h)
+}
+
+// get_preedit returns the in-progress IME composition string (empty when not
 // composing) and the caret byte offset within it. The string aliases an
 // internal buffer valid until the next composition event; clone to keep.
 context_get_preedit :: proc(ctx: ^Context) -> (text: string, caret: int) {
@@ -703,6 +767,11 @@ context_get_preedit :: proc(ctx: ^Context) -> (text: string, caret: int) {
 	return string(ctx.inp.preedit_buf[:ctx.inp.preedit_len]), ctx.inp.preedit_caret
 }
 
-GetPreedit :: proc() -> (text: string, caret: int) {
+get_preedit :: proc() -> (text: string, caret: int) {
 	return context_get_preedit(default_context())
+}
+
+@(deprecated = "use get_preedit")
+GetPreedit :: proc() -> (text: string, caret: int) {
+	return get_preedit()
 }
