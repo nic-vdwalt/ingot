@@ -129,6 +129,7 @@ when ODIN_OS == .Darwin {
 			ctx.activation_next_at = 0
 			input_service_events(ctx, should_wait, 0.001)
 			testing.expect_value(t, ctx.activation_retries_pending, ACTIVATION_RETRY_LIMIT - 1)
+			ctx.activation_next_at = platform_now() + 3600
 			for attempt in 0 ..< int(ACTIVATION_RETRY_LIMIT) {
 				input_service_events(ctx, should_wait, 0.001)
 				_ = attempt
