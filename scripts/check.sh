@@ -32,6 +32,9 @@ echo "== repository hygiene =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_repository_hygiene_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check-repository-hygiene.py"
 
+echo "== consumer script contract =="
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/consumer_contract_test.py"
+
 echo "== gfx context ownership guard =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" "$root"

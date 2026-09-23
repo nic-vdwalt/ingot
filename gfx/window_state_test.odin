@@ -133,11 +133,7 @@ when ODIN_OS == .Darwin {
 				input_service_events(ctx, should_wait, 0.001)
 				_ = attempt
 			}
-			testing.expect_value(
-				t,
-				ctx.activation_retries_pending,
-				ACTIVATION_RETRY_LIMIT - 1,
-			)
+			testing.expect_value(t, ctx.activation_retries_pending, ACTIVATION_RETRY_LIMIT - 1)
 			free(ctx)
 		}
 	}

@@ -37,6 +37,25 @@ compiler and vendor ABI constraint is separate from Ingot's public source API
 policy: matching application source may still require the toolchain pinned by
 the selected Ingot revision.
 
+The gate scripts source `scripts/odin-toolchain.sh`, which puts the pinned
+compiler ahead of any other `odin` on `PATH` when it is installed at
+`$INGOT_ODIN_ROOT`, `../tools/odin-<release>`, or `../tools/odin-<rev>`. A
+consumer can do the same for its own pin with
+`ingot_use_pinned_odin "$root" "$ODIN_VERSION"`.
+
+### Consumer gate scripts
+
+Consumer repositories call some of Ingot's gate scripts from their own gates.
+`scripts/consumer-contract.json` lists the scripts, flags, and shell functions
+they may rely on, and `scripts/consumer_contract_test.py` fails Ingot's own gate
+if any of them disappears. Removing an entry follows the same policy as a public
+API removal. Anything not listed is internal to Ingot's gates.
+
+`check_assertions.py --baseline FILE` is the consumer ratchet. Ingot's own gate
+runs without a baseline and requires zero uncovered risks. A consumer that
+adopts the gate with existing debt records it in a baseline; the gate then
+fails on any new risk and on any entry that no longer applies.
+
 The compatibility classes are:
 
 - Documented application APIs in `ingot:gfx`, `ingot:ui`, `ingot:ui_gfx`,

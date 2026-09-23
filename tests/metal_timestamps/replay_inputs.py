@@ -135,7 +135,7 @@ def atlas_pixels(payload, draw):
     return output
 
 
-# Pinned wgpu enum values (tools/odin-dev-2026-09/vendor/wgpu/wgpu.odin) the batch
+# Pinned wgpu enum values (tools/odin-902106f/vendor/wgpu/wgpu.odin) the batch
 # pipeline contract is written against. Any other value is a different pipeline.
 VERTEX_FLOAT32X2 = 0x1D
 VERTEX_FLOAT32X4 = 0x1F

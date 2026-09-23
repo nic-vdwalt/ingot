@@ -37,7 +37,7 @@ SDL3 and pass `-define:INGOT_GFX_SDL3=true` to select the optional SDL3 host.
 - Deterministic, bounded test harnesses
 
 > [!IMPORTANT]
-> `0.3.0` is the latest source tag for a young `0.x` API. Pin an exact revision
+> `0.3.1` is the latest source tag for a young `0.x` API. Pin an exact revision
 > and validate every platform your application ships on.
 
 ## The experiment
@@ -59,7 +59,7 @@ through explicit imports; there is no umbrella runtime profile.
 
 ```sh
 git submodule add https://github.com/Nic-vdwalt/ingot.git libs/ingot
-git -C libs/ingot checkout 0.3.0
+git -C libs/ingot checkout 0.3.1
 odin build src -collection:ingot=libs/ingot
 ```
 

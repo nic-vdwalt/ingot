@@ -45,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir "$RUNNER_TEMP/odin"
-          gh api repos/odin-lang/Odin/releases/assets/539931708 \
+          gh api repos/odin-lang/Odin/releases/assets/504110654 \
             -H "Accept: application/octet-stream" > "$RUNNER_TEMP/odin.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
           gh api repos/DanielGavin/ols/releases/assets/487668598 \

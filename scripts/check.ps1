@@ -18,6 +18,8 @@ Invoke-CheckedPython "check-toolchain.py"
 Write-Host "== repository hygiene =="
 Invoke-CheckedPython "check_repository_hygiene_test.py"
 Invoke-CheckedPython "check-repository-hygiene.py"
+Write-Host "== consumer script contract =="
+Invoke-CheckedPython "consumer_contract_test.py"
 Write-Host "== gfx context ownership guard =="
 Invoke-CheckedPython "check_gfx_context_test.py"
 Invoke-CheckedPython "check_gfx_context.py" @($Root)

@@ -1,0 +1,19 @@
+{
+  "python_flags": {
+    "check_assertions.py": ["--packages", "--baseline", "--measure"],
+    "check_odin_style.py": ["--baseline", "--print-procedures"],
+    "check_ui_api_layers.py": ["--consumer-root", "--binding-allow"],
+    "test-supervisor.py": [
+      "--package",
+      "--timeout",
+      "--output-limit",
+      "--log-dir",
+      "--retain-success-log"
+    ]
+  },
+  "shell_functions": {
+    "odin-toolchain.sh": ["ingot_use_pinned_odin"],
+    "sanitizer-toolchain.sh": ["ingot_use_sanitizer_clang"]
+  },
+  "shell_scripts": ["stage-web-runtime.sh"]
+}

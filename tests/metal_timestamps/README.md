@@ -196,7 +196,7 @@ decoder and prints the capture-health verdict, GPU reliability, cadence
 distributions and deadline counts used by the causal ledger:
 
 ```sh
-../tools/odin-dev-2026-09/odin build tests/metal_timestamps/qualify \
+../tools/odin-902106f/odin build tests/metal_timestamps/qualify \
   -collection:src=$PWD/../aesir/src -out:/tmp/qualify_bin
 /tmp/qualify_bin artifacts/timing-game-v11/recording/<recording>.jsonl
 ```

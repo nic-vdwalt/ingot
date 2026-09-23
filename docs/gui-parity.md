@@ -88,7 +88,7 @@ Baseline revision: `5c38d3f84e1ad0e199f92d8ad7592d2f78031b3b`.
 | Tracked Odin test files | 164 |
 | Tracked Odin source lines | 126,487 |
 | Examples with `main.odin` | 21 |
-| Pinned Odin | `dev-2026-09-nightly:a2fb372` |
+| Pinned Odin | `dev-2026-08-nightly:902106f` |
 
 The accepted headless UI baseline remains
 [`benchmarks/widgets/results/2026-07-26-m2-max-phase-2.md`](../benchmarks/widgets/results/2026-07-26-m2-max-phase-2.md).

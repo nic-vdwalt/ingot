@@ -9,6 +9,41 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+## [0.3.1] - 2026-09-23
+
+This is a source-only release; no binaries, installers, or web bundles are attached.
+It changes no public Odin API.
+
+### Added
+
+- Gate scripts source `scripts/odin-toolchain.sh`, which puts the Odin revision
+  pinned in `ODIN_VERSION` ahead of any other `odin` on `PATH` when it is
+  installed at `$INGOT_ODIN_ROOT`, `../tools/odin-<release>`, or
+  `../tools/odin-<rev>`. A Homebrew `odin` earlier on `PATH` no longer fails the
+  gates outright. Consumers can call `ingot_use_pinned_odin "$root" "$ODIN_VERSION"`
+  for their own pin.
+- `scripts/consumer-contract.json` lists the gate scripts, flags, and shell
+  functions consumer repositories may call, and `scripts/consumer_contract_test.py`
+  fails Ingot's gate if one disappears. See
+  [consumer gate scripts](docs/compatibility.md#consumer-gate-scripts).
+
+### Changed
+
+- `scripts/check_assertions.py` accepts `--baseline FILE` again, as the ratchet
+  for consumer repositories with recorded debt: new risks and stale entries
+  fail. Ingot's own gate still runs without a baseline and requires zero
+  uncovered risks. Removing the flag in 0.2.x broke consumer gates that passed it.
+- The Odin pin stays on `dev-2026-08-nightly:902106f`. `dev-2026-09` cannot link
+  `-build-mode:dll` on macOS or Linux (odin-lang/Odin#7559, fixed upstream after
+  that release), which breaks hot reload.
+
+### Fixed
+
+- `gfx/window_state_test.odin` is `odinfmt`-clean, so `scripts/check.sh` passes
+  at the tagged revision.
+- `scripts/check_assertions_test.py` had a `unittest.main()` guard midway through
+  the file, so the tests after it never ran. They run now.
+
 ## [0.3.0] - 2026-09-23
 
 This is a source-only release; no binaries, installers, or web bundles are attached.
@@ -978,7 +1013,8 @@ Not validated:
 - Prevented a libvterm UTF-8 decode buffer overflow.
 - Validated `LoadFontFromMemory`'s caller-supplied buffer.
 
-[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.3.0...HEAD
+[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.3.1...HEAD
+[0.3.1]: https://github.com/Nic-vdwalt/ingot/compare/0.3.0...0.3.1
 [0.3.0]: https://github.com/Nic-vdwalt/ingot/compare/0.2.1...0.3.0
 [0.2.1]: https://github.com/Nic-vdwalt/ingot/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/Nic-vdwalt/ingot/compare/0.1.9...0.2.0

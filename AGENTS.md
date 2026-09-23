@@ -42,10 +42,15 @@ worked example applied to a subsystem before it is written.
 ## Build / test / check commands
 
 - **Local pinned tools**: install the Odin release named in `ODIN_VERSION` at
-  `../tools/odin-<release>` (for example `../tools/odin-dev-2026-09`) or point
-  `INGOT_ODIN_ROOT` at it. The gate scripts source `scripts/odin-toolchain.sh`,
-  which puts that install ahead of any other `odin` on `PATH` (Homebrew Odin is a
-  different revision). Put `../ols` on `PATH` for `odinfmt`.
+  `../tools/odin-<release>` or `../tools/odin-<rev>` (currently
+  `../tools/odin-902106f`), or point `INGOT_ODIN_ROOT` at it. The gate scripts
+  source `scripts/odin-toolchain.sh`, which puts that install ahead of any other
+  `odin` on `PATH` (Homebrew Odin is a different revision). Put `../ols` on
+  `PATH` for `odinfmt`.
+- **Odin pin policy**: pin the newest Odin release that passes every gate,
+  including the `-build-mode:dll` hot-reload builds. `dev-2026-09` fails those
+  on macOS and Linux (odin-lang/Odin#7559, fixed on master after the release),
+  so the pin stays on `dev-2026-08` until a release carries the fix.
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
 - **Test**: `bash scripts/test.sh` - runs the packages and examples in

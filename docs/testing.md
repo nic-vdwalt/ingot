@@ -153,8 +153,10 @@ python3 scripts/check_gfx_context.py --measure .
 The documented PascalCase compatibility facade and default constructors are
 recognized structurally; renderer internals cannot be exempted by a baseline.
 The assertion-discipline guard likewise requires zero uncovered pointer, index,
-queue, ownership, state, and untrusted-input risks. It has no baseline; inspect
-its complete measurement with:
+queue, ownership, state, and untrusted-input risks. Ingot's own gate runs it
+without a baseline; `--baseline` exists only as the consumer ratchet described in
+[compatibility](compatibility.md#consumer-gate-scripts). Inspect its complete
+measurement with:
 
 ```sh
 python3 scripts/check_assertions.py --measure .
