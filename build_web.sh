@@ -9,6 +9,8 @@
 #   open http://localhost:8000
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+source "$ROOT/scripts/odin-toolchain.sh"
+ingot_use_pinned_odin "$ROOT"
 WEB="$ROOT/web"
 
 # The staged odin.js is copied out of the toolchain that compiled the module,
@@ -18,7 +20,7 @@ WEB="$ROOT/web"
 # browser in ways that read like an engine bug.
 #
 # This is deliberately weaker than scripts/check-toolchain.py, which check.sh
-# and CI run: a locally built odin reports its version as "dev-2026-08" with no
+# and CI run: a locally built odin reports its version as "dev-2026-09" with no
 # revision, so a strict comparison rejects the CORRECT toolchain. Only a
 # toolchain that names a revision AND disagrees with the pin is provably wrong,
 # and that is exactly the Homebrew case this guards against. When no revision

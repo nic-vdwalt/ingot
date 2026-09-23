@@ -868,11 +868,48 @@ def current_findings(root: Path, packages: tuple[str, ...] = PACKAGES) -> dict[s
     return findings
 
 
-def check_findings(current: dict[str, Finding]) -> list[str]:
-    return [
-        f"{key}: uncovered assertion risks: {', '.join(finding.risks)}"
-        for key, finding in sorted(current.items())
-    ]
+def check_findings(
+    current: dict[str, Finding], baseline: dict[str, list[str]] | None = None
+) -> list[str]:
+    """Report uncovered risks, or with a baseline, only changes against it.
+
+    Ingot's own gate runs without a baseline: its debt is zero and stays zero.
+    Consumer repositories that adopt the gate with existing debt pass a baseline
+    so the gate ratchets: a new risk fails, and so does an entry that no longer
+    applies, which keeps the recorded debt from outliving its fix.
+    """
+    if baseline is None:
+        return [
+            f"{key}: uncovered assertion risks: {', '.join(finding.risks)}"
+            for key, finding in sorted(current.items())
+        ]
+    failures: list[str] = []
+    for key, finding in sorted(current.items()):
+        allowed = set(baseline.get(key, []))
+        actual = set(finding.risks)
+        added = actual - allowed
+        if added:
+            failures.append(f"{key}: uncovered assertion risks added: {', '.join(sorted(added))}")
+        removed = allowed - actual
+        if removed:
+            failures.append(
+                f"{key}: stale assertion baseline risks; remove: {', '.join(sorted(removed))}"
+            )
+    for key in sorted(set(baseline) - set(current)):
+        failures.append(f"{key}: stale assertion baseline entry; remove it")
+    return failures
+
+
+def read_baseline(path: Path) -> dict[str, list[str]]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not all(
+        isinstance(key, str)
+        and isinstance(risks, list)
+        and all(isinstance(risk, str) and risk in RISK_PATTERNS for risk in risks)
+        for key, risks in data.items()
+    ):
+        raise ValueError(f"{path}: expected an object mapping 'path:procedure' to risk names")
+    return data
 
 
 def measurement(current: dict[str, Finding]) -> dict[str, object]:
@@ -891,6 +928,13 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default=".")
     parser.add_argument("--measure", action="store_true")
+    parser.add_argument(
+        "--baseline",
+        help=(
+            "JSON file of accepted debt for a consumer repository; the gate then fails "
+            "only on new risks and stale entries. Ingot's own gate does not use one."
+        ),
+    )
     parser.add_argument(
         "--packages",
         help=(
@@ -912,7 +956,13 @@ def main() -> int:
     if arguments.measure:
         print(json.dumps(measurement(current), indent=2, sort_keys=True))
         return 0
-    failures = check_findings(current)
+    baseline = None
+    if arguments.baseline:
+        try:
+            baseline = read_baseline(Path(arguments.baseline))
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+    failures = check_findings(current, baseline)
     for failure in failures:
         print(failure)
     return 1 if failures else 0

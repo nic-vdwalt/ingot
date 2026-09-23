@@ -43,6 +43,8 @@
 # clone/deliver/free cycle is exercised alongside the response parser.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/scripts/odin-toolchain.sh"
+ingot_use_pinned_odin "$ROOT"
 TARGET="${1:-net}"
 SEED="${2:-}"
 ITERATIONS="${3:-}"

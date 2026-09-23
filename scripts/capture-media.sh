@@ -17,6 +17,8 @@
 # Requires ffmpeg and ImageMagick (`magick`) for the encode and optimise steps.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/scripts/odin-toolchain.sh"
+ingot_use_pinned_odin "$ROOT"
 BIN="${TMPDIR:-/tmp}/ingot_gallery_capture"
 STILLS_DIR="$ROOT/docs/media"
 DIST_DIR="$ROOT/dist/media"

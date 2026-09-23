@@ -46,7 +46,7 @@ jobs:
           $OlsRoot = Join-Path $env:RUNNER_TEMP "ols"
           $WgpuRoot = Join-Path $env:RUNNER_TEMP "wgpu"
           New-Item -ItemType Directory -Force -Path $OdinRoot, $OlsRoot, $WgpuRoot | Out-Null
-          gh api repos/odin-lang/Odin/releases/assets/504098430 `
+          gh api repos/odin-lang/Odin/releases/assets/539931267 `
             -H "Accept: application/octet-stream" > $OdinArchive
           gh api repos/DanielGavin/ols/releases/assets/487668593 `
             -H "Accept: application/octet-stream" > $OlsArchive

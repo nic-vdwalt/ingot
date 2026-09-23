@@ -2,6 +2,8 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
+source "$root/scripts/odin-toolchain.sh"
+ingot_use_pinned_odin "$root"
 
 bash "$root/scripts/check-linux-dependencies.sh"
 bash "$root/scripts/test.sh" -define:ODIN_TEST_THREADS=1

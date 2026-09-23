@@ -12,6 +12,8 @@
 #   scripts/smoke-gallery.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/scripts/odin-toolchain.sh"
+ingot_use_pinned_odin "$ROOT"
 OUT="${TMPDIR:-/tmp}/ingot_gallery_smoke"
 
 echo "Building gallery (smoke mode)..."

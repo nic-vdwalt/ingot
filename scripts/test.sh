@@ -3,6 +3,8 @@
 # Usage: scripts/test.sh [extra odin flags...]
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
+source "$root/scripts/odin-toolchain.sh"
+ingot_use_pinned_odin "$root"
 col="-collection:ingot=$root"
 guard="-define:INGOT_FRAME_SCRATCH_GUARD=true"
 timeout_seconds="${INGOT_TEST_TIMEOUT_SECONDS:-300}"

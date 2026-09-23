@@ -41,8 +41,11 @@ worked example applied to a subsystem before it is written.
 
 ## Build / test / check commands
 
-- **Local pinned tools**: prepend `../tools/odin-902106f` and `../ols` to `PATH`
-  from this repository before running gates; Homebrew Odin is a different revision.
+- **Local pinned tools**: install the Odin release named in `ODIN_VERSION` at
+  `../tools/odin-<release>` (for example `../tools/odin-dev-2026-09`) or point
+  `INGOT_ODIN_ROOT` at it. The gate scripts source `scripts/odin-toolchain.sh`,
+  which puts that install ahead of any other `odin` on `PATH` (Homebrew Odin is a
+  different revision). Put `../ols` on `PATH` for `odinfmt`.
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
 - **Test**: `bash scripts/test.sh` - runs the packages and examples in

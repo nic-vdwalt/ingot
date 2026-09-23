@@ -16,6 +16,8 @@
 # remains a manual pass (VoiceOver+Safari / ChromeVox).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/scripts/odin-toolchain.sh"
+ingot_use_pinned_odin "$ROOT"
 
 # The vendored Box3D objects are Git LFS-tracked. On a checkout made without
 # git-lfs they are 130-byte text pointers, and the only symptom is an opaque

@@ -9,6 +9,8 @@
 # Usage: scripts/check-cross.sh [extra odin flags...]
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
+source "$root/scripts/odin-toolchain.sh"
+ingot_use_pinned_odin "$root"
 col="-collection:ingot=$root"
 manifest="$root/scripts/gate-manifest.json"
 vet_flags="-vet -strict-style -vet-shadowing -no-entry-point"
