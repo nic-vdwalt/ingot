@@ -50,7 +50,8 @@ scroll_route_draw :: proc(builder: ^Builder, user_data: rawptr) {
 			claim = true,
 		},
 	)
-	Spacer(modal, .XL, {size = {width = Fixed(300), height = Fixed(300)}})
+	cover := Column(modal, {size = {width = Fixed(300), height = Fixed(300)}})
+	Spacer(cover, .XL, {size = {width = Fixed(300), height = Fixed(300)}})
 }
 
 @(private = "file")
