@@ -145,6 +145,12 @@ Gpu_Material :: struct {
 	custom_params_23:     [4]f32,
 	custom_params_24:     [4]f32,
 	custom_params_25:     [4]f32,
+	custom_params_26:     [4]f32,
+	custom_params_27:     [4]f32,
+	custom_params_28:     [4]f32,
+	custom_params_29:     [4]f32,
+	custom_params_30:     [4]f32,
+	custom_params_31:     [4]f32,
 	// shader with a zero id means the built-in GPU_3D_SHADER; a custom
 	// handle from create_gpu_3d_shader replaces both shader stages. Stale
 	// handles fall back to the built-in shader (operating condition).
@@ -278,6 +284,12 @@ Gpu_3D_Uniforms :: struct {
 	custom_params_23:          [4]f32,
 	custom_params_24:          [4]f32,
 	custom_params_25:          [4]f32,
+	custom_params_26:          [4]f32,
+	custom_params_27:          [4]f32,
+	custom_params_28:          [4]f32,
+	custom_params_29:          [4]f32,
+	custom_params_30:          [4]f32,
+	custom_params_31:          [4]f32,
 }
 
 // Per-instance model transforms for draw_gpu_mesh_instanced, read by the
@@ -294,7 +306,7 @@ Gpu_3D_Instance_Uniforms :: struct {
 // and WebGPU permits a binding larger than the shader view. Lock the invariants
 // a struct edit could silently break: never smaller than the shader view, always
 // 16-byte aligned as dynamic offsets require.
-#assert(size_of(Gpu_3D_Uniforms) >= 640)
+#assert(size_of(Gpu_3D_Uniforms) >= 736)
 #assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
 #assert(size_of(Gpu_3D_Vertex) == 36)
 #assert(size_of(Matrix) == 64)
@@ -473,6 +485,12 @@ struct Uniforms {
     custom_params_23: vec4<f32>,
     custom_params_24: vec4<f32>,
     custom_params_25: vec4<f32>,
+    custom_params_26: vec4<f32>,
+    custom_params_27: vec4<f32>,
+    custom_params_28: vec4<f32>,
+    custom_params_29: vec4<f32>,
+    custom_params_30: vec4<f32>,
+    custom_params_31: vec4<f32>,
 };
 // Array length mirrors GPU_3D_MAX_INSTANCES_PER_DRAW.
 struct Instances {
@@ -2284,6 +2302,12 @@ _gpu_3d_uniforms :: proc(
 		custom_params_23 = material.custom_params_23,
 		custom_params_24 = material.custom_params_24,
 		custom_params_25 = material.custom_params_25,
+		custom_params_26 = material.custom_params_26,
+		custom_params_27 = material.custom_params_27,
+		custom_params_28 = material.custom_params_28,
+		custom_params_29 = material.custom_params_29,
+		custom_params_30 = material.custom_params_30,
+		custom_params_31 = material.custom_params_31,
 	}
 }
 

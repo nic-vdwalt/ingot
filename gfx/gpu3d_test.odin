@@ -744,7 +744,7 @@ test_gpu_3d_shader_pool_bounds :: proc(t: ^testing.T) {
 test_gpu_3d_uniforms_layout_locked :: proc(t: ^testing.T) {
 	// The Odin structs are copied raw into the uniform stream and read back
 	// through the WGSL views, so their sizes are load-bearing contracts.
-	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 640, "uniforms smaller than extended WGSL view")
+	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 736, "uniforms smaller than extended WGSL view")
 	testing.expect_value(t, size_of(Gpu_3D_Uniforms) % 16, 0)
 	testing.expect_value(t, size_of(Gpu_3D_Vertex), 36)
 	testing.expect_value(t, size_of(Matrix), 64)
