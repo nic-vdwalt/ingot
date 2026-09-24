@@ -13,6 +13,9 @@ Prepared_Input_Frame :: struct {
 	enter:     bool,
 	shift:     bool,
 	width:     i32, // zero uses 300
+	unfocused: bool, // start without keyboard focus
+	request:   bool, // raise the one-shot focus request
+	attached:  bool, // render inside a fixed-width floating attachment
 }
 
 @(private = "file")
@@ -23,6 +26,8 @@ Prepared_Input_Result :: struct {
 	line_height: i32,
 	pad:         i32,
 	min_h:       i32,
+	focused:     bool,
+	request:     bool,
 }
 
 // prepared_input_frame drives one real frame of a focused declarative text
@@ -65,12 +70,17 @@ prepared_input_frame :: proc(config: Prepared_Input_Frame) -> Prepared_Input_Res
 	defer free(u)
 	begin(u, frame, {0, 0, width, 400})
 	widget := id(u, "composer")
-	u.focus_state.active = focus_widget_id(widget)
+	if !config.unfocused do u.focus_state.active = focus_widget_id(widget)
+	request := config.request
 	submitted := false
 	builder := new(Fit_Builder)
 	defer free(builder)
 	fit_begin(builder, u)
 	fit_builder_row(builder, {size = {width = grow()}})
+	if config.attached {
+		fit_builder_attachment(builder, {target_kind = .Viewport, z = Z_POPUP})
+		fit_builder_column(builder, {size = {width = fixed(width)}})
+	}
 	fit_builder_text_input(
 		builder,
 		{
@@ -81,9 +91,14 @@ prepared_input_frame :: proc(config: Prepared_Input_Frame) -> Prepared_Input_Res
 			semantics = {name = "Message"},
 			submit = config.submit,
 			max_lines = config.max_lines,
+			focus_request = &request,
 		},
 		{size = {width = grow()}, changed = &submitted},
 	)
+	if config.attached {
+		fit_end(builder)
+		fit_end(builder)
+	}
 	fit_end(builder)
 	fit_render(builder)
 	rect_h := i32(-1)
@@ -99,6 +114,8 @@ prepared_input_frame :: proc(config: Prepared_Input_Frame) -> Prepared_Input_Res
 		line_height = metrics.LINE_HEIGHT,
 		pad         = ui_frame_sc(frame, TI_PAD_VERT),
 		min_h       = metrics.ROW_H_MD + metrics.CONTROL_GAP,
+		focused     = u.focus_state.active == focus_widget_id(widget),
+		request     = request,
 	}
 	end(u)
 	ui_frame_end(frame)
@@ -160,4 +177,23 @@ prepared_text_input_default_submit_follows_box_height :: proc(t: ^testing.T) {
 	field := prepared_input_frame({text = "ab", enter = true})
 	testing.expect(t, field.submitted, "a one-line default box must submit on Enter")
 	testing.expect_value(t, field.text, "ab")
+}
+
+@(test)
+prepared_text_input_focus_request_takes_focus_once :: proc(t: ^testing.T) {
+	idle := prepared_input_frame({text = "a", unfocused = true})
+	testing.expect(t, !idle.focused, "an input must not take focus unasked")
+	asked := prepared_input_frame({text = "a", unfocused = true, request = true})
+	testing.expect(t, asked.focused, "a focus request must focus the input")
+	testing.expect(t, !asked.request, "a focus request must be consumed")
+}
+
+// A floating attachment gives its subtree a width of its own; growing inputs
+// inside it must measure at that width, not at zero.
+@(test)
+prepared_text_input_grows_inside_an_attachment :: proc(t: ^testing.T) {
+	one := prepared_input_frame({text = "a", max_lines = 4, attached = true})
+	three := prepared_input_frame({text = "a\nb\nc", max_lines = 4, attached = true})
+	testing.expect_value(t, one.rect_h, grown_height(one, 1))
+	testing.expect_value(t, three.rect_h, grown_height(three, 3))
 }

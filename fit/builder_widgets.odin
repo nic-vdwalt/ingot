@@ -236,6 +236,7 @@ builder_text_input_id :: proc(
 			semantics = to_text_semantics(options.semantics),
 			submit = builder_submit_override(options.submit),
 			max_lines = options.max_lines,
+			focus_request = options.focus_request,
 		},
 		{
 			track = to_track(options.track),
@@ -298,6 +299,7 @@ builder_text_input_state :: proc(
 			semantics = to_text_semantics(options.semantics),
 			submit = builder_submit_override(options.submit),
 			max_lines = options.max_lines,
+			focus_request = options.focus_request,
 		},
 		{
 			track = to_track(options.track),

@@ -659,19 +659,23 @@ Leaf_Options :: struct {
 }
 
 Builder_Text_Input_Options :: struct {
-	height:    i32,
-	masked:    bool,
-	semantics: Text_Input_Semantics,
-	track:     Track,
-	size:      Size_Options,
+	height:        i32,
+	masked:        bool,
+	semantics:     Text_Input_Semantics,
+	track:         Track,
+	size:          Size_Options,
 	// submitted is written during Render and must outlive the build callback.
-	submitted: ^bool,
+	submitted:     ^bool,
 	// submit overrides the Enter behaviour; .Default keeps the height-based
 	// choice (one-line boxes submit, taller boxes insert a newline).
-	submit:    Text_Input_Submit,
+	submit:        Text_Input_Submit,
 	// max_lines > 0 grows the box with its wrapped text up to max_lines,
 	// then scrolls internally. 0 keeps the fixed height.
-	max_lines: i32,
+	max_lines:     i32,
+	// focus_request is a one-shot: when it points at true and the box is on
+	// screen, the box takes keyboard focus and the flag is cleared. It must
+	// outlive the build callback.
+	focus_request: ^bool,
 }
 
 Progress_Options :: struct {

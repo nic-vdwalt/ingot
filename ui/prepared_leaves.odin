@@ -3,25 +3,28 @@ package ui
 import "core:strings"
 
 Prepared_Text_Input :: struct {
-	id:          Widget_Id,
-	box:         ^Input_Box,
+	id:            Widget_Id,
+	box:           ^Input_Box,
 	// Caller-owned buffer variant: when text+state are set (and box is nil),
 	// the widget renders app-owned state via text_input_box instead of a
 	// bundled Input_Box. This lets declarative fit reuse state the app already
 	// holds, matching immediate mode's caller-owns-state contract.
-	text:        ^strings.Builder,
-	state:       ^Text_Input_State,
-	placeholder: string,
-	height:      i32,
-	masked:      bool,
-	semantics:   Text_Input_Semantics,
+	text:          ^strings.Builder,
+	state:         ^Text_Input_State,
+	placeholder:   string,
+	height:        i32,
+	masked:        bool,
+	semantics:     Text_Input_Semantics,
 	// submit overrides the Enter behaviour. nil keeps the height-based
 	// default from text_input_default_submit.
-	submit:      Maybe(Text_Input_Submit),
+	submit:        Maybe(Text_Input_Submit),
 	// max_lines > 0 makes the box grow with its wrapped text, measured at
 	// its resolved width, up to max_lines; past that it scrolls internally.
 	// 0 keeps the fixed height.
-	max_lines:   i32,
+	max_lines:     i32,
+	// focus_request is a one-shot: when it points at true and the box is on
+	// screen, the box takes keyboard focus and the flag is cleared.
+	focus_request: ^bool,
 }
 
 // A prepared text input is fed by exactly one source: a bundled Input_Box, or a
@@ -121,6 +124,10 @@ prepared_text_input_at :: proc(u: ^Ui, spec: Prepared_Text_Input, rect: Rect_I32
 	)
 	assert(spec.semantics.name != "", "prepared text input: empty accessible label")
 	fo := focus(u, spec.id) if slot_visible(rect) else Focus_Opt{}
+	if spec.focus_request != nil && spec.focus_request^ && fo.focus != nil {
+		focus_opt_set(fo)
+		spec.focus_request^ = false
+	}
 	focus_opt_click(u.frame, fo, rect.x, rect.y, rect.w, rect.h)
 	semantics := spec.semantics
 	semantics.focus = fo.focus

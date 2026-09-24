@@ -30,6 +30,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   width with the renderer's wrap memo, up to `max_lines` lines, then scrolls
   internally. Both default to the previous behaviour. The declarative box path
   now renders through `text_input_box` so it honours `submit` too.
+- `fit.Builder_Text_Input_Options.focus_request` (`ui.Prepared_Text_Input.focus_request`):
+  a one-shot `^bool` that focuses the input on its next visible frame and is
+  then cleared, so an app can move the caret into a composer after navigation.
 
 ### Changed
 
@@ -55,6 +58,11 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Fixed
 
+- Width-dependent leaves inside a prepared attachment (wrapped labels, growing
+  text inputs, custom leaves) were measured at width 0 in the resolved pass
+  because width assignment skipped attachment subtrees. The attachment child
+  now receives its own resolved width before heights are measured, and the
+  attachment re-reads its child's size afterwards.
 - Gallery crashed on phones: at 200% scale on a portrait phone, or at 100% in
   landscape with the toolbar or soft keyboard shown, the header plus the nav
   strip exceeded the canvas height, the content pane got a negative height,

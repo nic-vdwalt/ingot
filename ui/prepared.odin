@@ -1548,8 +1548,24 @@ prepared_assign_widths :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_place_grid_cell(prepared, index)
 		} else if node.kind == .Scroll {
 			prepared_place_scroll(u, prepared, index, false)
+		} else if node.kind == .Attachment {
+			prepared_assign_attachment_width(prepared, index)
 		}
 	}
+}
+
+// prepared_assign_attachment_width hands an attached subtree its own resolved
+// width. Without it the subtree's width-dependent leaves (wrapped labels,
+// growing text inputs) would measure at width 0 and render taller than laid out.
+@(private = "file")
+prepared_assign_attachment_width :: proc(prepared: ^Prepared_Ui, index: i32) {
+	assert(prepared != nil && index > 0 && index < prepared.count)
+	node := &prepared_nodes(prepared)[index]
+	assert(node.kind == .Attachment && node.first_child == node.last_child)
+	assert(node.first_child > index && node.first_child < prepared.count)
+	child := &prepared_nodes(prepared)[node.first_child]
+	child.rect.w = child.size.w
+	child.rect.h = max(child.rect.h, child.size.h)
 }
 
 @(private = "file")
@@ -1592,6 +1608,8 @@ prepared_measure_heights :: proc(u: ^Ui, prepared: ^Prepared_Ui) {
 			prepared_measure_scroll(u, prepared, index, true)
 		} else if node.kind == .Grid_Cell {
 			prepared_measure_grid_cell(prepared, index)
+		} else if node.kind == .Attachment {
+			prepared_measure_attachment(prepared, index)
 		} else if node.kind == .Row || node.kind == .Column {
 			prepared_measure_container(u, prepared, index, true)
 		} else {
