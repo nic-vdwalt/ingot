@@ -803,6 +803,11 @@ when !INGOT_GFX_SDL3 {
 		// tigerstyle: allow-unbounded-loop -- window close terminates the application lifetime
 		for !WindowShouldClose() {
 			frame(userdata)
+			// ui_gfx/adapter.odin: the host owns context.temp_allocator and must
+			// reclaim it after each complete frame. This loop is that host, so
+			// every measured string and tprintf of a frame is released here
+			// instead of accumulating for the whole process lifetime.
+			free_all(context.temp_allocator)
 		}
 		return true
 	}

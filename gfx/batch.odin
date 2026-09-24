@@ -672,6 +672,11 @@ renderer_frame_begin :: proc(ctx: ^Context, r: ^Renderer) -> bool {
 	retired := &r.retired_buffers[r.active_stream_slot]
 	for buffer in retired^ do wg.BufferRelease(buffer)
 	clear(retired)
+	// Buffers still listed here were never submitted - a submitted frame moves
+	// them to retired_buffers (_stream_transients_retire) - so the only way to
+	// reach this with entries is an abandoned frame. Clearing without releasing
+	// leaked them, one pair per overflowing flush.
+	for buffer in r.transient_buffers do wg.BufferRelease(buffer)
 	clear(&r.transient_buffers)
 	clear(&r.verts)
 	clear(&r.indices)

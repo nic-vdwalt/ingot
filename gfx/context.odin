@@ -223,6 +223,9 @@ Context :: struct {
 	fb_width, fb_height:        i32,
 	dpi:                        f32,
 	force_reconfigure:          bool,
+	// Set once the browser revoked the WebGPU device. Terminal: frames stop
+	// and the host page offers a reload (platform_web.odin).
+	device_lost:                bool,
 	// Set by _maybe_reconfigure when the logical size changed at the start of
 	// this frame, so IsWindowResized answers for the frame the caller is in.
 	resized_this_frame:         bool,

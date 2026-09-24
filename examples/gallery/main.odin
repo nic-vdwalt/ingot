@@ -95,6 +95,14 @@ NARROW_WIDTH_MAX :: 640
 NAV_STRIP_ROW_H :: 34
 NAV_STRIP_CELL_W :: 92
 NAV_SIDEBAR_ROW_H :: 28
+// The strip may take at most 1/NAV_STRIP_HEIGHT_SHARE_DEN of the height under
+// the header. At 200% on a 390px phone the full grid is one column of nine
+// 68px rows, taller than the whole canvas, which left the content pane with a
+// negative height and trapped the wasm module on pane_begin's assertion.
+NAV_STRIP_HEIGHT_SHARE_DEN :: 2
+// Widget ids for the compact strip's previous / current / next buttons. They
+// sit above the full grid's 0x2000 + Section range so the two cannot collide.
+NAV_STRIP_COMPACT_ID_BASE :: 0x2100
 
 // --- caller-owned state (the whole point: no hidden library state) ----------
 
@@ -369,9 +377,12 @@ gallery_build :: proc(builder: ^fit.Builder, user_data: rawptr) {
 gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, user_data: rawptr) -> bool {
 	_ = user_data
 	gallery_root = root
-	fmt.eprintfln("[gallery] frame root = %v", root)
 	sw := root.w
 	sh := root.h
+	// A browser can hand over an empty box mid-rotation or while the tab is
+	// being hidden. Every layout below assumes positive extents, and on the
+	// web their assertions trap the whole module rather than one frame.
+	if sw <= 0 || sh <= 0 do return false
 
 	when SMOKE do smoke_step()
 	when CAPTURE do capture_step()
@@ -454,6 +465,58 @@ nav_uses_strip :: proc(surface: ^fit.Surface, width, available_height: i32) -> b
 	return nav_uses_strip_scale(scale, width, available_height)
 }
 
+// nav_strip_full_height_scale is the height of the full wrapped section grid
+// plus the controls row. Pure, so the phone geometry is testable without a frame.
+nav_strip_full_height_scale :: proc(scale: f32, width: i32) -> i32 {
+	assert(width > 0, "nav_strip_full_height_scale: empty width")
+	pad := gallery_scaled(8, scale)
+	gap := gallery_scaled(6, scale)
+	row_h := gallery_scaled(NAV_STRIP_ROW_H, scale)
+	cell := gallery_scaled(NAV_STRIP_CELL_W, scale)
+	cols := max((width - pad * 2 + gap) / (cell + gap), 1)
+	rows := (i32(len(Section)) + cols - 1) / cols
+	height := pad * 2 + rows * row_h + (rows - 1) * gap + gap + row_h
+	assert(height > 0, "nav_strip_full_height_scale: non-positive height")
+	return height
+}
+
+// nav_strip_compact_height_scale is one previous/current/next row plus the
+// controls row.
+nav_strip_compact_height_scale :: proc(scale: f32) -> i32 {
+	pad := gallery_scaled(8, scale)
+	row_h := gallery_scaled(NAV_STRIP_ROW_H, scale)
+	height := pad * 2 + row_h * 2 + gallery_scaled(6, scale)
+	assert(height > 0, "nav_strip_compact_height_scale: non-positive height")
+	return height
+}
+
+nav_strip_uses_compact_scale :: proc(scale: f32, width, available_height: i32) -> bool {
+	assert(width > 0, "nav_strip_uses_compact_scale: empty width")
+	assert(available_height >= 0, "nav_strip_uses_compact_scale: negative height")
+	share := available_height / NAV_STRIP_HEIGHT_SHARE_DEN
+	return nav_strip_full_height_scale(scale, width) > share
+}
+
+// nav_strip_height_scale is the height the strip actually occupies. It never
+// exceeds the space under the header, so the content pane cannot go negative.
+nav_strip_height_scale :: proc(scale: f32, width, available_height: i32) -> i32 {
+	available := max(available_height, 0)
+	compact := nav_strip_uses_compact_scale(scale, width, available)
+	wanted :=
+		nav_strip_compact_height_scale(scale) if compact else nav_strip_full_height_scale(scale, width)
+	height := min(wanted, available)
+	assert(height >= 0 && height <= available, "nav_strip_height_scale: escapes viewport")
+	return height
+}
+
+// nav_select_section is the one place a nav switches section, so the sidebar,
+// the full strip and the compact strip cannot disagree about the side effects.
+nav_select_section :: proc(s: Section) {
+	section = s
+	fit.Pane_Reset(&content_pane)
+	assert(section == s, "nav_select_section: section not applied")
+}
+
 // draw_nav renders the section switcher and returns the vertical space it
 // consumed. Wide viewports get the sidebar (0 vertical space, it lives beside
 // the content); narrow ones get a horizontal strip whose height the caller
@@ -528,7 +591,7 @@ nav_control_activate :: proc(control: Nav_Control, surface: ^fit.Surface) {
 
 draw_nav :: proc(surface: ^fit.Surface, top, sw, sh: i32, narrow: bool) -> i32 {
 	assert(surface != nil, "draw_nav: nil surface")
-	if narrow do return draw_nav_strip(surface, top, sw)
+	if narrow do return draw_nav_strip(surface, top, sw, sh)
 	w := fit.Px(surface, NAV_W)
 	theme := fit.Get_Theme_Tokens(surface)
 	fit.Fill_Rect(surface, fit.Rect{0, top, w, sh - top}, theme.background_secondary)
@@ -548,8 +611,7 @@ draw_nav :: proc(surface: ^fit.Surface, top, sw, sh: i32, narrow: bool) -> i32 {
 		style := fit.Button_Style.Primary if s == section else .Ghost
 		fit.Region_Flex_Row_Begin(u, NAV_SIDEBAR_ROW_H, {fit.Grow()})
 		if fit.Region_Button(u, SECTION_NAMES[s], SECTION_NAMES[s], style) {
-			section = s
-			fit.Pane_Reset(&content_pane)
+			nav_select_section(s)
 		}
 		fit.Region_Flex_Row_End(u)
 	}
@@ -580,32 +642,32 @@ NAV_CONTROL_IDS := [Nav_Control]string {
 // spending 44% of the width on a sidebar. It carries the same Nav_Control set
 // the sidebar does - a demo that hides its own features on mobile is worse
 // than one that scrolls.
-draw_nav_strip :: proc(surface: ^fit.Surface, top, sw: i32) -> i32 {
+//
+// On a short viewport the full grid would crowd out the content, so the strip
+// switches to a compact previous / current / next row, and its height is
+// clamped to the space under the header in every case.
+draw_nav_strip :: proc(surface: ^fit.Surface, top, sw, sh: i32) -> i32 {
 	assert(surface != nil, "draw_nav_strip: nil surface")
 	assert(sw > 0, "draw_nav_strip: empty viewport")
+	scale := f32(fit.Px(surface, 1000)) / 1000
+	available := max(sh - top, 0)
+	height := nav_strip_height_scale(scale, sw, available)
+	if height <= 0 do return 0
+	compact := nav_strip_uses_compact_scale(scale, sw, available)
 	theme := fit.Get_Theme_Tokens(surface)
-	pad := fit.Px(surface, 8)
-	gap := fit.Px(surface, 6)
-	row_h := fit.Px(surface, NAV_STRIP_ROW_H)
-	cols := max((sw - pad * 2 + gap) / (fit.Px(surface, NAV_STRIP_CELL_W) + gap), 1)
-	rows := (i32(len(Section)) + cols - 1) / cols
-	height := pad * 2 + rows * row_h + (rows - 1) * gap + gap + row_h
+	pad := gallery_scaled(8, scale)
+	gap := gallery_scaled(6, scale)
+	row_h := gallery_scaled(NAV_STRIP_ROW_H, scale)
 
 	fit.Fill_Rect(surface, fit.Rect{0, top, sw, height}, theme.background_secondary)
 	fit.Fill_Rect(surface, fit.Rect{0, top + height - 1, sw, 1}, theme.border_subtle)
 
-	grid: fit.Grid_State
-	fit.Grid_Begin(surface, &grid, {pad, top + pad, sw - pad * 2, 0}, cols, row_h, gap, gap)
-	for s in Section {
-		style := fit.Button_Style.Primary if s == section else .Ghost
-		rect := fit.Grid_Next(&grid)
-		widget := fit.Widget_Id(0x2000 + u64(s))
-		if fit.Surface_Button(surface, widget, SECTION_NAMES[s], rect, style) {
-			section = s
-			fit.Pane_Reset(&content_pane)
-		}
-	}
-	content := fit.Grid_End(&grid)
+	content := draw_nav_strip_sections(
+		surface,
+		{pad, top + pad, sw - pad * 2, row_h},
+		gap,
+		compact,
+	)
 
 	controls: fit.Grid_State
 	fit.Grid_Begin(
@@ -626,6 +688,51 @@ draw_nav_strip :: proc(surface: ^fit.Surface, top, sw: i32) -> i32 {
 	}
 	_ = fit.Grid_End(&controls)
 	return height
+}
+
+// draw_nav_strip_sections draws the section switcher inside `area` (whose h is
+// one row height): either the full wrapped grid or, when that grid would take
+// more than its share of a short viewport, one row of previous / current /
+// next. Returns the rect the rows covered.
+draw_nav_strip_sections :: proc(
+	surface: ^fit.Surface,
+	area: fit.Rect,
+	gap: i32,
+	compact: bool,
+) -> fit.Rect {
+	assert(surface != nil, "draw_nav_strip_sections: nil surface")
+	assert(area.h > 0, "draw_nav_strip_sections: empty row")
+	scale := f32(fit.Px(surface, 1000)) / 1000
+	cell := gallery_scaled(NAV_STRIP_CELL_W, scale)
+	cols := i32(3) if compact else max((area.w + gap) / (cell + gap), 1)
+	grid: fit.Grid_State
+	fit.Grid_Begin(surface, &grid, {area.x, area.y, area.w, 0}, cols, area.h, gap, gap)
+	if compact {
+		count := i32(len(Section))
+		prev := Section((i32(section) + count - 1) % count)
+		next := Section((i32(section) + 1) % count)
+		prev_id := fit.Widget_Id(NAV_STRIP_COMPACT_ID_BASE)
+		if fit.Surface_Button(surface, prev_id, "<", fit.Grid_Next(&grid), .Ghost) {
+			nav_select_section(prev)
+		}
+		current_id := fit.Widget_Id(NAV_STRIP_COMPACT_ID_BASE + 1)
+		current_rect := fit.Grid_Next(&grid)
+		_ = fit.Surface_Button(surface, current_id, SECTION_NAMES[section], current_rect, .Primary)
+		next_id := fit.Widget_Id(NAV_STRIP_COMPACT_ID_BASE + 2)
+		if fit.Surface_Button(surface, next_id, ">", fit.Grid_Next(&grid), .Ghost) {
+			nav_select_section(next)
+		}
+		return fit.Grid_End(&grid)
+	}
+	for s in Section {
+		style := fit.Button_Style.Primary if s == section else .Ghost
+		rect := fit.Grid_Next(&grid)
+		widget := fit.Widget_Id(0x2000 + u64(s))
+		if fit.Surface_Button(surface, widget, SECTION_NAMES[s], rect, style) {
+			nav_select_section(s)
+		}
+	}
+	return fit.Grid_End(&grid)
 }
 
 apply_gallery_theme :: proc(surface: ^fit.Surface = nil) {
@@ -697,8 +804,11 @@ draw_page_substrate :: proc(surface: ^fit.Surface, pane: fit.Rect, anchor: i32, 
 
 draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
 	x := i32(0) if narrow else fit.Px(surface, NAV_W)
-	w := sw - x
-	pane_rect := fit.Rect{x, top, w, sh - top}
+	w := max(sw - x, 0)
+	pane_rect := fit.Rect{x, top, w, max(sh - top, 0)}
+	// Nothing to show: pane_begin asserts non-negative extents, and a zero
+	// pane would still clip and route input for no visible content.
+	if pane_rect.w == 0 || pane_rect.h == 0 do return
 	y := fit.Pane_Begin(
 		surface,
 		&content_pane,
@@ -711,6 +821,12 @@ draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
 	gutter := fit.Px(surface, 20 if narrow else 52)
 	cx := x + inset
 	cw := w - gutter
+	// A viewport narrower than the gutter leaves no column to lay sections
+	// into, and several of them assert a positive width.
+	if cw <= 0 {
+		fit.Pane_End(surface, &content_pane, pane_rect, y, padding = 14)
+		return
+	}
 	y = draw_section_layer(surface, cx, y, cw)
 
 	end_y: i32

@@ -144,6 +144,93 @@ if status not in source:
 if open(path).read().count(status) != 1:
     raise SystemExit("invalid SurfaceTexture.status compatibility transform")
 PY
+# Failure paths in the vendored WebGPU glue, all of which reach phones first:
+#
+# - requestAdapter / requestDevice are written `.catch(err).then(ok)`. After a
+#   rejection `ok` still runs with `undefined`, so Odin receives a SECOND
+#   callback for a request it already freed (gfx/platform_web.odin), and
+#   `device.lost` then throws a TypeError. The device error callback also
+#   omitted the device slot, so the message pointer landed in it.
+# - A `null` adapter (a blocklisted mobile GPU) was reported as Success.
+# - getCurrentTexture throws on an unconfigured or lost context, and the
+#   exception unwound straight through wasm `step`, ending the frame loop.
+#   Reporting SurfaceGetCurrentTextureStatus.Lost (5, pinned by an #assert in
+#   gfx/platform_web.odin) routes it through gfx's reconfigure-and-skip path.
+#
+# Same contract as the blocks above: every transform is idempotent, keyed on a
+# sentinel, and fails loudly if the upstream text moves.
+python3 - "$DEST/wgpu.js" <<'PY'
+import sys
+path = sys.argv[1]
+source = open(path).read()
+
+DEV_OLD = (
+    "\t\t\t\t\t\tthis.callCallback(callbackInfo, [ENUMS.RequestDeviceStatus.indexOf(\"Error\"), messageAddr]);\n"
+    "\t\t\t\t\t\tthis.mem.exports.wgpu_free(messageAddr);\n"
+    "\t\t\t\t\t})\n"
+    "\t\t\t\t\t.then((device) => {\n"
+)
+DEV_NEW = (
+    "\t\t\t\t\t\tthis.callCallback(callbackInfo, [ENUMS.RequestDeviceStatus.indexOf(\"Error\"), 0, messageAddr]);\n"
+    "\t\t\t\t\t\tthis.mem.exports.wgpu_free(messageAddr);\n"
+    "\t\t\t\t\t\treturn undefined;\n"
+    "\t\t\t\t\t})\n"
+    "\t\t\t\t\t.then((device) => {\n"
+    "\t\t\t\t\t\tif (device === undefined) return; // ingot: rejected above\n"
+)
+ADP_OLD = (
+    "\t\t\t\t\t.then((adapter) => {\n"
+    "\t\t\t\t\t\tconst adapterIdx = this.adapters.create(adapter);\n"
+)
+ADP_NEW = (
+    "\t\t\t\t\t.then((adapter) => {\n"
+    "\t\t\t\t\t\tif (adapter === undefined) return; // ingot: rejected above\n"
+    "\t\t\t\t\t\tif (adapter === null) { // ingot: no adapter is Unavailable, not Success\n"
+    "\t\t\t\t\t\t\tthis.callCallback(callbackInfo, [ENUMS.RequestAdapterStatus.indexOf(\"Unavailable\"), 0, this.zeroMessageArg()]);\n"
+    "\t\t\t\t\t\t\treturn;\n"
+    "\t\t\t\t\t\t}\n"
+    "\t\t\t\t\t\tconst adapterIdx = this.adapters.create(adapter);\n"
+)
+TEX_OLD = "\t\t\t\tconst texture = context.getCurrentTexture();\n"
+TEX_NEW = (
+    "\t\t\t\tlet texture; // ingot: guarded acquire\n"
+    "\t\t\t\ttry {\n"
+    "\t\t\t\t\ttexture = context.getCurrentTexture();\n"
+    "\t\t\t\t} catch (e) {\n"
+    "\t\t\t\t\tthis.mem.storeI32(texturePtr + 4, 0);\n"
+    "\t\t\t\t\tthis.mem.storeI32(texturePtr + 8, 5); // SurfaceGetCurrentTextureStatus.Lost\n"
+    "\t\t\t\t\treturn;\n"
+    "\t\t\t\t}\n"
+)
+
+# (label, already-applied sentinel, old text, new text).
+TRANSFORMS = (
+    ("requestDevice",  "if (device === undefined) return; // ingot: rejected above",  DEV_OLD, DEV_NEW),
+    ("requestAdapter", "// ingot: no adapter is Unavailable, not Success",            ADP_OLD, ADP_NEW),
+    ("getCurrentTexture", "let texture; // ingot: guarded acquire",                  TEX_OLD, TEX_NEW),
+)
+
+changed = False
+for label, sentinel, old, new in TRANSFORMS:
+    if sentinel in source:
+        continue
+    if source.count(old) != 1:
+        raise SystemExit("unexpected Odin WebGPU %s implementation" % label)
+    source = source.replace(old, new, 1)
+    changed = True
+if changed:
+    open(path, "w").write(source)
+
+result = open(path).read()
+EXPECTED = (
+    ("rejected-promise guards", "// ingot: rejected above", 2),
+    ("null adapter status", "// ingot: no adapter is Unavailable, not Success", 1),
+    ("guarded surface acquire", "// ingot: guarded acquire", 1),
+)
+for label, sentinel, count in EXPECTED:
+    if result.count(sentinel) != count:
+        raise SystemExit("invalid WebGPU failure-path transform: %s" % label)
+PY
 if [ "$ROOT/web" != "$(cd "$DEST" && pwd)" ]; then
 	cp "$ROOT/web/ingot_web.js" "$DEST/ingot_web.js"
 	cp "$ROOT/web/ingot_input.js" "$DEST/ingot_input.js"

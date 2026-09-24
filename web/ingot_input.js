@@ -256,7 +256,9 @@
 		listen(canvas, "pointerdown", function (e) {
 			const x = ex();
 			if (!x) return;
-			canvas.focus();
+			// preventScroll: iOS otherwise scrolls the page to the canvas on
+			// every tap, which fires resize and refits the swapchain.
+			canvas.focus({ preventScroll: true });
 			syncModifiers(e);
 			const record = pointerRecord(e);
 			if (!activePointers.has(record.id) && activePointers.size >= ACTIVE_POINTERS_MAX) return;
@@ -381,14 +383,40 @@
 		listen(document, "visibilitychange", function () {
 			if (document.visibilityState !== "visible") releaseHeldInput();
 		});
+		// Touch fires pointerleave right after pointerup, in the same task as
+		// the replayed tap. Clearing hover then makes pointer_snapshot_sanitize
+		// (ui_gfx/input.odin) drop the press before any frame sees it, so the
+		// tap is lost. The hover clear is deferred one animation frame instead:
+		// the engine's step, already scheduled, consumes the tap first.
+		let touchLeaveFrame = 0;
+		const cancelTouchLeave = () => {
+			if (touchLeaveFrame && typeof window.cancelAnimationFrame === "function") {
+				window.cancelAnimationFrame(touchLeaveFrame);
+			}
+			touchLeaveFrame = 0;
+		};
 		listen(canvas, "pointerenter", function (e) {
+			cancelTouchLeave();
 			const x = ex();
 			if (!x) return;
 			x.ingot_web_hover(true);
 			syncModifiers(e);
 		});
-		listen(canvas, "pointerleave", function () {
+		listen(canvas, "pointerleave", function (e) {
 			if (pressedButtons.size > 0) return;
+			const deferrable = e && isTouch(e) &&
+				typeof window.requestAnimationFrame === "function";
+			if (deferrable) {
+				if (touchLeaveFrame) return;
+				touchLeaveFrame = window.requestAnimationFrame(() => {
+					touchLeaveFrame = 0;
+					// Same release a mouse leave performs, just one frame
+					// later; a new touch re-enters first and cancels this.
+					releaseHeldInput();
+					const x = ex(); if (x) x.ingot_web_hover(false);
+				});
+				return;
+			}
 			releaseHeldInput();
 			const x = ex(); if (x) x.ingot_web_hover(false);
 		});
@@ -404,6 +432,7 @@
 		const detach = () => {
 			if (!active) return;
 			active = false;
+			cancelTouchLeave();
 			releaseHeldInput();
 			for (const [target, type, handler, options] of listeners) {
 				target.removeEventListener(type, handler, options);

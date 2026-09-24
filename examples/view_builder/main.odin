@@ -12,9 +12,13 @@ VIEW_FILE :: "views/scratch.ingv"
 SMOKE :: #config(INGOT_SMOKE, false)
 
 State :: struct {
-	doc:      view.View_Doc,
-	selected: i32,
-	status:   string,
+	doc:        view.View_Doc,
+	selected:   i32,
+	status:     string,
+	// Formatted status lines live here, not in the temp arena: the gfx run
+	// loop reclaims context.temp_allocator after every frame, and status is
+	// shown on every later frame.
+	status_buf: [128]u8,
 }
 
 app: fit.App
@@ -98,7 +102,7 @@ delete_action :: proc(user_data: rawptr) {
 save :: proc(data: ^State) {
 	source := view.view_of(&data.doc)
 	if result, ok := view.view_validate(source); !ok {
-		data.status = fmt.tprintf("invalid document: %v", result.fault)
+		data.status = fmt.bprintf(data.status_buf[:], "invalid document: %v", result.fault)
 		return
 	}
 	buffer := make([]u8, view.view_encoded_size(source), context.temp_allocator)
@@ -107,7 +111,7 @@ save :: proc(data: ^State) {
 		data.status = "save failed"
 		return
 	}
-	data.status = fmt.tprintf("saved %d bytes", written)
+	data.status = fmt.bprintf(data.status_buf[:], "saved %d bytes", written)
 }
 
 load :: proc(data: ^State) {
@@ -118,9 +122,9 @@ load :: proc(data: ^State) {
 	}
 	loaded := new(view.View_Doc, context.temp_allocator)
 	if result, decoded := view.view_decode(bytes, loaded); !decoded {
-		data.status = fmt.tprintf("load failed: %v", result.fault)
+		data.status = fmt.bprintf(data.status_buf[:], "load failed: %v", result.fault)
 		return
 	}
 	data.doc = loaded^
-	data.status = fmt.tprintf("loaded %d nodes", data.doc.count)
+	data.status = fmt.bprintf(data.status_buf[:], "loaded %d nodes", data.doc.count)
 }

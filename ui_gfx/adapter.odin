@@ -7,7 +7,13 @@ import ak "ingot:accesskit"
 import rl "ingot:gfx"
 import "ingot:ui"
 
-FONT_CAP :: 64
+// Each cached size is a 2048^2 atlas (4 MiB of GPU memory, plus a transient
+// 4 MiB heap buffer while it is built). A browser tab on a phone cannot afford
+// 64 of them; past the cap, adapter_font_for_size falls back to the nearest
+// loaded size. The gallery smoke run (every scale, theme and section) peaks at
+// 5 distinct sizes per scale, since a scale change resets the set, so 16 keeps
+// more than 3x headroom on web.
+FONT_CAP :: 16 when ODIN_OS == .JS else 64
 
 Adapter :: struct {
 	gfx_context:      ^rl.Context,

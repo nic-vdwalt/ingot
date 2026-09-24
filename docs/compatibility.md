@@ -234,9 +234,11 @@ system GPU support and browser policy.
 
 Consumer builds should call `scripts/stage-web-runtime.sh DEST`. The script
 copies the pinned Odin runtime, WebGPU runtime, and Ingot host glue and applies
-the required compatibility transform. It does not copy application WASM or an
-HTML entry point. Keep staged runtime files and the compiled WASM from the same
-Ingot/Odin revision.
+the required compatibility transforms, including fixes to the WebGPU runtime's
+adapter, device, and surface-acquire failure paths. Each transform is idempotent
+and fails the staging run if the upstream text changes. It does not copy
+application WASM or an HTML entry point. Keep staged runtime files and the
+compiled WASM from the same Ingot/Odin revision.
 
 `ingotWeb.run()` returns a managed session. Retain it and call
 `session.destroy()` before replacement, or call `ingotWeb.stop()` for global
@@ -257,6 +259,42 @@ Browser limitations include:
 - Accessibility uses a semantic DOM overlay and requires real browser/screen-
   reader validation.
 - PTY and native terminal process spawning are unavailable.
+- A lost GPU device ends the session. Mobile browsers revoke the WebGPU device
+  after long backgrounding, a GPU process reset, or memory pressure. `gfx` then
+  stops drawing and calls the host import `ingot.ingot_device_lost(reason)`;
+  `web/ingot_web.js` shows a "tap to reload" overlay and reloads when the page
+  becomes visible again. The device and its resources are not recreated in
+  place, so in-memory application state is lost.
+
+### Host imports
+
+Every page that instantiates an Ingot module must provide the `ingot` import
+module. `web/ingot_web.js` (`ingotWeb.ingotImports()`) is the reference
+provider; a custom host must supply every function `gfx/platform_web.odin`
+declares, or `WebAssembly.instantiate` fails with a missing-import error.
+`ingot_device_lost(reason: i32)` was added for device-loss reporting: `reason`
+is the `wgpu.DeviceLostReason` value, and the host should tell the user that
+the page must be reloaded.
+
+### Mobile browsers
+
+- The backing store is capped at a device-pixel ratio of 2, and at 4 MP when
+  the primary pointer is coarse (16 MP otherwise). Once the pixel budget
+  engages, the effective ratio is rounded down to a 0.25 step so that small
+  resizes (toolbars, keyboard) do not change it and force every font atlas to
+  be rebuilt.
+- Each distinct UI font size costs a 2048x2048 atlas (4 MiB of GPU memory). On
+  web at most 16 sizes are cached; further sizes reuse the nearest loaded one.
+- The frame loop reclaims `context.temp_allocator` after every frame, on web
+  and native alike. Anything kept across frames must use a persistent
+  allocator.
+- Resizes are coalesced to one per animation frame and also follow
+  `orientationchange`, `visualViewport` and a `ResizeObserver` on the canvas's
+  parent.
+- `web/index.html` is a reference shell for phones: no page scrolling,
+  `100dvh`, safe-area insets, and a full-bleed canvas below 700 CSS px wide or
+  500 CSS px tall. Deployed pages outside this repository need the same
+  treatment to benefit.
 
 ### Module size and serving
 

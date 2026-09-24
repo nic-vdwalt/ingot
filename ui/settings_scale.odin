@@ -77,7 +77,9 @@ draw_scale_settings_panel :: proc(
 	section_h := ui_frame_sc(frame, 26)
 	footer_h := ui_frame_sc(frame, 24)
 	modal_padding := metrics.PADDING
-	modal_w := min(ui_frame_sc(frame, 440), screen_width - metrics.PADDING * 4)
+	// A phone narrower than four paddings would otherwise produce a
+	// negative-width modal rect.
+	modal_w := max(min(ui_frame_sc(frame, 440), screen_width - metrics.PADDING * 4), 1)
 	modal_h := ui_frame_sc(frame, 40) + section_h + i32(n) * item_h + footer_h + modal_padding * 2
 
 	st := Modal_State {

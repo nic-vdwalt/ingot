@@ -2,21 +2,48 @@
 <html lang="en">
 <head>
 	<meta charset="UTF-8" />
-	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 	<title>ingot - WebGPU (Odin)</title>
 	<style>
-		html, body { margin: 0; height: 100%; background: #1e1e1e; color: #ddd;
-			font-family: ui-monospace, monospace; }
+		/* The page never scrolls: on iOS a scrolling page toggles the URL bar,
+		   and every toggle is a resize that can reallocate the swapchain. */
+		html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
+			background: #1e1e1e; color: #ddd; font-family: ui-monospace, monospace; }
+		/* 100dvh follows the visible viewport as mobile toolbars come and go;
+		   the 100% line is the fallback for browsers without dvh. */
 		#wrap { display: flex; flex-direction: column; align-items: center; gap: 12px;
-			padding: 24px; box-sizing: border-box; height: 100%; }
-		#ingot-canvas { width: 1280px; max-width: 92vw; height: 720px; max-height: 78vh;
-			border: 1px solid #46464f; border-radius: 8px; background: #000;
-			outline: none; touch-action: none; }
+			padding: 24px; box-sizing: border-box; height: 100%; height: 100dvh; }
+		/* A flex child bounded by the column rather than by vh, so the canvas
+		   always fits beside the heading and status line instead of pushing
+		   the page into overflow. min-height: 0 lets it shrink below 720px.
+		   The flex basis stays auto so it follows `height`: fitCanvas pins the
+		   inline width/height to a whole-device-pixel size, and a fixed basis
+		   would override that pin and stretch the bitmap by the snap slack. */
+		#ingot-canvas { display: block; width: min(1280px, 100%); height: 720px;
+			flex: 0 1 auto; min-height: 0; border: 1px solid #46464f;
+			border-radius: 8px; background: #000; outline: none; touch-action: none; }
 		#msg { font-size: 13px; color: #a0a0aa; }
-		#crash { display: none; font-size: 12px; color: #ff8080; background: #2a1e1e;
+		/* Fixed, not in the column: a crash report appearing must not resize
+		   the canvas out from under the frame that is reporting it. */
+		#crash { display: none; position: fixed; z-index: 10;
+			left: calc(8px + env(safe-area-inset-left)); right: calc(8px + env(safe-area-inset-right));
+			bottom: calc(8px + env(safe-area-inset-bottom));
+			font-size: 12px; color: #ff8080; background: #2a1e1e;
 			border: 1px solid #5a3030; border-radius: 6px; padding: 8px 10px;
-			max-width: 92vw; max-height: 30vh; overflow: auto; white-space: pre-wrap;
+			max-height: 30vh; overflow: auto; white-space: pre-wrap;
 			word-break: break-word; margin: 0; }
+		/* Phones and short landscape screens: the canvas is the page. Dropping
+		   the heading, status line, padding and border returns ~120 CSS px of
+		   height, which is the difference between the gallery fitting and not.
+		   Safe-area insets keep it clear of the notch and home indicator. */
+		@media (max-width: 700px), (max-height: 500px) {
+			#wrap { gap: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right)
+				env(safe-area-inset-bottom) env(safe-area-inset-left); }
+			#wrap > h3, #msg { display: none; }
+			/* 100% of the column's definite height, not flex-grow, for the
+			   same reason as above: the fitCanvas pin must stay in charge. */
+			#ingot-canvas { width: 100%; height: 100%; border: 0; border-radius: 0; }
+		}
 		a { color: #64a0ff; }
 	</style>
 </head>

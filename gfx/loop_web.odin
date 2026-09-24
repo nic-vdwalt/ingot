@@ -56,11 +56,20 @@ run :: proc(frame: Run_Proc) {
 web_step_context :: proc(ctx: ^Context, now: f64) -> bool {
 	assert(ctx != nil, "web_step_context: nil context")
 	if !ctx.initialized do return true
+	// A lost device cannot draw again; the page shows a reload prompt, and
+	// returning true keeps the loop alive so that prompt stays responsive.
+	if ctx.device_lost do return true
 	if !_idle_web_gate(&ctx.idle, now) do return true
 	input_poll(ctx)
 	if g_web_callback.active {
 		assert(g_web_callback.frame != nil, "web_step_context: active callback has no frame")
 		g_web_callback.frame(g_web_callback.userdata)
+		// ui_gfx/adapter.odin: the host owns context.temp_allocator and must
+		// reclaim it after each complete frame. The browser loop is that
+		// host. Without this every measured string and tprintf of every
+		// frame stayed resident, and wasm memory never shrinks, so a phone
+		// eventually killed the tab.
+		free_all(context.temp_allocator)
 	}
 	return true
 }

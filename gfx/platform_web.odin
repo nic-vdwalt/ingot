@@ -80,7 +80,15 @@ foreign dom {
 	_js_drop_data_copy :: proc(index: i32, dst: rawptr, cap: i32) -> i32 ---
 	@(link_name = "ingot_drop_clear")
 	_js_drop_clear :: proc() ---
+	// Tells the host page the GPU device is gone so it can offer a reload.
+	@(link_name = "ingot_device_lost")
+	_js_device_lost :: proc(reason: i32) ---
 }
+
+// The staged wgpu.js reports a thrown getCurrentTexture as this numeric status
+// (scripts/stage-web-runtime.sh). A vendor renumbering must fail the build here
+// rather than silently mapping the failure onto a success status.
+#assert(int(wg.SurfaceGetCurrentTextureStatus.Lost) == 5)
 
 // A non-nil sentinel so the shared `g.win == nil` guards treat the web target as
 // "window present" (there is no OS window; the canvas plays that role).
@@ -230,8 +238,11 @@ _web_on_adapter :: proc "c" (
 	context = g_web_ctx
 	request := cast(^Web_GPU_Request)u1
 	ctx := request.owner if request != nil else nil
-	if status != .Success || !_web_request_live(request) {
-		if status != .Success {
+	// Before the staging transform, wgpu.js reported a null adapter (a
+	// blocklisted mobile GPU) as Success; treat it as the failure it is.
+	adapter_missing := status == .Success && adapter == nil
+	if status != .Success || adapter_missing || !_web_request_live(request) {
+		if status != .Success || adapter_missing {
 			// Mobile browsers commonly resolve with a null adapter (blocklisted
 			// GPU, compat-mode-only device). Without this line the canvas just
 			// stays black forever - surface the reason instead.
@@ -255,9 +266,38 @@ _web_on_adapter :: proc "c" (
 	ctx.budget = gpu_negotiate_budget(adapter)
 	wg.AdapterRequestDevice(
 		ctx.adapter,
-		&wg.DeviceDescriptor{uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error}},
+		&wg.DeviceDescriptor {
+			uncapturedErrorCallbackInfo = {callback = _on_uncaptured_error},
+			deviceLostCallbackInfo = {callback = _web_on_device_lost},
+		},
 		{callback = _web_on_device, userdata1 = device_request},
 	)
+}
+
+// _web_on_device_lost runs when the browser revokes the device: backgrounded
+// too long, GPU process reset, or memory pressure on a phone. Recording
+// against a dead device only produces a frozen canvas, so frames stop and the
+// page is told to offer a reload. A deliberate close destroys the device
+// itself and is ignored, as is the loss of any device this context no longer
+// owns.
+@(private)
+_web_on_device_lost :: proc "c" (
+	device: ^wg.Device,
+	reason: wg.DeviceLostReason,
+	message: wg.StringView,
+	u1, u2: rawptr,
+) {
+	context = g_web_ctx
+	_ = u1
+	_ = u2
+	if reason == .Destroyed || reason == .CallbackCancelled do return
+	ctx := _web_owner_context()
+	if ctx == nil || !ctx.initialized || ctx.device_lost do return
+	if device == nil || device^ != ctx.device do return
+	ctx.device_lost = true
+	fmt.eprintfln("gfx: WebGPU device lost (%v): %s", reason, _web_reason(message))
+	_js_device_lost(i32(reason))
+	assert(ctx.device_lost, "_web_on_device_lost: flag not set")
 }
 
 @(private)

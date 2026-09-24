@@ -9,6 +9,68 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+### Added
+
+- **Host import**: `gfx` registers a WebGPU device-lost callback on web and
+  calls the new `ingot.ingot_device_lost(reason: i32)` import when the browser
+  revokes the device (long backgrounding, GPU process reset, memory pressure).
+  Frames stop instead of recording against a dead device, and
+  `web/ingot_web.js` shows a "tap to reload" overlay, reloading automatically
+  when the page becomes visible again. Custom hosts that build their own
+  `ingot` import object must add this function or instantiation fails. See
+  [host imports](docs/compatibility.md#host-imports).
+- `web/ingot_web.js` refits the canvas on `orientationchange`, `visualViewport`
+  resize, and a `ResizeObserver` on the canvas's parent, coalesced to at most
+  one refit per animation frame.
+
+### Changed
+
+- The gfx run loops (web, native GLFW, and SDL3) call
+  `free_all(context.temp_allocator)` after every frame, as the `ui_gfx`
+  contract already required of the host. Previously nothing on the
+  `fit.Run`/`ui_gfx.App` path reclaimed it, so wasm memory grew for the whole
+  session until a phone killed the tab. Data kept across frames must use a
+  persistent allocator; `examples/view_builder` now formats its status line
+  into a fixed buffer for this reason.
+- When the canvas pixel budget engages, the effective device-pixel ratio is
+  rounded down to a 0.25 step. A continuous ratio changed on every toolbar
+  collapse on tablets and forced every font atlas to be discarded and
+  re-rasterised.
+- `ui_gfx.FONT_CAP` is 16 on web (64 natively). Each cached size is a 4 MiB
+  atlas; the gallery peaks at 5 sizes per scale.
+- `web/index.html` no longer scrolls, uses `100dvh` and safe-area insets, pins
+  the crash panel to the bottom of the viewport, and makes the canvas full
+  bleed below 700 CSS px wide or 500 CSS px tall.
+- Gallery: the narrow nav strip switches to a compact previous / current /
+  next row when the full section grid would take more than half the height
+  under the header.
+
+### Fixed
+
+- Gallery crashed on phones: at 200% scale on a portrait phone, or at 100% in
+  landscape with the toolbar or soft keyboard shown, the header plus the nav
+  strip exceeded the canvas height, the content pane got a negative height,
+  and `pane_begin`'s assertion trapped the wasm module. The strip height is now
+  bounded by the space under the header, the pane rect is clamped, and empty
+  or too-narrow viewports skip content.
+- `scripts/stage-web-runtime.sh` patches three failure paths in the staged
+  `wgpu.js`: a rejected `requestAdapter`/`requestDevice` no longer runs the
+  success branch afterwards (a second callback into a request Odin had already
+  freed), a `null` adapter is reported as `Unavailable` instead of `Success`,
+  and a throwing `getCurrentTexture` reports
+  `SurfaceGetCurrentTextureStatus.Lost` instead of unwinding through the wasm
+  frame loop. `gfx` also treats a successful-but-null adapter as a failure.
+- Touch taps were sometimes dropped: `pointerleave` fires right after a touch
+  `pointerup`, and clearing hover in the same task made the pointer snapshot
+  discard the replayed press. The hover clear for touch is deferred one
+  animation frame. The canvas is focused with `preventScroll` so iOS does not
+  scroll (and resize) the page on every tap.
+- One-shot geometry buffers created by an overflowing flush leaked when the
+  frame was abandoned; `renderer_frame_begin` now releases them.
+- The scale-settings modal no longer computes a negative width on viewports
+  narrower than four paddings.
+- Removed a per-frame `[gallery] frame root` debug log line.
+
 ## [0.3.1] - 2026-09-23
 
 This is a source-only release; no binaries, installers, or web bundles are attached.

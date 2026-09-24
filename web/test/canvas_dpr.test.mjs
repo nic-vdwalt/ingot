@@ -54,6 +54,14 @@ function reportedCssSize() {
 	return [imports.ingot_canvas_css_width(), imports.ingot_canvas_css_height()];
 }
 
+// CANVAS_DPR_STEP in ingot_web.js: the grid the effective ratio snaps to once
+// the pixel budget engages.
+const DPR_STEP = 0.25;
+
+function onStep(ratio) {
+	return Math.abs(ratio / DPR_STEP - Math.round(ratio / DPR_STEP)) < 1e-9;
+}
+
 function pinnedCss(element) {
 	assert.match(element.style.width, /^\d+px$/);
 	assert.match(element.style.height, /^\d+px$/);
@@ -251,8 +259,10 @@ test("the engine reads the effective ratio when the pixel budget engages", () =>
 		assert.ok(element.width < cssW * 2, "budget should have engaged");
 		const ratio = reportedRatio();
 		assert.ok(ratio < 2);
-		assert.ok(Math.abs(ratio - element.width / cssW) < 0.01);
-		assert.ok(Math.abs(ratio - element.height / cssH) < 0.01);
+		// Stepped, so the bitmap is an exact multiple of the pinned box.
+		assert.ok(onStep(ratio), `expected a ${DPR_STEP} step, got ${ratio}`);
+		assert.equal(element.width, cssW * ratio);
+		assert.equal(element.height, cssH * ratio);
 	});
 	// And the cap releases: the next uncapped fit reports the plain ratio.
 	element.setBoundingClientRect({ width: 1200, height: 800 });
@@ -285,7 +295,32 @@ test("a coarse pointer keeps the phone pixel budget", () => {
 		assert.ok(element.width * element.height <= 4 * 1024 * 1024);
 		assert.ok(element.width < 3456);
 		assert.ok(reportedRatio() < 2);
+		assert.ok(onStep(reportedRatio()));
 	});
+});
+
+test("a budget-capped ratio is stable across small resizes", () => {
+	// A continuous ratio changed on every toolbar collapse, and every change
+	// made gfx discard and re-rasterise all font atlases. Sweeping a tablet
+	// box through toolbar-sized height changes must keep the ratio on the
+	// step grid, inside the budget, in exact agreement with the bitmap, and
+	// changing only rarely.
+	const element = canvas();
+	const seen = new Set();
+	withRatio(2, () => {
+		for (let height = 1100; height >= 900; height -= 7) {
+			element.setBoundingClientRect({ width: 1366, height });
+			withCoarsePointer(true, () => globalThis.ingotWeb.fitCanvas());
+			const [cssW, cssH] = pinnedCss(element);
+			const ratio = reportedRatio();
+			assert.ok(onStep(ratio), `expected a ${DPR_STEP} step, got ${ratio}`);
+			assert.ok(element.width * element.height <= 4 * 1024 * 1024);
+			assert.equal(element.width, cssW * ratio);
+			assert.equal(element.height, cssH * ratio);
+			seen.add(ratio);
+		}
+	});
+	assert.ok(seen.size <= 2, `ratio changed too often: ${[...seen]}`);
 });
 
 test("a shrunk pin does not stop the canvas growing back", () => {

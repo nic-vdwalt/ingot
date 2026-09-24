@@ -223,6 +223,34 @@ nav_strip_respects_scaled_width_and_sidebar_height :: proc(t: ^testing.T) {
 	}
 }
 
+// GALLERY_TEST_HEADER_H mirrors ui TAB_BAR_HEIGHT = si(35, s) (ui/scale.odin),
+// the header height draw_content subtracts before the strip.
+GALLERY_TEST_HEADER_H :: 35
+
+// The mobile crash: at 200% on a portrait phone the full strip was taller than
+// the canvas, so the content pane's height went negative and pane_begin's
+// assertion trapped the wasm module. The strip must now always leave the pane
+// a non-negative height, across every preset scale and phone-shaped viewport.
+@(test)
+nav_strip_never_pushes_content_below_zero :: proc(t: ^testing.T) {
+	scales := [?]f32{0.5, 1, 1.25, 1.5, 1.75, 2}
+	viewports := [?][2]i32{{390, 844}, {358, 658}, {844, 390}, {844, 150}, {320, 568}, {1, 1}}
+	for scale in scales {
+		header := gallery_scaled(GALLERY_TEST_HEADER_H, scale)
+		for viewport in viewports {
+			available := max(viewport.y - header, 0)
+			strip := nav_strip_height_scale(scale, viewport.x, available)
+			testing.expect(t, strip >= 0 && strip <= available)
+			testing.expect(t, viewport.y - header - strip >= 0 || available == 0)
+		}
+	}
+	header := gallery_scaled(GALLERY_TEST_HEADER_H, 2)
+	available := i32(658) - header
+	testing.expect(t, nav_strip_uses_compact_scale(2, 358, available))
+	content := available - nav_strip_height_scale(2, 358, available)
+	testing.expect(t, content >= 300)
+}
+
 @(test)
 gallery_contract_keeps_sections_geometry_and_stress_scale :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(Section), 9)

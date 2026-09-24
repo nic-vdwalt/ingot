@@ -243,6 +243,12 @@
 	// multiple of 4, 1.5 an even number; 16 covers every ratio browsers
 	// report in practice and bounds the loop.
 	const CANVAS_SNAP_STEPS_MAX = 16;
+	// When the pixel budget engages, the effective ratio snaps down to this
+	// grid. A continuous ratio changed on every toolbar collapse, which made
+	// gfx discard and re-rasterise every font atlas (ui_gfx/text.odin
+	// adapter_set_font_dpi) on each resize. 0.25 keeps the snap search
+	// (multiples of 4 CSS px) inside CANVAS_SNAP_STEPS_MAX.
+	const CANVAS_DPR_STEP = 0.25;
 	// Scale the pixel budget applied on top of canvasDpr(), 1 when it did
 	// not engage. Reported to the engine so fonts rasterise at the size
 	// they are actually drawn at, rather than at dpr and then minified.
@@ -297,6 +303,20 @@
 		return { width: rect.width, height: rect.height };
 	}
 
+	// Largest CANVAS_DPR_STEP multiple, not above `dpr`, at which a css box of
+	// cssW x cssH fits both the pixel budget and the per-axis bound. Zero when
+	// even one step does not fit, which only a pathological box can cause.
+	function steppedCanvasRatio(cssW, cssH, dpr, budget) {
+		const limit = Math.min(
+			dpr,
+			Math.sqrt(budget / (cssW * cssH)),
+			CANVAS_DIMENSION_MAX / cssW,
+			CANVAS_DIMENSION_MAX / cssH,
+		);
+		if (!Number.isFinite(limit)) return 0;
+		return Math.floor(limit / CANVAS_DPR_STEP) * CANVAS_DPR_STEP;
+	}
+
 	function fitCanvas() {
 		const c = document.getElementById(CANVAS_ID);
 		if (!c) return;
@@ -306,17 +326,42 @@
 		c.style.width = "";
 		c.style.height = "";
 		const box = canvasContentBox(c);
-		const cssW = snapCssDimension(box.width, dpr);
-		const cssH = snapCssDimension(box.height, dpr);
+		let cssW = snapCssDimension(box.width, dpr);
+		let cssH = snapCssDimension(box.height, dpr);
 		let w = Math.min(CANVAS_DIMENSION_MAX, Math.max(1, Math.round(cssW * dpr)));
 		let h = Math.min(CANVAS_DIMENSION_MAX, Math.max(1, Math.round(cssH * dpr)));
 		const budget = canvasPixelsMax();
 		canvasCapScale = 1;
 		if (w * h > budget) {
-			const scale = Math.sqrt(budget / (w * h));
-			w = Math.max(1, Math.floor(w * scale));
-			h = Math.max(1, Math.floor(h * scale));
-			canvasCapScale = Math.min(w / (cssW * dpr), h / (cssH * dpr));
+			let stepped = steppedCanvasRatio(cssW, cssH, dpr, budget);
+			let fitted = null;
+			// Re-snapping the css box to the stepped ratio can hand back a few
+			// more css pixels than the dpr snap did, so the budget is checked
+			// on the final bitmap and the ratio steps down until it holds.
+			// Bounded: dpr is at most CANVAS_DPR_MAX, so this runs at most
+			// CANVAS_DPR_MAX / CANVAS_DPR_STEP times.
+			while (stepped >= CANVAS_DPR_STEP && fitted === null) {
+				const snappedW = snapCssDimension(box.width, stepped);
+				const snappedH = snapCssDimension(box.height, stepped);
+				const pixelsW = Math.max(1, Math.round(snappedW * stepped));
+				const pixelsH = Math.max(1, Math.round(snappedH * stepped));
+				const fits = pixelsW * pixelsH <= budget &&
+					pixelsW <= CANVAS_DIMENSION_MAX && pixelsH <= CANVAS_DIMENSION_MAX;
+				if (fits) fitted = { snappedW, snappedH, pixelsW, pixelsH };
+				else stepped -= CANVAS_DPR_STEP;
+			}
+			if (fitted !== null) {
+				cssW = fitted.snappedW;
+				cssH = fitted.snappedH;
+				w = fitted.pixelsW;
+				h = fitted.pixelsH;
+				canvasCapScale = stepped / dpr;
+			} else {
+				const scale = Math.sqrt(budget / (w * h));
+				w = Math.max(1, Math.floor(w * scale));
+				h = Math.max(1, Math.floor(h * scale));
+				canvasCapScale = Math.min(w / (cssW * dpr), h / (cssH * dpr));
+			}
 		}
 		if (c.width !== w) c.width = w;
 		if (c.height !== h) c.height = h;
@@ -584,6 +629,53 @@
 		"not-allowed", "none",
 	];
 
+	// The GPU device is gone for good once the browser revokes it (tab
+	// backgrounded too long, GPU process reset, memory pressure on a phone).
+	// gfx stops drawing, so without this the page is a frozen canvas with no
+	// explanation. Idempotent: at most one overlay per page.
+	const DEVICE_LOST_ID = "ingot-device-lost";
+	let deviceLost = false;
+
+	function reloadPage() {
+		if (typeof location !== "undefined" && typeof location.reload === "function") {
+			location.reload();
+		}
+	}
+
+	function showDeviceLost(reason) {
+		if (deviceLost) return;
+		deviceLost = true;
+		if (!document.body || document.getElementById(DEVICE_LOST_ID)) return;
+		const panel = document.createElement("div");
+		panel.id = DEVICE_LOST_ID;
+		panel.setAttribute("role", "alert");
+		panel.setAttribute("data-reason", String(reason));
+		Object.assign(panel.style, {
+			position: "fixed", inset: "0", zIndex: "20", display: "flex",
+			flexDirection: "column", alignItems: "center", justifyContent: "center",
+			gap: "12px", padding: "24px", background: "rgba(20, 20, 24, 0.92)",
+			color: "#ddd", font: "14px ui-monospace, monospace", textAlign: "center",
+			cursor: "pointer",
+		});
+		const text = document.createElement("div");
+		text.textContent = "The browser reset graphics. Tap to reload.";
+		const button = document.createElement("button");
+		button.type = "button";
+		button.textContent = "Reload";
+		panel.appendChild(text);
+		panel.appendChild(button);
+		// The whole panel is the target: "tap to reload" must work on a
+		// phone without hunting for the button.
+		panel.addEventListener("click", reloadPage);
+		document.body.appendChild(panel);
+	}
+
+	function clearDeviceLost() {
+		deviceLost = false;
+		const panel = document.getElementById(DEVICE_LOST_ID);
+		if (panel) panel.remove();
+	}
+
 	// The "ingot" foreign-import module (see gfx/platform_web.odin).
 	function ingotImports() {
 		return {
@@ -608,6 +700,9 @@
 				return c ? c.height : 0;
 			},
 			ingot_device_pixel_ratio: () => canvasEffectiveDpr(),
+			// gfx/platform_web.odin _web_on_device_lost: the browser revoked
+			// the GPU device. Nothing can draw again in this page instance.
+			ingot_device_lost: (reason) => showDeviceLost(reason),
 			ingot_set_cursor: (cur) => {
 				const c = document.getElementById(CANVAS_ID);
 				if (c) c.style.cursor = CURSORS[cur] || "default";
@@ -1150,10 +1245,26 @@
 			target.addEventListener(type, handler);
 			listeners.push([target, type, handler]);
 		};
-		const onResize = () => {
+		const applyResize = () => {
 			fitCanvas();
 			const x = wmi.exports;
 			if (x && x.ingot_web_resize) x.ingot_web_resize();
+		};
+		// Mobile browsers fire resize in bursts (URL bar, rotation, soft
+		// keyboard). Each fit can reallocate the swapchain, so apply at most
+		// one per animation frame. Hosts without rAF (node tests) stay
+		// synchronous.
+		let resizeFrame = 0;
+		const onResize = () => {
+			if (typeof window.requestAnimationFrame !== "function") {
+				applyResize();
+				return;
+			}
+			if (resizeFrame) return;
+			resizeFrame = window.requestAnimationFrame(() => {
+				resizeFrame = 0;
+				applyResize();
+			});
 		};
 		const onPaste = (event) => {
 			const text = event.clipboardData && event.clipboardData.getData("text/plain");
@@ -1161,12 +1272,30 @@
 		};
 		const onResume = () => {
 			if (document.visibilityState && document.visibilityState !== "visible") return;
+			// The device cannot come back in this page, and reloading is what
+			// the user would do anyway on returning to a dead canvas.
+			if (deviceLost) {
+				reloadPage();
+				return;
+			}
 			fitCanvas();
 			const x = wmi.exports;
 			if (x && x.ingot_web_resume) x.ingot_web_resume();
 		};
 		fitCanvas();
 		listen(window, "resize", onResize);
+		listen(window, "orientationchange", onResize);
+		// visualViewport tracks the soft keyboard and pinch zoom, which on
+		// iOS do not always fire a window resize.
+		if (window.visualViewport) listen(window.visualViewport, "resize", onResize);
+		// The canvas's container can change size without the window doing so
+		// (flex layout, a crash panel appearing). fitCanvas pins only the
+		// canvas's own style, so observing the parent cannot feed back.
+		const canvasElement = document.getElementById(CANVAS_ID);
+		const canvasParent = canvasElement && canvasElement.parentElement;
+		const resizeObserver = typeof ResizeObserver === "function" && canvasParent
+			? new ResizeObserver(onResize) : null;
+		if (resizeObserver) resizeObserver.observe(canvasParent);
 		listen(window, "paste", onPaste);
 		listen(window, "pageshow", onResume);
 		listen(document, "visibilitychange", onResume);
@@ -1205,6 +1334,12 @@
 				for (const [target, type, handler] of listeners) {
 					safely(() => target.removeEventListener(type, handler));
 				}
+				if (resizeObserver) safely(() => resizeObserver.disconnect());
+				if (resizeFrame && typeof window.cancelAnimationFrame === "function") {
+					safely(() => window.cancelAnimationFrame(resizeFrame));
+				}
+				resizeFrame = 0;
+				safely(clearDeviceLost);
 				safely(clearSemanticOverlays);
 				if (wasmMemoryInterface === wmi) wasmMemoryInterface = null;
 				if (activeSession === session) activeSession = null;
@@ -1252,6 +1387,7 @@
 			semanticState: () => ({ semanticInputs, semanticForms, semanticControls }),
 			attachDrop,
 			box3dWorkerImports,
+			clearDeviceLost,
 		});
 	}
 })();

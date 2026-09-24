@@ -1020,7 +1020,12 @@ when INGOT_GFX_SDL3 {
 
 	run_data :: proc(frame: Run_Data_Proc, userdata: rawptr) -> bool {
 		if frame == nil do return false
-		for !WindowShouldClose() do frame(userdata)
+		// tigerstyle: allow-unbounded-loop -- window close terminates the application lifetime
+		for !WindowShouldClose() {
+			frame(userdata)
+			// Same contract as loop_web.odin: the run loop owns frame scratch.
+			free_all(context.temp_allocator)
+		}
 		return true
 	}
 
