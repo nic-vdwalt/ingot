@@ -274,7 +274,14 @@ write_gpu_texture :: proc(
 	width: u32,
 	height: u32,
 ) -> bool {
-	return context_write_gpu_texture(default_context(), texture, data, bytes_per_row, width, height)
+	return context_write_gpu_texture(
+		default_context(),
+		texture,
+		data,
+		bytes_per_row,
+		width,
+		height,
+	)
 }
 
 // _f32_to_f16_bits converts with round-to-nearest-even, flushing values below
@@ -340,7 +347,12 @@ context_write_gpu_texture_rgba16f :: proc(
 	)
 }
 
-write_gpu_texture_rgba16f :: proc(texture: Gpu_Texture, texels: []f32, width: u32, height: u32) -> bool {
+write_gpu_texture_rgba16f :: proc(
+	texture: Gpu_Texture,
+	texels: []f32,
+	width: u32,
+	height: u32,
+) -> bool {
 	return context_write_gpu_texture_rgba16f(default_context(), texture, texels, width, height)
 }
 
@@ -362,7 +374,12 @@ context_write_gpu_texture_rgba32f :: proc(
 	return context_write_gpu_texture(ctx, texture, bytes, width * 16, width, height)
 }
 
-write_gpu_texture_rgba32f :: proc(texture: Gpu_Texture, texels: []f32, width: u32, height: u32) -> bool {
+write_gpu_texture_rgba32f :: proc(
+	texture: Gpu_Texture,
+	texels: []f32,
+	width: u32,
+	height: u32,
+) -> bool {
 	return context_write_gpu_texture_rgba32f(default_context(), texture, texels, width, height)
 }
 

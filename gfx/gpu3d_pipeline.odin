@@ -2138,10 +2138,27 @@ _gpu_3d_scene_view :: proc(
 	entry := slot.entry
 	if entry.sample_count > 1 do return fallback, nil, false
 	if .TextureBinding not_in entry.usage && entry.usage != {} do return fallback, nil, false
-	allowed :=
-		_gpu_3d_format_filterable(entry.wgformat) if filterable else _gpu_3d_format_float_sampleable(entry.wgformat)
+	allowed := _gpu_3d_format_float_sampleable(entry.wgformat)
+	if filterable do allowed = _gpu_3d_format_filterable(entry.wgformat)
 	if !allowed do return fallback, nil, false
 	return entry.view, entry.sampler, true
+}
+
+// _gpu_3d_scene_sampled_view resolves a filterable material texture together
+// with its sampler; any unusable handle falls back to the neutral pair.
+@(private)
+_gpu_3d_scene_sampled_view :: proc(
+	ctx: ^Context,
+	texture: Texture2D,
+) -> (
+	wg.TextureView,
+	wg.Sampler,
+) {
+	assert(ctx != nil, "_gpu_3d_scene_sampled_view: nil context")
+	neutral_view := ctx.rend.neutral_view
+	view, sampler, ok := _gpu_3d_scene_view(ctx, texture, neutral_view, true)
+	if !ok || sampler == nil do return neutral_view, ctx.rend.neutral_sampler
+	return view, sampler
 }
 
 @(private)
@@ -2162,29 +2179,26 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.Bi
 		if entry.key == key do return entry.bind, true
 	}
 	neutral_view := pass.owner.rend.neutral_view
-	neutral_sampler := pass.owner.rend.neutral_sampler
-	roughness_view, roughness_sampler, roughness_ok := _gpu_3d_scene_view(
+	roughness_view, roughness_sampler := _gpu_3d_scene_sampled_view(
 		pass.owner,
 		material.roughness_ao_texture,
-		neutral_view,
-		true,
 	)
-	if !roughness_ok || roughness_sampler == nil {
-		roughness_view = neutral_view
-		roughness_sampler = neutral_sampler
-	}
-	color_view, color_sampler, color_ok := _gpu_3d_scene_view(
+	color_view, color_sampler := _gpu_3d_scene_sampled_view(
 		pass.owner,
 		material.scene_color_texture,
+	)
+	extra_0_view, _, _ := _gpu_3d_scene_view(
+		pass.owner,
+		material.extra_texture_0,
 		neutral_view,
 		true,
 	)
-	if !color_ok || color_sampler == nil {
-		color_view = neutral_view
-		color_sampler = neutral_sampler
-	}
-	extra_0_view, _, _ := _gpu_3d_scene_view(pass.owner, material.extra_texture_0, neutral_view, true)
-	extra_1_view, _, _ := _gpu_3d_scene_view(pass.owner, material.extra_texture_1, neutral_view, true)
+	extra_1_view, _, _ := _gpu_3d_scene_view(
+		pass.owner,
+		material.extra_texture_1,
+		neutral_view,
+		true,
+	)
 	data_0_view, _, _ := _gpu_3d_scene_view(
 		pass.owner,
 		material.extra_data_texture,
@@ -2845,9 +2859,9 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 }
 
 @(private)
-_gpu_3d_init_neutral_scene :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
-	assert(ctx != nil, "_gpu_3d_init_neutral_scene: nil context")
-	assert(resources != nil, "_gpu_3d_init_neutral_scene: nil resources")
+_gpu_3d_init_scene_layout :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
+	assert(ctx != nil, "_gpu_3d_init_scene_layout: nil context")
+	assert(resources != nil, "_gpu_3d_init_scene_layout: nil resources")
 	scene_layout_entries := [GPU_3D_SCENE_BINDING_COUNT]wg.BindGroupLayoutEntry {
 		{
 			binding = 0,
@@ -2892,6 +2906,14 @@ _gpu_3d_init_neutral_scene :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) 
 		ctx.device,
 		&{entryCount = len(scene_layout_entries), entries = raw_data(scene_layout_entries[:])},
 	)
+	assert(resources.scene_layout != nil)
+}
+
+@(private)
+_gpu_3d_init_neutral_scene :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
+	assert(ctx != nil, "_gpu_3d_init_neutral_scene: nil context")
+	assert(resources != nil, "_gpu_3d_init_neutral_scene: nil resources")
+	_gpu_3d_init_scene_layout(ctx, resources)
 	resources.neutral_depth_tex = wg.DeviceCreateTexture(
 		ctx.device,
 		&{

@@ -35,19 +35,43 @@ gpu_3d_scene_bind_keys_include_every_scene_texture :: proc(t: ^testing.T) {
 	)
 	testing.expect(
 		t,
-		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 2, depth_texture = 3, extra_0 = 5},
+		base !=
+		Gpu_3D_Scene_Bind_Key {
+				roughness_texture = 1,
+				color_texture = 2,
+				depth_texture = 3,
+				extra_0 = 5,
+			},
 	)
 	testing.expect(
 		t,
-		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 2, depth_texture = 3, extra_1 = 5},
+		base !=
+		Gpu_3D_Scene_Bind_Key {
+				roughness_texture = 1,
+				color_texture = 2,
+				depth_texture = 3,
+				extra_1 = 5,
+			},
 	)
 	testing.expect(
 		t,
-		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 2, depth_texture = 3, extra_data_0 = 5},
+		base !=
+		Gpu_3D_Scene_Bind_Key {
+				roughness_texture = 1,
+				color_texture = 2,
+				depth_texture = 3,
+				extra_data_0 = 5,
+			},
 	)
 	testing.expect(
 		t,
-		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 2, depth_texture = 3, extra_data_1 = 5},
+		base !=
+		Gpu_3D_Scene_Bind_Key {
+				roughness_texture = 1,
+				color_texture = 2,
+				depth_texture = 3,
+				extra_data_1 = 5,
+			},
 	)
 	testing.expect(t, GPU_3D_SCENE_BINDS_PER_PASS > 0)
 }
