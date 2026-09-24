@@ -1132,6 +1132,7 @@ prepared_leaf_size_is_fixed :: proc(node: ^Prepared_Node) -> bool {
 prepared_leaf_width_dependent :: proc(node: ^Prepared_Node) -> bool {
 	assert(node != nil, "prepared leaf dependency: nil node")
 	assert(!prepared_kind_is_container(node.kind), "prepared leaf dependency: container")
+	if node.kind == .Text_Input do return node.text_input.max_lines > 0
 	return (node.kind == .Label && node.label.wrap) || node.kind == .Custom
 }
 
@@ -1176,7 +1177,11 @@ prepared_measure_leaf :: proc(u: ^Ui, node: ^Prepared_Node, max_width: i32) {
 	case .Slider:
 		node.size = slider_spec_size(u, node.slider)
 	case .Text_Input:
-		node.size = prepared_text_input_size(u, node.text_input)
+		if node.text_input.max_lines > 0 && max_width > 0 {
+			node.size = prepared_text_input_grown_size(u, node.text_input, max_width)
+		} else {
+			node.size = prepared_text_input_size(u, node.text_input)
+		}
 	case .Progress:
 		node.size = prepared_progress_size(u, node.progress)
 	case .Separator:

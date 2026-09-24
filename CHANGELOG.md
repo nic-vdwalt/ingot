@@ -22,6 +22,14 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - `web/ingot_web.js` refits the canvas on `orientationchange`, `visualViewport`
   resize, and a `ResizeObserver` on the canvas's parent, coalesced to at most
   one refit per animation frame.
+- `fit.Builder_Text_Input_Options` gains `submit` and `max_lines`
+  (`ui.Prepared_Text_Input.submit`/`max_lines`). `submit` picks the Enter
+  behaviour explicitly, so a multi-line composer can send on Enter and insert
+  a newline on Shift+Enter; `.Default` keeps the height-based choice.
+  `max_lines > 0` grows the box with its wrapped text, measured at its resolved
+  width with the renderer's wrap memo, up to `max_lines` lines, then scrolls
+  internally. Both default to the previous behaviour. The declarative box path
+  now renders through `text_input_box` so it honours `submit` too.
 
 ### Changed
 

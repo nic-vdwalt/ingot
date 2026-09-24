@@ -205,6 +205,14 @@ Slider :: proc {
 	slider_id,
 }
 
+// builder_submit_override maps the façade submit mode to the prepared spec;
+// .Default leaves the height-based choice in place.
+@(private = "file")
+builder_submit_override :: proc(mode: Text_Input_Submit) -> Maybe(ui.Text_Input_Submit) {
+	if mode == .Default do return nil
+	return to_submit(mode)
+}
+
 @(private = "file")
 builder_text_input_id :: proc(
 	parent: Parent,
@@ -226,6 +234,8 @@ builder_text_input_id :: proc(
 			height = options.height,
 			masked = options.masked,
 			semantics = to_text_semantics(options.semantics),
+			submit = builder_submit_override(options.submit),
+			max_lines = options.max_lines,
 		},
 		{
 			track = to_track(options.track),
@@ -286,6 +296,8 @@ builder_text_input_state :: proc(
 			height = options.height,
 			masked = options.masked,
 			semantics = to_text_semantics(options.semantics),
+			submit = builder_submit_override(options.submit),
+			max_lines = options.max_lines,
 		},
 		{
 			track = to_track(options.track),
