@@ -1657,6 +1657,21 @@ prepared_place_container :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32) {
 }
 
 @(private = "file")
+prepared_attachment_z :: proc(prepared: ^Prepared_Ui, index: i32) -> (z: Z_Order, scoped: bool) {
+	assert(prepared != nil && index >= 0 && index < prepared.count)
+	nodes := prepared_nodes(prepared)
+	current := nodes[index].parent
+	for _ in 0 ..< prepared.count {
+		if current < 0 do return
+		assert(current < prepared.count, "prepared_attachment_z: invalid parent")
+		if nodes[current].kind == .Attachment do return nodes[current].attachment.z, true
+		current = nodes[current].parent
+	}
+	assert(false, "prepared_attachment_z: parent chain exceeds node count")
+	return
+}
+
+@(private = "file")
 prepared_place_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, interactive: bool) {
 	assert(u != nil && prepared != nil && index >= 0 && index < prepared.count)
 	node := &prepared_nodes(prepared)[index]
@@ -1678,6 +1693,9 @@ prepared_place_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, intera
 		maximum := max(content_size - viewport_size, 0)
 		mouse := get_mouse_position(u.frame)
 		screen := frame_rect_to_screen(u.frame, rect_f32(node.rect))
+		z, scoped := prepared_attachment_z(prepared, index)
+		scoped = scoped && z > frame_z(u.frame)
+		if scoped do z_scope_begin(u.frame, z)
 		if node.scroll.focus.focus == nil && slot_visible(node.rect) {
 			node.scroll.focus = focus(u, node.scroll.id)
 		}
@@ -1700,6 +1718,7 @@ prepared_place_scroll :: proc(u: ^Ui, prepared: ^Prepared_Ui, index: i32, intera
 			prepared_scroll_keyboard(u.frame, state, viewport_size, content_size, node.scroll.axis)
 		}
 		state.offset = clamp(state.offset, 0, f32(maximum))
+		if scoped do z_scope_end(u.frame)
 	}
 	content := rect_inset(node.rect, insets_of(u, node.scroll.padding))
 	child := &prepared_nodes(prepared)[node.first_child]
