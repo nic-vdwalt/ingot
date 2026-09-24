@@ -51,6 +51,10 @@ GPU_3D_PLANE_MAX_INDICES :: GPU_3D_PLANE_MAX_CELLS * GPU_3D_PLANE_MAX_CELLS * 6
 // large enough that per-chunk overhead amortizes to one upload and one draw.
 GPU_3D_MAX_INSTANCES_PER_DRAW :: 256
 GPU_3D_SCENE_BINDS_PER_PASS :: 64
+// Group 3 layout: b0 roughness/AO, b1 sampler, b2 scene colour, b3 sampler,
+// b4 scene depth, b5/b6 extra filterable textures, b7 extra sampler, b8/b9
+// extra unfilterable data textures. Shaders may declare any subset.
+GPU_3D_SCENE_BINDING_COUNT :: 10
 
 Gpu_Mesh :: struct {
 	id: u32,
@@ -107,6 +111,14 @@ Gpu_Material :: struct {
 	roughness_ao_texture: Texture2D,
 	scene_color_texture:  Texture2D,
 	scene_depth_texture:  Texture2D,
+	// Optional group-3 extras for custom shaders: extra_texture_0/1 bind at
+	// b5/b6 (filterable float, sampled with the engine-owned linear/repeat
+	// sampler at b7); extra_data_texture/_1 bind at b8/b9 as unfilterable
+	// float (textureLoad only). Zero ids bind neutral textures.
+	extra_texture_0:      Texture2D,
+	extra_texture_1:      Texture2D,
+	extra_data_texture:   Texture2D,
+	extra_data_texture_1: Texture2D,
 	custom_params:        [4]f32,
 	custom_params_2:      [4]f32,
 	custom_params_3:      [4]f32,
@@ -126,6 +138,12 @@ Gpu_Material :: struct {
 	custom_params_17:     [4]f32,
 	custom_params_18:     [4]f32,
 	custom_params_19:     [4]f32,
+	custom_params_20:     [4]f32,
+	custom_params_21:     [4]f32,
+	custom_params_22:     [4]f32,
+	custom_params_23:     [4]f32,
+	custom_params_24:     [4]f32,
+	custom_params_25:     [4]f32,
 	// shader with a zero id means the built-in GPU_3D_SHADER; a custom
 	// handle from create_gpu_3d_shader replaces both shader stages. Stale
 	// handles fall back to the built-in shader (operating condition).
@@ -160,6 +178,10 @@ Gpu_3D_Scene_Bind_Key :: struct {
 	roughness_texture: u32,
 	color_texture:     u32,
 	depth_texture:     u32,
+	extra_0:           u32,
+	extra_1:           u32,
+	extra_data_0:      u32,
+	extra_data_1:      u32,
 }
 
 @(private)
@@ -249,6 +271,12 @@ Gpu_3D_Uniforms :: struct {
 	clip_padding:              [3]u32,
 	secondary_light_direction: [4]f32,
 	secondary_light_params:    [4]f32,
+	custom_params_20:          [4]f32,
+	custom_params_21:          [4]f32,
+	custom_params_22:          [4]f32,
+	custom_params_23:          [4]f32,
+	custom_params_24:          [4]f32,
+	custom_params_25:          [4]f32,
 }
 
 // Per-instance model transforms for draw_gpu_mesh_instanced, read by the
@@ -265,7 +293,7 @@ Gpu_3D_Instance_Uniforms :: struct {
 // and WebGPU permits a binding larger than the shader view. Lock the invariants
 // a struct edit could silently break: never smaller than the shader view, always
 // 16-byte aligned as dynamic offsets require.
-#assert(size_of(Gpu_3D_Uniforms) >= 544)
+#assert(size_of(Gpu_3D_Uniforms) >= 640)
 #assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
 #assert(size_of(Gpu_3D_Vertex) == 36)
 #assert(size_of(Matrix) == 64)
@@ -387,6 +415,9 @@ Gpu_3D_Resources :: struct {
 	scene_layout:           wg.BindGroupLayout,
 	neutral_depth_tex:      wg.Texture,
 	neutral_depth_view:     wg.TextureView,
+	neutral_data_tex:       wg.Texture,
+	neutral_data_view:      wg.TextureView,
+	extra_sampler:          wg.Sampler,
 	neutral_scene_bind:     wg.BindGroup,
 	next_pass_generation:   u64,
 	active_pass_generation: u64,
@@ -435,6 +466,12 @@ struct Uniforms {
     clip_padding: vec3<u32>,
     secondary_light_direction: vec4<f32>,
     secondary_light_params: vec4<f32>,
+    custom_params_20: vec4<f32>,
+    custom_params_21: vec4<f32>,
+    custom_params_22: vec4<f32>,
+    custom_params_23: vec4<f32>,
+    custom_params_24: vec4<f32>,
+    custom_params_25: vec4<f32>,
 };
 // Array length mirrors GPU_3D_MAX_INSTANCES_PER_DRAW.
 struct Instances {
@@ -2011,6 +2048,81 @@ _gpu_3d_material_binds :: proc(
 	return texture_bind, textured, normal_bind, normal_mapped, roughness_bind, roughness_mapped
 }
 
+// _gpu_3d_format_filterable reports whether a texture format may bind to a
+// Float (filterable) texture slot sampled with a Filtering sampler. 32-bit
+// float formats need the optional float32-filterable feature, which the
+// device never requests; depth and integer formats never qualify.
+@(private)
+_gpu_3d_format_filterable :: proc(format: wg.TextureFormat) -> bool {
+	#partial switch format {
+	case .R32Float, .RG32Float, .RGBA32Float:
+		return false
+	}
+	return _gpu_3d_format_float_sampleable(format)
+}
+
+// _gpu_3d_format_float_sampleable reports whether a format may bind to an
+// UnfilterableFloat texture slot (any float or normalized colour format).
+@(private)
+_gpu_3d_format_float_sampleable :: proc(format: wg.TextureFormat) -> bool {
+	#partial switch format {
+	case .Undefined,
+	     .Stencil8,
+	     .Depth16Unorm,
+	     .Depth24Plus,
+	     .Depth24PlusStencil8,
+	     .Depth32Float,
+	     .Depth32FloatStencil8,
+	     .R8Uint,
+	     .R8Sint,
+	     .R16Uint,
+	     .R16Sint,
+	     .RG8Uint,
+	     .RG8Sint,
+	     .R32Uint,
+	     .R32Sint,
+	     .RG16Uint,
+	     .RG16Sint,
+	     .RGBA8Uint,
+	     .RGBA8Sint,
+	     .RG32Uint,
+	     .RG32Sint,
+	     .RGBA16Uint,
+	     .RGBA16Sint,
+	     .RGBA32Uint,
+	     .RGBA32Sint,
+	     .RGB10A2Uint:
+		return false
+	}
+	return true
+}
+
+// _gpu_3d_scene_view resolves a material texture to a single-sample view for
+// a group-3 slot. Stale handles, multisampled textures and formats the slot
+// cannot accept fall back to the neutral view (operating condition).
+@(private)
+_gpu_3d_scene_view :: proc(
+	ctx: ^Context,
+	texture: Texture2D,
+	fallback: wg.TextureView,
+	filterable: bool,
+) -> (
+	wg.TextureView,
+	wg.Sampler,
+	bool,
+) {
+	if texture.id == 0 do return fallback, nil, false
+	slot := _texture_slot_context(ctx.id, &ctx.resources.textures, texture.id)
+	if slot == nil || slot.entry == nil || slot.entry.view == nil do return fallback, nil, false
+	entry := slot.entry
+	if entry.sample_count > 1 do return fallback, nil, false
+	if .TextureBinding not_in entry.usage && entry.usage != {} do return fallback, nil, false
+	allowed :=
+		_gpu_3d_format_filterable(entry.wgformat) if filterable else _gpu_3d_format_float_sampleable(entry.wgformat)
+	if !allowed do return fallback, nil, false
+	return entry.view, entry.sampler, true
+}
+
 @(private)
 _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.BindGroup, bool) {
 	assert(pass != nil && pass.owner != nil, "_gpu_3d_scene_bind: nil pass")
@@ -2019,37 +2131,51 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.Bi
 		roughness_texture = material.roughness_ao_texture.id,
 		color_texture     = material.scene_color_texture.id,
 		depth_texture     = material.scene_depth_texture.id,
+		extra_0           = material.extra_texture_0.id,
+		extra_1           = material.extra_texture_1.id,
+		extra_data_0      = material.extra_data_texture.id,
+		extra_data_1      = material.extra_data_texture_1.id,
 	}
 	for index in 0 ..< pass.scene_bind_count {
 		entry := &pass.scene_binds[index]
 		if entry.key == key do return entry.bind, true
 	}
-	roughness_view := pass.owner.rend.neutral_view
-	roughness_sampler := pass.owner.rend.neutral_sampler
-	if material.roughness_ao_texture.id != 0 {
-		slot := _texture_slot_context(
-			pass.owner.id,
-			&pass.owner.resources.textures,
-			material.roughness_ao_texture.id,
-		)
-		if slot != nil && slot.entry != nil {
-			roughness_view = slot.entry.view
-			roughness_sampler = slot.entry.sampler
-		}
+	neutral_view := pass.owner.rend.neutral_view
+	neutral_sampler := pass.owner.rend.neutral_sampler
+	roughness_view, roughness_sampler, roughness_ok := _gpu_3d_scene_view(
+		pass.owner,
+		material.roughness_ao_texture,
+		neutral_view,
+		true,
+	)
+	if !roughness_ok || roughness_sampler == nil {
+		roughness_view = neutral_view
+		roughness_sampler = neutral_sampler
 	}
-	color_view := pass.owner.rend.neutral_view
-	color_sampler := pass.owner.rend.neutral_sampler
-	if material.scene_color_texture.id != 0 {
-		slot := _texture_slot_context(
-			pass.owner.id,
-			&pass.owner.resources.textures,
-			material.scene_color_texture.id,
-		)
-		if slot != nil && slot.entry != nil {
-			color_view = slot.entry.view
-			color_sampler = slot.entry.sampler
-		}
+	color_view, color_sampler, color_ok := _gpu_3d_scene_view(
+		pass.owner,
+		material.scene_color_texture,
+		neutral_view,
+		true,
+	)
+	if !color_ok || color_sampler == nil {
+		color_view = neutral_view
+		color_sampler = neutral_sampler
 	}
+	extra_0_view, _, _ := _gpu_3d_scene_view(pass.owner, material.extra_texture_0, neutral_view, true)
+	extra_1_view, _, _ := _gpu_3d_scene_view(pass.owner, material.extra_texture_1, neutral_view, true)
+	data_0_view, _, _ := _gpu_3d_scene_view(
+		pass.owner,
+		material.extra_data_texture,
+		resources.neutral_data_view,
+		false,
+	)
+	data_1_view, _, _ := _gpu_3d_scene_view(
+		pass.owner,
+		material.extra_data_texture_1,
+		resources.neutral_data_view,
+		false,
+	)
 	depth_view := resources.neutral_depth_view
 	if material.scene_depth_texture.id != 0 {
 		slot := _texture_slot_context(
@@ -2059,12 +2185,17 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.Bi
 		)
 		if slot != nil && slot.entry != nil do depth_view = slot.entry.view
 	}
-	entries := [5]wg.BindGroupEntry {
+	entries := [GPU_3D_SCENE_BINDING_COUNT]wg.BindGroupEntry {
 		{binding = 0, textureView = roughness_view},
 		{binding = 1, sampler = roughness_sampler},
 		{binding = 2, textureView = color_view},
 		{binding = 3, sampler = color_sampler},
 		{binding = 4, textureView = depth_view},
+		{binding = 5, textureView = extra_0_view},
+		{binding = 6, textureView = extra_1_view},
+		{binding = 7, sampler = resources.extra_sampler},
+		{binding = 8, textureView = data_0_view},
+		{binding = 9, textureView = data_1_view},
 	}
 	bind := wg.DeviceCreateBindGroup(
 		pass.owner.device,
@@ -2146,6 +2277,12 @@ _gpu_3d_uniforms :: proc(
 			0,
 		},
 		secondary_light_params = {secondary_light.ambient, secondary_light.diffuse, 0, 0},
+		custom_params_20 = material.custom_params_20,
+		custom_params_21 = material.custom_params_21,
+		custom_params_22 = material.custom_params_22,
+		custom_params_23 = material.custom_params_23,
+		custom_params_24 = material.custom_params_24,
+		custom_params_25 = material.custom_params_25,
 	}
 }
 
@@ -2684,7 +2821,7 @@ _gpu_3d_init_shared :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 _gpu_3d_init_neutral_scene :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 	assert(ctx != nil, "_gpu_3d_init_neutral_scene: nil context")
 	assert(resources != nil, "_gpu_3d_init_neutral_scene: nil resources")
-	scene_layout_entries := [5]wg.BindGroupLayoutEntry {
+	scene_layout_entries := [GPU_3D_SCENE_BINDING_COUNT]wg.BindGroupLayoutEntry {
 		{
 			binding = 0,
 			visibility = {.Vertex, .Fragment},
@@ -2701,6 +2838,27 @@ _gpu_3d_init_neutral_scene :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) 
 			binding = 4,
 			visibility = {.Fragment},
 			texture = {sampleType = .Depth, viewDimension = ._2D},
+		},
+		{
+			binding = 5,
+			visibility = {.Vertex, .Fragment},
+			texture = {sampleType = .Float, viewDimension = ._2D},
+		},
+		{
+			binding = 6,
+			visibility = {.Vertex, .Fragment},
+			texture = {sampleType = .Float, viewDimension = ._2D},
+		},
+		{binding = 7, visibility = {.Vertex, .Fragment}, sampler = {type = .Filtering}},
+		{
+			binding = 8,
+			visibility = {.Vertex, .Fragment},
+			texture = {sampleType = .UnfilterableFloat, viewDimension = ._2D},
+		},
+		{
+			binding = 9,
+			visibility = {.Vertex, .Fragment},
+			texture = {sampleType = .UnfilterableFloat, viewDimension = ._2D},
 		},
 	}
 	resources.scene_layout = wg.DeviceCreateBindGroupLayout(
@@ -2719,12 +2877,50 @@ _gpu_3d_init_neutral_scene :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) 
 		},
 	)
 	resources.neutral_depth_view = wg.TextureCreateView(resources.neutral_depth_tex, nil)
-	neutral_scene_entries := [5]wg.BindGroupEntry {
+	resources.neutral_data_tex = wg.DeviceCreateTexture(
+		ctx.device,
+		&{
+			usage = {.TextureBinding, .CopyDst},
+			dimension = ._2D,
+			size = {1, 1, 1},
+			format = .RGBA32Float,
+			mipLevelCount = 1,
+			sampleCount = 1,
+		},
+	)
+	neutral_data := [4]f32{}
+	wg.QueueWriteTexture(
+		ctx.queue,
+		&{texture = resources.neutral_data_tex},
+		raw_data(neutral_data[:]),
+		uint(size_of(neutral_data)),
+		&{bytesPerRow = size_of(neutral_data), rowsPerImage = 1},
+		&{1, 1, 1},
+	)
+	resources.neutral_data_view = wg.TextureCreateView(resources.neutral_data_tex, nil)
+	resources.extra_sampler = wg.DeviceCreateSampler(
+		ctx.device,
+		&{
+			magFilter = .Linear,
+			minFilter = .Linear,
+			mipmapFilter = .Linear,
+			addressModeU = .Repeat,
+			addressModeV = .Repeat,
+			addressModeW = .ClampToEdge,
+			maxAnisotropy = 1,
+		},
+	)
+	neutral_scene_entries := [GPU_3D_SCENE_BINDING_COUNT]wg.BindGroupEntry {
 		{binding = 0, textureView = ctx.rend.neutral_view},
 		{binding = 1, sampler = ctx.rend.neutral_sampler},
 		{binding = 2, textureView = ctx.rend.neutral_view},
 		{binding = 3, sampler = ctx.rend.neutral_sampler},
 		{binding = 4, textureView = resources.neutral_depth_view},
+		{binding = 5, textureView = ctx.rend.neutral_view},
+		{binding = 6, textureView = ctx.rend.neutral_view},
+		{binding = 7, sampler = resources.extra_sampler},
+		{binding = 8, textureView = resources.neutral_data_view},
+		{binding = 9, textureView = resources.neutral_data_view},
 	}
 	resources.neutral_scene_bind = wg.DeviceCreateBindGroup(
 		ctx.device,
@@ -2737,6 +2933,9 @@ _gpu_3d_init_neutral_scene :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) 
 	assert(resources.scene_layout != nil)
 	assert(resources.neutral_depth_tex != nil)
 	assert(resources.neutral_depth_view != nil)
+	assert(resources.neutral_data_tex != nil)
+	assert(resources.neutral_data_view != nil)
+	assert(resources.extra_sampler != nil)
 	assert(resources.neutral_scene_bind != nil)
 }
 
@@ -2774,6 +2973,12 @@ _gpu_3d_resources_destroy :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 	if resources.neutral_depth_tex != nil {
 		wg.TextureDestroy(resources.neutral_depth_tex)
 		wg.TextureRelease(resources.neutral_depth_tex)
+	}
+	if resources.extra_sampler != nil do wg.SamplerRelease(resources.extra_sampler)
+	if resources.neutral_data_view != nil do wg.TextureViewRelease(resources.neutral_data_view)
+	if resources.neutral_data_tex != nil {
+		wg.TextureDestroy(resources.neutral_data_tex)
+		wg.TextureRelease(resources.neutral_data_tex)
 	}
 	if resources.scene_layout != nil do wg.BindGroupLayoutRelease(resources.scene_layout)
 	if resources.layout != nil do wg.BindGroupLayoutRelease(resources.layout)

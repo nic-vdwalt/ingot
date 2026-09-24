@@ -214,6 +214,158 @@ write_gpu_buffer :: proc(buffer: Gpu_Buffer, offset: u64, data: []u8) -> bool {
 	return context_write_gpu_buffer(default_context(), buffer, offset, data)
 }
 
+// _wg_format_bytes returns the texel size of the uncompressed colour formats
+// write_gpu_texture accepts, or 0 for formats it rejects.
+@(private)
+_wg_format_bytes :: proc(format: wg.TextureFormat) -> u32 {
+	#partial switch format {
+	case .R8Unorm:
+		return 1
+	case .RG8Unorm, .R16Float:
+		return 2
+	case .RGBA8Unorm, .RGBA8UnormSrgb, .BGRA8Unorm, .BGRA8UnormSrgb, .R32Float, .RG16Float:
+		return 4
+	case .RG32Float, .RGBA16Float:
+		return 8
+	case .RGBA32Float:
+		return 16
+	}
+	return 0
+}
+
+// context_write_gpu_texture uploads raw texel rows to mip 0 of a
+// single-sample texture created with .CopyDst. data holds `height` rows of
+// `bytes_per_row` bytes (the last row may be tightly packed); the rows are
+// written to the top-left width x height region. Invalid arguments return
+// false without touching the queue.
+context_write_gpu_texture :: proc(
+	ctx: ^Context,
+	texture: Gpu_Texture,
+	data: []u8,
+	bytes_per_row: u32,
+	width: u32,
+	height: u32,
+) -> bool {
+	assert(ctx != nil, "context_write_gpu_texture: nil context")
+	entry := context_get_texture(ctx, texture.id)
+	if entry == nil || entry.tex == nil || ctx.queue == nil do return false
+	if .CopyDst not_in entry.usage || entry.sample_count != 1 do return false
+	bytes_per_texel := _wg_format_bytes(entry.wgformat)
+	if bytes_per_texel == 0 || width == 0 || height == 0 do return false
+	if width > u32(entry.width) || height > u32(entry.height) do return false
+	row_bytes := u64(width) * u64(bytes_per_texel)
+	if u64(bytes_per_row) < row_bytes do return false
+	if u64(len(data)) < u64(bytes_per_row) * u64(height - 1) + row_bytes do return false
+	wg.QueueWriteTexture(
+		ctx.queue,
+		&{texture = entry.tex},
+		raw_data(data),
+		uint(len(data)),
+		&{bytesPerRow = bytes_per_row, rowsPerImage = height},
+		&{width, height, 1},
+	)
+	return true
+}
+
+write_gpu_texture :: proc(
+	texture: Gpu_Texture,
+	data: []u8,
+	bytes_per_row: u32,
+	width: u32,
+	height: u32,
+) -> bool {
+	return context_write_gpu_texture(default_context(), texture, data, bytes_per_row, width, height)
+}
+
+// _f32_to_f16_bits converts with round-to-nearest-even, flushing values below
+// the half subnormal range to signed zero and saturating overflow to infinity.
+// Done by bit manipulation so native and wasm builds agree exactly.
+@(private)
+_f32_to_f16_bits :: proc(value: f32) -> u16 {
+	bits := transmute(u32)value
+	sign := u16((bits >> 16) & 0x8000)
+	exponent := i32((bits >> 23) & 0xff)
+	mantissa := bits & 0x7fffff
+	if exponent == 0xff {
+		if mantissa != 0 do return sign | 0x7e00
+		return sign | 0x7c00
+	}
+	half_exponent := exponent - 127 + 15
+	if half_exponent >= 0x1f do return sign | 0x7c00
+	if half_exponent <= 0 {
+		if half_exponent < -10 do return sign
+		mantissa |= 0x800000
+		shift := u32(14 - half_exponent)
+		half_mantissa := mantissa >> shift
+		remainder := mantissa & ((u32(1) << shift) - 1)
+		halfway := u32(1) << (shift - 1)
+		if remainder > halfway || (remainder == halfway && (half_mantissa & 1) != 0) {
+			half_mantissa += 1
+		}
+		return sign | u16(half_mantissa)
+	}
+	half := u32(half_exponent) << 10 | (mantissa >> 13)
+	remainder := mantissa & 0x1fff
+	if remainder > 0x1000 || (remainder == 0x1000 && (half & 1) != 0) do half += 1
+	return sign | u16(half)
+}
+
+// context_write_gpu_texture_rgba16f converts tightly packed RGBA f32 texels
+// (width*height*4 values) to half floats and uploads them to an RGBA16Float
+// texture.
+context_write_gpu_texture_rgba16f :: proc(
+	ctx: ^Context,
+	texture: Gpu_Texture,
+	texels: []f32,
+	width: u32,
+	height: u32,
+) -> bool {
+	assert(ctx != nil, "context_write_gpu_texture_rgba16f: nil context")
+	entry := context_get_texture(ctx, texture.id)
+	if entry == nil || entry.wgformat != .RGBA16Float do return false
+	count := u64(width) * u64(height) * 4
+	if count == 0 || u64(len(texels)) < count do return false
+	resources := &ctx.resources.textures
+	byte_count := int(count) * 2
+	if len(resources.upload_scratch) < byte_count do resize(&resources.upload_scratch, byte_count)
+	halves := ([^]u16)(raw_data(resources.upload_scratch))[:count]
+	for index in 0 ..< int(count) do halves[index] = _f32_to_f16_bits(texels[index])
+	return context_write_gpu_texture(
+		ctx,
+		texture,
+		resources.upload_scratch[:byte_count],
+		width * 8,
+		width,
+		height,
+	)
+}
+
+write_gpu_texture_rgba16f :: proc(texture: Gpu_Texture, texels: []f32, width: u32, height: u32) -> bool {
+	return context_write_gpu_texture_rgba16f(default_context(), texture, texels, width, height)
+}
+
+// context_write_gpu_texture_rgba32f uploads tightly packed RGBA f32 texels
+// (width*height*4 values) to an RGBA32Float texture.
+context_write_gpu_texture_rgba32f :: proc(
+	ctx: ^Context,
+	texture: Gpu_Texture,
+	texels: []f32,
+	width: u32,
+	height: u32,
+) -> bool {
+	assert(ctx != nil, "context_write_gpu_texture_rgba32f: nil context")
+	entry := context_get_texture(ctx, texture.id)
+	if entry == nil || entry.wgformat != .RGBA32Float do return false
+	count := u64(width) * u64(height) * 4
+	if count == 0 || u64(len(texels)) < count do return false
+	bytes := ([^]u8)(raw_data(texels))[:count * 4]
+	return context_write_gpu_texture(ctx, texture, bytes, width * 16, width, height)
+}
+
+write_gpu_texture_rgba32f :: proc(texture: Gpu_Texture, texels: []f32, width: u32, height: u32) -> bool {
+	return context_write_gpu_texture_rgba32f(default_context(), texture, texels, width, height)
+}
+
 context_destroy_gpu_buffer :: proc(ctx: ^Context, handle: ^Gpu_Buffer) {
 	assert(ctx != nil && handle != nil, "context_destroy_gpu_buffer: invalid argument")
 	index, generation, ok := _gpu_compute_slot(

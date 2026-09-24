@@ -33,6 +33,22 @@ gpu_3d_scene_bind_keys_include_every_scene_texture :: proc(t: ^testing.T) {
 		t,
 		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 2, depth_texture = 4},
 	)
+	testing.expect(
+		t,
+		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 2, depth_texture = 3, extra_0 = 5},
+	)
+	testing.expect(
+		t,
+		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 2, depth_texture = 3, extra_1 = 5},
+	)
+	testing.expect(
+		t,
+		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 2, depth_texture = 3, extra_data_0 = 5},
+	)
+	testing.expect(
+		t,
+		base != Gpu_3D_Scene_Bind_Key{roughness_texture = 1, color_texture = 2, depth_texture = 3, extra_data_1 = 5},
+	)
 	testing.expect(t, GPU_3D_SCENE_BINDS_PER_PASS > 0)
 }
 
@@ -728,7 +744,7 @@ test_gpu_3d_shader_pool_bounds :: proc(t: ^testing.T) {
 test_gpu_3d_uniforms_layout_locked :: proc(t: ^testing.T) {
 	// The Odin structs are copied raw into the uniform stream and read back
 	// through the WGSL views, so their sizes are load-bearing contracts.
-	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 544, "uniforms smaller than extended WGSL view")
+	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 640, "uniforms smaller than extended WGSL view")
 	testing.expect_value(t, size_of(Gpu_3D_Uniforms) % 16, 0)
 	testing.expect_value(t, size_of(Gpu_3D_Vertex), 36)
 	testing.expect_value(t, size_of(Matrix), 64)
@@ -746,6 +762,10 @@ test_gpu_3d_pbr_material_defaults_are_neutral :: proc(t: ^testing.T) {
 	testing.expect_value(t, material.texture.id, u32(0))
 	testing.expect_value(t, material.normal_texture.id, u32(0))
 	testing.expect_value(t, material.roughness_ao_texture.id, u32(0))
+	testing.expect_value(t, material.extra_texture_0.id, u32(0))
+	testing.expect_value(t, material.extra_texture_1.id, u32(0))
+	testing.expect_value(t, material.extra_data_texture.id, u32(0))
+	testing.expect_value(t, material.extra_data_texture_1.id, u32(0))
 	uniforms: Gpu_3D_Uniforms
 	testing.expect_value(t, uniforms.use_texture, u32(0))
 	testing.expect_value(t, uniforms.use_normal, u32(0))

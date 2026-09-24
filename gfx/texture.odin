@@ -605,6 +605,12 @@ context_update_texture_checked :: proc(
 	assert(ctx != nil, "context_update_texture_checked: nil context")
 	e := context_get_texture(ctx, texture.id)
 	if e == nil || pixels == nil || byte_count < 0 do return false
+	// This path always expands to RGBA8 rows; float-backed textures would be
+	// written with the wrong texel size. They go through write_gpu_texture.
+	#partial switch e.wgformat {
+	case .R16Float, .RG16Float, .RGBA16Float, .R32Float, .RG32Float, .RGBA32Float:
+		return false
+	}
 	bytes_per_pixel := texture_format_bytes(format)
 	if bytes_per_pixel == 0 do return false
 	pixel_count := i64(e.width) * i64(e.height)
