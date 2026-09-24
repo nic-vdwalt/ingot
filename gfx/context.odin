@@ -65,16 +65,16 @@ context_submit_gpu_commands :: proc(commands: ^Gpu_Command_List) -> bool {
 }
 
 KEY_COUNT :: 349 // KB_MENU (348) + 1
-RESOURCE_SLOT_BITS :: 10
-RESOURCE_CONTEXT_BITS :: 10
+RESOURCE_SLOT_BITS :: 11
+RESOURCE_CONTEXT_BITS :: 9
 RESOURCE_GENERATION_BITS :: 32 - RESOURCE_SLOT_BITS - RESOURCE_CONTEXT_BITS
 RESOURCE_SLOT_COUNT :: 1 << RESOURCE_SLOT_BITS
 RESOURCE_SLOT_MASK :: u32(RESOURCE_SLOT_COUNT - 1)
 RESOURCE_CONTEXT_MASK :: (u32(1) << RESOURCE_CONTEXT_BITS) - 1
 RESOURCE_GENERATION_MASK :: (u32(1) << RESOURCE_GENERATION_BITS) - 1
 
-#assert(RESOURCE_SLOT_COUNT == 1024)
-#assert(RESOURCE_CONTEXT_MASK == 1023)
+#assert(RESOURCE_SLOT_COUNT == 2048)
+#assert(RESOURCE_CONTEXT_MASK == 511)
 #assert(RESOURCE_GENERATION_MASK == 4095)
 
 @(private)
@@ -294,7 +294,7 @@ Retired_Texture :: struct {
 // twice. A tile-cache consumer legitimately recycles hundreds of textures per
 // frame while the user flick-zooms, so the previous policy cap of 64 turned an
 // ordinary workload into an abort.
-MAX_RETIRED_PER_FRAME :: RESOURCE_SLOT_COUNT + MAX_ATLASES
+MAX_RETIRED_PER_FRAME :: MAX_TEXTURES + MAX_ATLASES
 #assert(MAX_RETIRED_PER_FRAME == 1280)
 
 // _retire_texture destroys a texture's GPU handles, deferring to after this

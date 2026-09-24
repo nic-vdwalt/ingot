@@ -275,7 +275,7 @@ retire_bound_covers_every_destroyable_resource :: proc(t: ^testing.T) {
 	// The bound must stay the physical maximum (one retirement per texture
 	// slot plus one per atlas), otherwise a consumer that legitimately
 	// recycles a large tile cache in one frame trips the assert.
-	#assert(MAX_RETIRED_PER_FRAME == RESOURCE_SLOT_COUNT + MAX_ATLASES)
+	#assert(MAX_RETIRED_PER_FRAME == MAX_TEXTURES + MAX_ATLASES)
 	#assert(MAX_RETIRED_PER_FRAME == 1280)
 	testing.expect(t, MAX_RETIRED_PER_FRAME >= MAX_TEXTURES)
 }
