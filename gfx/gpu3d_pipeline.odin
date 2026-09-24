@@ -12,7 +12,7 @@ import wg "vendor:wgpu"
 // without touching the packed handle layout.
 GPU_3D_MAX_MESHES :: RESOURCE_SLOT_COUNT
 GPU_3D_MAX_PIPELINES :: 48
-GPU_3D_MAX_SHADERS :: 8
+GPU_3D_MAX_SHADERS :: 16
 GPU_3D_MAX_VERTICES :: 1_048_576
 GPU_3D_MAX_INDICES :: 6_291_456
 GPU_3D_MAX_MESH_BYTES :: 128 * 1024 * 1024
@@ -476,7 +476,9 @@ struct Uniforms {
     custom_params_19: vec4<f32>,
     clip_plane: vec4<f32>,
     clip_enabled: u32,
-    clip_padding: vec3<u32>,
+    clip_padding_0: u32,
+    clip_padding_1: u32,
+    clip_padding_2: u32,
     secondary_light_direction: vec4<f32>,
     secondary_light_params: vec4<f32>,
     custom_params_20: vec4<f32>,
