@@ -791,3 +791,63 @@ gpu_timing_unsubmitted_frame_frees_its_slot :: proc(t: ^testing.T) {
 	testing.expect_value(t, ctx.gpu_timing.slots[0].query_count, u32(0))
 	testing.expect_value(t, ctx.gpu_timing.active_slot, -1)
 }
+
+@(test)
+gpu_timing_preframe_spans_join_the_next_frame :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.gpu_timing.available = true
+	ctx.gpu_timing.active_slot = -1
+	ctx.epoch = 3
+	_gpu_timing_preframe_ensure(ctx)
+	testing.expect_value(t, ctx.gpu_timing.active_slot, 0)
+	testing.expect(t, ctx.gpu_timing.preframe)
+	testing.expect(t, _gpu_timing_pair_reserve(&ctx.gpu_timing, "ocean.spectral").valid)
+	_gpu_timing_preframe_ensure(ctx)
+	testing.expect_value(t, ctx.gpu_timing.active_slot, 0)
+	ctx.stats_current.frame_index = 7
+	_gpu_timing_frame_begin(ctx)
+	testing.expect_value(t, ctx.gpu_timing.active_slot, 0)
+	testing.expect(t, !ctx.gpu_timing.preframe)
+	testing.expect_value(t, ctx.gpu_timing.slots[0].query_count, u32(2))
+	testing.expect_value(t, ctx.gpu_timing.slots[0].frame_index, u64(7))
+	testing.expect_value(t, ctx.gpu_timing.slots[0].epoch, u64(3))
+	testing.expect(t, _gpu_timing_pair_reserve(&ctx.gpu_timing, "window").valid)
+	testing.expect_value(t, ctx.gpu_timing.slots[0].query_count, u32(4))
+	_gpu_timing_frame_begin(ctx)
+	testing.expect_value(t, ctx.gpu_timing.slots[0].query_count, u32(0))
+	testing.expect_value(t, ctx.gpu_timing.slots[0].phase, Gpu_Timing_Phase.Recording)
+}
+
+@(test)
+gpu_timing_preframe_is_released_without_a_frame :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	ctx.gpu_timing.available = true
+	ctx.gpu_timing.active_slot = -1
+	_gpu_timing_preframe_ensure(ctx)
+	testing.expect(t, _gpu_timing_pair_reserve(&ctx.gpu_timing, "ocean.surf").valid)
+	testing.expect(t, _gpu_timing_quiesce(ctx))
+	testing.expect_value(t, ctx.gpu_timing.active_slot, -1)
+	testing.expect(t, !ctx.gpu_timing.preframe)
+	testing.expect_value(t, ctx.gpu_timing.slots[0].phase, Gpu_Timing_Phase.Free)
+	ctx.gpu_timing.available = false
+	_gpu_timing_preframe_ensure(ctx)
+	testing.expect_value(t, ctx.gpu_timing.active_slot, -1)
+	testing.expect(t, !ctx.gpu_timing.preframe)
+}
+
+@(test)
+split_frame_pass_requires_an_open_window_frame :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	testing.expect(t, !context_split_frame_pass(ctx, "world.post"))
+	ctx.frame.has_frame = true
+	ctx.frame.rt = 4
+	testing.expect(t, !context_split_frame_pass(ctx, "world.post"))
+	ctx.frame.rt = 0
+	testing.expect(t, context_split_frame_pass(ctx, "world.post"))
+	testing.expect_value(t, ctx.frame.pass_name, "world.post")
+	testing.expect(t, !ctx.frame.pass_preserve)
+	testing.expect(t, !ctx.frame.pass_begun)
+}

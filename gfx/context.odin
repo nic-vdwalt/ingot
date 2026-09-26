@@ -23,6 +23,7 @@ context_begin_gpu_commands_named :: proc(ctx: ^Context, name: string) -> (Gpu_Co
 	assert(ctx.lifecycle == .Ready, "context_begin_gpu_commands: context is not ready")
 	assert(ctx.device != nil, "context_begin_gpu_commands: initialized context requires device")
 	assert(!ctx.frame.has_frame, "context_begin_gpu_commands: frame is open")
+	_gpu_timing_preframe_ensure(ctx)
 	encoder := _gpu_timing_command_encoder(ctx, name)
 	if encoder == nil do return {}, false
 	return {
@@ -154,8 +155,10 @@ Frame_State :: struct {
 	encoder:                wg.CommandEncoder,
 	timing:                 Gpu_Timing_Token,
 	pass:                   wg.RenderPassEncoder,
+	pass_name:              string,
 	clear_color:            Color,
 	pass_begun:             bool,
+	pass_preserve:          bool,
 	has_frame:              bool,
 	draw_started:           f64,
 
@@ -905,6 +908,8 @@ context_begin_drawing :: proc(ctx: ^Context) {
 	ctx.frame.timing = {}
 	ctx.frame.clear_color = Color{0, 0, 0, 255}
 	ctx.frame.pass_begun = false
+	ctx.frame.pass_name = "window"
+	ctx.frame.pass_preserve = false
 	ctx.frame.has_frame = true
 	ctx.frame.scissor_on = false
 	ctx.frame.scissor_empty = false
@@ -953,17 +958,19 @@ context_ensure_pass :: proc(ctx: ^Context) {
 	assert(ctx != nil, "context_ensure_pass: nil context")
 	if !ctx.frame.has_frame || ctx.frame.pass_begun do return
 	cc := ctx.frame.clear_color
-	writes := _gpu_timing_pass_writes(&ctx.gpu_timing, "window")
+	name := ctx.frame.pass_name if len(ctx.frame.pass_name) > 0 else "window"
+	load_op := wg.LoadOp.Load if ctx.frame.pass_preserve else wg.LoadOp.Clear
+	writes := _gpu_timing_pass_writes(&ctx.gpu_timing, name)
 	ctx.frame.pass = wg.CommandEncoderBeginRenderPass(
 		ctx.frame.encoder,
 		&{
-			label = "window",
+			label = name,
 			timestampWrites = writes.querySet != nil ? &writes : nil,
 			colorAttachmentCount = 1,
 			colorAttachments = &wg.RenderPassColorAttachment {
 				view = ctx.frame.view,
 				depthSlice = wg.DEPTH_SLICE_UNDEFINED,
-				loadOp = .Clear,
+				loadOp = load_op,
 				storeOp = .Store,
 				clearValue = {
 					f64(cc.r) / 255.0,
@@ -982,7 +989,7 @@ context_ensure_pass :: proc(ctx: ^Context) {
 				writes.beginningOfPassWriteIndex / 2,
 				ctx.frame.encoder,
 				ctx.frame.pass,
-				.Clear,
+				load_op,
 				.Store,
 			)
 			_gpu_timing_diagnostic_attachment(ctx, writes.beginningOfPassWriteIndex, 0, 0)
@@ -1002,6 +1009,33 @@ context_ensure_pass :: proc(ctx: ^Context) {
 			ctx.frame.sc_h,
 		)
 	}
+}
+
+context_split_frame_pass :: proc(ctx: ^Context, name: string) -> bool {
+	assert(ctx != nil, "context_split_frame_pass: nil context")
+	assert(len(name) > 0, "context_split_frame_pass: empty name")
+	if !ctx.frame.has_frame || ctx.frame.rt != 0 do return false
+	if ctx.resources.gpu_3d.active_pass_generation != 0 do return false
+	if ctx.frame.pass_begun {
+		if !ctx.frame.scissor_empty {
+			renderer_flush(ctx, &ctx.rend, ctx.frame.pass, .Manual)
+		} else {
+			clear(&ctx.rend.verts)
+			clear(&ctx.rend.indices)
+		}
+		wg.RenderPassEncoderEnd(ctx.frame.pass)
+		wg.RenderPassEncoderRelease(ctx.frame.pass)
+		ctx.frame.pass = nil
+		ctx.frame.pass_begun = false
+		ctx.frame.pass_preserve = true
+	}
+	ctx.frame.pass_name = name
+	assert(!ctx.frame.pass_begun)
+	return true
+}
+
+split_frame_pass :: proc(name: string) -> bool {
+	return context_split_frame_pass(default_context(), name)
 }
 
 EndDrawing :: proc() {

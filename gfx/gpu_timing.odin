@@ -181,6 +181,7 @@ Gpu_Timing_State :: struct {
 	quarantined:      u32,
 	available:        bool,
 	closing:          bool,
+	preframe:         bool,
 }
 
 _gpu_timing_init :: proc(ctx: ^Context) -> bool {
@@ -267,6 +268,7 @@ _gpu_timing_unsettled_count :: proc(state: ^Gpu_Timing_State) -> u32 {
 // Returns false when any slot is still unsettled after the bound.
 _gpu_timing_quiesce :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_gpu_timing_quiesce: nil context")
+	if ctx.gpu_timing.preframe do _gpu_timing_frame_abandon(ctx)
 	when ODIN_OS != .JS {
 		for _ in 0 ..< GPU_TIMING_SHUTDOWN_POLLS {
 			_gpu_timing_collect(ctx)
@@ -352,7 +354,29 @@ _gpu_timing_frame_begin :: proc(ctx: ^Context) {
 	assert(ctx != nil, "_gpu_timing_frame_begin: nil context")
 	// A frame that never reached submit (surface unavailable, acquire failed)
 	// leaves its slot recording; that slot is free again, not in flight.
+	if ctx.gpu_timing.preframe && ctx.gpu_timing.active_slot >= 0 {
+		assert(ctx.gpu_timing.active_slot < GPU_TIMING_FRAME_SLOTS)
+		adopted := &ctx.gpu_timing.slots[ctx.gpu_timing.active_slot]
+		assert(adopted.phase == .Recording, "gpu timing: pre-frame slot left recording")
+		adopted.frame_index = ctx.stats_current.frame_index
+		adopted.epoch = ctx.epoch
+		ctx.gpu_timing.preframe = false
+		return
+	}
 	_gpu_timing_frame_abandon(ctx)
+	_gpu_timing_slot_open(ctx)
+}
+
+_gpu_timing_preframe_ensure :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_gpu_timing_preframe_ensure: nil context")
+	if ctx.gpu_timing.active_slot >= 0 do return
+	_gpu_timing_slot_open(ctx)
+	ctx.gpu_timing.preframe = ctx.gpu_timing.active_slot >= 0
+}
+
+_gpu_timing_slot_open :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_gpu_timing_slot_open: nil context")
+	assert(ctx.gpu_timing.active_slot < 0, "gpu timing: slot already open")
 	if !ctx.gpu_timing.available do return
 	if ctx.gpu_timing.closing {
 		ctx.gpu_timing.health.closed_rejections += 1
@@ -523,7 +547,9 @@ _gpu_timing_frame_submitted :: proc(ctx: ^Context) {
 }
 
 _gpu_timing_frame_abandon :: proc(ctx: ^Context) {
-	if ctx == nil || ctx.gpu_timing.active_slot < 0 do return
+	if ctx == nil do return
+	ctx.gpu_timing.preframe = false
+	if ctx.gpu_timing.active_slot < 0 do return
 	slot := &ctx.gpu_timing.slots[ctx.gpu_timing.active_slot]
 	assert(!_gpu_timing_slot_in_flight(slot), "gpu timing: abandoning an armed slot")
 	slot.query_count = 0
