@@ -221,6 +221,9 @@ Gpu_3D_Pass :: struct {
 	time:                      f32,
 	underwater_primary:        [4]f32,
 	underwater_secondary:      [4]f32,
+	// Pass-owned participating medium for custom shaders that declare the
+	// trailing atmosphere_0..2 uniforms. Zero means the shader's legacy path.
+	atmosphere:                [3][4]f32,
 	clip_plane:                [4]f32,
 	clip_enabled:              u32,
 	generation:                u64,
@@ -290,6 +293,9 @@ Gpu_3D_Uniforms :: struct {
 	custom_params_29:          [4]f32,
 	custom_params_30:          [4]f32,
 	custom_params_31:          [4]f32,
+	atmosphere_0:              [4]f32,
+	atmosphere_1:              [4]f32,
+	atmosphere_2:              [4]f32,
 }
 
 // Per-instance model transforms for draw_gpu_mesh_instanced, read by the
@@ -306,7 +312,7 @@ Gpu_3D_Instance_Uniforms :: struct {
 // and WebGPU permits a binding larger than the shader view. Lock the invariants
 // a struct edit could silently break: never smaller than the shader view, always
 // 16-byte aligned as dynamic offsets require.
-#assert(size_of(Gpu_3D_Uniforms) >= 736)
+#assert(size_of(Gpu_3D_Uniforms) >= 784)
 #assert(size_of(Gpu_3D_Uniforms) % 16 == 0)
 #assert(size_of(Gpu_3D_Vertex) == 36)
 #assert(size_of(Matrix) == 64)
@@ -1831,6 +1837,22 @@ set_gpu_3d_underwater_medium :: proc(
 	pass.underwater_secondary = scattering_turbidity
 }
 
+// set_gpu_3d_atmosphere_medium publishes a pass-owned atmosphere medium to
+// every subsequent draw through the trailing atmosphere_0..2 uniforms.
+// Shaders that do not declare them are unaffected.
+set_gpu_3d_atmosphere_medium :: proc(pass: ^Gpu_3D_Pass, params: [3][4]f32) {
+	assert(pass != nil, "set_gpu_3d_atmosphere_medium: nil pass")
+	for row in params {
+		for component in row {
+			assert(
+				component == component && abs(component) < 1e30,
+				"set_gpu_3d_atmosphere_medium: non-finite parameter",
+			)
+		}
+	}
+	pass.atmosphere = params
+}
+
 set_gpu_3d_clip_plane :: proc(pass: ^Gpu_3D_Pass, plane: [4]f32, enabled: bool) {
 	assert(pass != nil, "set_gpu_3d_clip_plane: nil pass")
 	if enabled {
@@ -2324,6 +2346,9 @@ _gpu_3d_uniforms :: proc(
 		custom_params_29 = material.custom_params_29,
 		custom_params_30 = material.custom_params_30,
 		custom_params_31 = material.custom_params_31,
+		atmosphere_0 = pass.atmosphere[0],
+		atmosphere_1 = pass.atmosphere[1],
+		atmosphere_2 = pass.atmosphere[2],
 	}
 }
 
