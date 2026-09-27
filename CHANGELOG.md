@@ -9,6 +9,29 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+### Removed
+
+- **Tactile controls** (breaking): `Theme.tactile_controls` and
+  `fit.Theme_Set_Tactile_Controls` are gone, along with the effects they
+  enabled: eased hover/press/selection motion, the hard offset shadow under
+  Primary/Secondary buttons, knob shadows on toggles and sliders, and the
+  collapsible-header hover fill. `Control_Motion_State` and the `motion`
+  options remain for source compatibility; control motion now always snaps
+  to its target. The gallery's "Tactile" navigation toggle is removed.
+
+### Changed
+
+- **Pixel buttons** no longer draw an inner bevel. Against the button outline
+  the bevel read as a border two art pixels thick on the top and left and a
+  dark gap on the bottom and right. Buttons keep the notched fill, a one art
+  pixel outline on all four sides, and the hard shadow while up.
+  `surface_takes_bevel` now returns `false` for `.Button_Primary`,
+  `.Button_Secondary` and `.Button_Danger`.
+
+## [0.3.2] - 2026-09-27
+
+This is a source-only release; no binaries, installers, or web bundles are attached.
+
 ### Added
 
 - **Reading font face**: `Theme.reading_font_face` selects the face used
@@ -18,13 +41,6 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   long-form text stays legible under pixel chrome. Set it with
   `Theme_Set_Reading_Font_Face` and read it back as
   `fit.Theme_Tokens.reading_font_face`.
-
-## [0.3.2] - 2026-09-27
-
-This is a source-only release; no binaries, installers, or web bundles are attached.
-
-### Added
-
 - `gfx.context_set_vsync` / `gfx.set_vsync` switch the surface present mode
   at runtime (Fifo when enabled, Immediate when disabled and the surface
   offers it) and report whether the request was applied. On web the browser

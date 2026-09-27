@@ -186,7 +186,6 @@ Theme :: struct {
 	// Accessibility. reduced_motion snaps animations (hover ease, caret
 	// blink) to their final state for vestibular/motion-sensitive users.
 	reduced_motion:             bool,
-	tactile_controls:           bool,
 }
 
 // Font_Face names a bundled typeface. Mono is JetBrains Mono, the default

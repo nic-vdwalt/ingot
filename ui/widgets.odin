@@ -1023,17 +1023,15 @@ button_surface_paint :: proc(
 		button_surface_paint_pixel(frame, rect, style, enabled, background, border, press)
 		return
 	}
-	if enabled && (style == .Primary || style == .Secondary) {
-		draw_control_shadow(frame, rect, .MD, press)
-	}
 	draw_surface_colors(frame, rect, {bg = background}, border = .None)
 	if style == .Primary && enabled do btn_gloss(frame, ui_frame_theme(frame), rect)
 	draw_surface_colors(frame, rect, {border = border})
 }
 
 // button_surface_paint_pixel paints a button as a pixel sprite: hard shadow
-// while up, notched face, a bevel that inverts when held, then the notched
-// outline. It has no gloss; a gradient has no place in a fixed palette.
+// while up, notched face, then the notched outline. It has no bevel, which
+// would thicken the outline on two sides only, and no gloss; a gradient has
+// no place in a fixed palette.
 @(private = "file")
 button_surface_paint_pixel :: proc(
 	frame: ^Ui_Frame,
@@ -1052,7 +1050,6 @@ button_surface_paint_pixel :: proc(
 	down := press >= 0.5
 	if solid && !down do draw_pixel_shadow(frame, rect, pixel_shadow_offset(frame, .Lifted))
 	draw_pixel_fill(frame, rect, background)
-	if solid do draw_pixel_bevel(frame, rect, down)
 	draw_pixel_border(frame, rect, border)
 }
 
@@ -2090,17 +2087,13 @@ collapsible_header_at :: proc(
 	culled := rect_culled_frame(frame, {x, y, w, height})
 	channel: ^Transition_F32_State
 	if options.motion != nil do channel = &options.motion.value
-	emphasis := control_motion_fraction(
+	_ = control_motion_fraction(
 		frame,
 		channel,
 		1 if open^ || interaction.hovered else 0,
 		snap = culled,
 	)
 	if !culled {
-		if style.tactile_controls {
-			background := color_mix(Color{}, style.bg_hover, emphasis)
-			draw_surface_colors(frame, rect, {bg = background}, border = .None)
-		}
 		if focus_opt_focused(options.focus) do draw_focus_ring(frame, x, y, w, height)
 
 		pad := ui_frame_sc(frame, 10)

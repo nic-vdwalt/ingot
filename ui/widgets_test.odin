@@ -18,7 +18,7 @@ w_mono :: proc(text: cstring, size: i32) -> i32 {
 }
 
 @(test)
-tactile_widgets_keep_interaction_geometry :: proc(t: ^testing.T) {
+control_widgets_keep_interaction_geometry :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
@@ -29,7 +29,6 @@ tactile_widgets_keep_interaction_geometry :: proc(t: ^testing.T) {
 	)
 	sem_enable(&runtime, true)
 	theme := theme_dark()
-	theme.tactile_controls = true
 	ui_runtime_set_theme(&runtime, theme)
 	output := new(Ui_Output)
 	defer free(output)
@@ -49,14 +48,14 @@ tactile_widgets_keep_interaction_geometry :: proc(t: ^testing.T) {
 	input.mouse_down[input_mouse_index(.LEFT)] = true
 	ui_frame_begin(&frame, &runtime, &input)
 	testing.expect(t, !button_at(&frame, rect, "Save", motion = &motion))
-	testing.expect(t, motion.press.current > 0 && motion.press.current < 1)
+	testing.expect_value(t, motion.press.current, f32(1))
 	ui_frame_end(&frame)
 	input.mouse_pressed[input_mouse_index(.LEFT)] = false
 	input.mouse_down[input_mouse_index(.LEFT)] = false
 	input.mouse_released[input_mouse_index(.LEFT)] = true
 	ui_frame_begin(&frame, &runtime, &input)
 	testing.expect(t, button_at(&frame, rect, "Save", motion = &motion))
-	testing.expect(t, motion.press.current > 0)
+	testing.expect_value(t, motion.press.current, f32(0))
 	testing.expect_value(t, frame.semantics.cur.count, 1)
 	ui_frame_end(&frame)
 	ui_frame_begin(&frame, &runtime, &input)
@@ -78,7 +77,7 @@ tactile_widgets_keep_interaction_geometry :: proc(t: ^testing.T) {
 	transition_f32_reset(&motion.hover, 0)
 	_ = button_at_state(&frame, &legacy, rect, "Save", motion = &motion)
 	testing.expect_value(t, legacy.hover, motion.hover.current)
-	testing.expect(t, legacy.hover > 0 && legacy.hover < 1)
+	testing.expect_value(t, legacy.hover, f32(1))
 	ui_frame_end(&frame)
 	ui_frame_begin(&frame, &runtime, &input)
 	frame.text_cull_top, frame.text_cull_bottom = 100, 200
@@ -174,7 +173,6 @@ disclosure_motion_keeps_expansion_immediate :: proc(t: ^testing.T) {
 	)
 	sem_enable(&runtime, true)
 	theme := theme_dark()
-	theme.tactile_controls = true
 	ui_runtime_set_theme(&runtime, theme)
 	output := new(Ui_Output)
 	defer free(output)
@@ -197,7 +195,7 @@ disclosure_motion_keeps_expansion_immediate :: proc(t: ^testing.T) {
 	result := collapsible_header_at(&frame, {20, 20, 200, 30}, "Details", &open, options)
 	testing.expect(t, result.toggled && open)
 	testing.expect_value(t, result.next_y, i32(46))
-	testing.expect(t, motion.value.current > 0 && motion.value.current < 1)
+	testing.expect_value(t, motion.value.current, f32(1))
 	testing.expect(t, .Expanded in frame.semantics.cur.nodes[0].state)
 	testing.expect_value(t, frame.semantics.cur.nodes[0].rect, Rect_I32{20, 20, 200, 26})
 	ui_frame_end(&frame)
@@ -210,9 +208,8 @@ disclosure_motion_keeps_expansion_immediate :: proc(t: ^testing.T) {
 	testing.expect(t, !output.platform.request_redraw)
 	testing.expect(t, .Expanded in frame.semantics.cur.nodes[0].state)
 	ui_frame_end(&frame)
-	for enabled in ([?]bool{true, false}) {
-		theme.tactile_controls = enabled
-		theme.reduced_motion = true
+	for reduced in ([?]bool{true, false}) {
+		theme.reduced_motion = reduced
 		ui_runtime_set_theme(&runtime, theme)
 		transition_f32_reset(&motion.value, 0)
 		ui_frame_begin(&frame, &runtime, &input)

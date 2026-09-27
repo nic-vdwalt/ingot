@@ -15,61 +15,7 @@ package ui
 import "core:testing"
 
 @(test)
-tactile_pilot_paint_cost_is_constant :: proc(t: ^testing.T) {
-	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
-	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
-	output := new(Ui_Output)
-	defer free(output)
-	frame := Ui_Frame {
-		output = output,
-	}
-	for scale in ([?]f32{0.5, 1, 2, 3}) {
-		ui_runtime_set_scale(&runtime, scale)
-		baseline: [5]int
-		for enabled in ([?]bool{false, true}) {
-			theme := theme_dark()
-			theme.tactile_controls = enabled
-			ui_runtime_set_theme(&runtime, theme)
-			ui_frame_begin(&frame, &runtime)
-			checked, open := true, true
-			value: f32 = 40
-			for index in 0 ..< 5 {
-				output.main.count = 0
-				switch index {
-				case 0:
-					_ = button_at(&frame, {20, 20, 300, 50}, "Button")
-				case 1:
-					_ = toggle_at(&frame, {20, 20, 300, 50}, "Toggle", &checked)
-				case 2:
-					_ = slider_at(&frame, {20, 20, 300, 50}, &value, 0, 100)
-				case 3:
-					_ = collapsible_header_at(&frame, {20, 20, 300, 50}, "Details", &open)
-				case 4:
-					for control in 0 ..< 128 {
-						_ = button_at(&frame, {20, i32(control) * 50, 300, 50}, "Button")
-					}
-				}
-				if !enabled {
-					baseline[index] = output.main.count
-				} else {
-					bound := 128 if index == 4 else 1
-					testing.expect_value(t, output.main.count - baseline[index], bound)
-				}
-				testing.expect_value(t, output.main.dropped_commands, 0)
-			}
-			ui_frame_end(&frame)
-		}
-	}
-}
-
-@(test)
-tactile_surfaces_preserve_palette_and_bound_paint :: proc(t: ^testing.T) {
+surfaces_preserve_palette_and_bound_paint :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
@@ -127,20 +73,6 @@ tactile_surfaces_preserve_palette_and_bound_paint :: proc(t: ^testing.T) {
 		testing.expect_value(t, output.main.count, 0)
 		testing.expect_value(t, output.main.dropped_commands, 0)
 		ui_frame_end(&frame)
-		for enabled in ([?]bool{false, true}) {
-			tactile := theme
-			tactile.tactile_controls = enabled
-			ui_runtime_set_theme(&runtime, tactile)
-			ui_frame_begin(&frame, &runtime, &input)
-			draw_control_shadow(&frame, {10, 10, 1, 1}, .MD, 0)
-			expected := 1 if enabled && theme.shadow_color.a > 0 else 0
-			testing.expect_value(t, output.main.count, expected)
-			draw_control_shadow(&frame, {10, 10, 80, 30}, .MD, 1)
-			draw_control_shadow(&frame, {}, .MD, 0)
-			testing.expect_value(t, output.main.count, expected)
-			testing.expect_value(t, output.main.dropped_commands, 0)
-			ui_frame_end(&frame)
-		}
 	}
 }
 

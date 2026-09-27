@@ -48,11 +48,8 @@ control_motion_fraction :: proc(
 	assert(frame != nil && frame.open, "control motion: invalid frame")
 	assert(target >= 0 && target <= 1, "control motion: invalid target")
 	if state == nil do return target
-	if snap || !ui_frame_theme(frame).tactile_controls {
-		transition_f32_reset(state, target)
-		return target
-	}
-	return clamp(transition_f32(frame, state, target, {speed = speed}), 0, 1)
+	transition_f32_reset(state, target)
+	return target
 }
 
 control_motion_indicator :: proc(
@@ -64,11 +61,8 @@ control_motion_indicator :: proc(
 	assert(frame != nil && frame.open, "control indicator: invalid frame")
 	assert(target.w >= 0 && target.h >= 0, "control indicator: negative extent")
 	if state == nil do return target
-	if snap || !ui_frame_theme(frame).tactile_controls {
-		transition_rect_reset(state, target)
-		return target
-	}
-	return transition_rect(frame, state, target, {speed = CONTROL_SELECTION_SPEED})
+	transition_rect_reset(state, target)
+	return target
 }
 
 transition_f32_reset :: proc(state: ^Transition_F32_State, value: f32) {

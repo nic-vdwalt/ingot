@@ -147,7 +147,6 @@ PALETTE_NAMES := [Palette]string {
 
 palette := Palette.Ingot
 reduced_motion := false
-tactile_controls := true
 initial_theme_pending := false
 section := Section.Buttons
 debug_on := false
@@ -534,7 +533,6 @@ nav_select_section :: proc(s: Section) {
 Nav_Control :: enum {
 	Theme,
 	Motion,
-	Tactile,
 	Scale,
 }
 
@@ -562,8 +560,6 @@ nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
 	case .Motion:
 		if compact do return "Motion"
 		return "Motion: reduced" if reduced_motion else "Motion: full"
-	case .Tactile:
-		return "Tactile: on" if tactile_controls else "Tactile: off"
 	case .Scale:
 		if compact do return "Scale\u2026"
 		return "UI scale\u2026"
@@ -583,9 +579,6 @@ nav_control_activate :: proc(control: Nav_Control, surface: ^fit.Surface) {
 		apply_gallery_theme(surface)
 	case .Motion:
 		reduced_motion = !reduced_motion
-		apply_gallery_theme(surface)
-	case .Tactile:
-		tactile_controls = !tactile_controls
 		apply_gallery_theme(surface)
 	case .Scale:
 		settings_open = true
@@ -635,10 +628,9 @@ draw_nav :: proc(surface: ^fit.Surface, top, sw, sh: i32, narrow: bool) -> i32 {
 // Stable widget identities for the shared controls. Derived from the enum so a
 // new control cannot be added without one.
 NAV_CONTROL_IDS := [Nav_Control]string {
-	.Theme   = "theme",
-	.Motion  = "motion",
-	.Tactile = "tactile",
-	.Scale   = "scale",
+	.Theme  = "theme",
+	.Motion = "motion",
+	.Scale  = "scale",
 }
 
 // draw_nav_strip is the narrow-viewport nav: wrapped rows of section buttons
@@ -749,7 +741,6 @@ apply_gallery_theme :: proc(surface: ^fit.Surface = nil) {
 	// both must be able to have both.
 	t := palette_theme(palette)
 	fit.Theme_Set_Reduced_Motion(&t, reduced_motion)
-	fit.Theme_Set_Tactile_Controls(&t, tactile_controls)
 	when CAPTURE {
 		fit.Session_Set_Theme(&capture_session, t)
 	} else {

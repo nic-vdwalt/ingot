@@ -722,7 +722,6 @@ fit_controls_forward_caller_owned_motion :: proc(t: ^testing.T) {
 	fit_test_runtime(&runtime, &backend)
 	defer ui.ui_runtime_destroy(&runtime)
 	theme := Theme_Dark()
-	Theme_Set_Tactile_Controls(&theme, true)
 	ui.ui_runtime_set_theme(&runtime, theme.inner)
 	output := new(ui.Ui_Output)
 	defer free(output)
@@ -768,8 +767,8 @@ fit_controls_forward_caller_owned_motion :: proc(t: ^testing.T) {
 		testing.expect(t, button_motion.hover.initialized && slider_motion.hover.initialized)
 		testing.expect(t, toggle_motion.value.initialized && tabs_motion.indicator.initialized)
 		if iteration == 1 {
-			testing.expect(t, toggle_motion.value.current > 0 && toggle_motion.value.current < 1)
-			testing.expect(t, tabs_motion.indicator.current != tabs_motion.indicator.target)
+			testing.expect_value(t, toggle_motion.value.current, f32(1))
+			testing.expect(t, tabs_motion.indicator.current == tabs_motion.indicator.target)
 		}
 		testing.expect_value(t, value, f32(40))
 		testing.expect_value(t, output.main.dropped_commands, 0)
@@ -789,7 +788,6 @@ fit_regions_forward_caller_owned_motion :: proc(t: ^testing.T) {
 	fit_test_runtime(&runtime, &backend)
 	defer ui.ui_runtime_destroy(&runtime)
 	theme := Theme_Dark()
-	Theme_Set_Tactile_Controls(&theme, true)
 	ui.ui_runtime_set_theme(&runtime, theme.inner)
 	output := new(ui.Ui_Output)
 	defer free(output)
@@ -843,9 +841,9 @@ fit_regions_forward_caller_owned_motion :: proc(t: ^testing.T) {
 		testing.expect(t, toggle_motion.value.initialized && header_motion.value.initialized)
 		testing.expect(t, tabs_motion.indicator.initialized)
 		if iteration == 1 {
-			testing.expect(t, toggle_motion.value.current > 0 && toggle_motion.value.current < 1)
-			testing.expect(t, header_motion.value.current > 0 && header_motion.value.current < 1)
-			testing.expect(t, tabs_motion.indicator.current != tabs_motion.indicator.target)
+			testing.expect_value(t, toggle_motion.value.current, f32(1))
+			testing.expect_value(t, header_motion.value.current, f32(1))
+			testing.expect(t, tabs_motion.indicator.current == tabs_motion.indicator.target)
 		}
 		ui.ui_frame_end(&frame)
 	}

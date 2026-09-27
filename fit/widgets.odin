@@ -587,10 +587,6 @@ Theme_Set_Reduced_Motion :: proc(theme: ^Theme, enabled: bool) {
 	assert(theme != nil, "Fit.Theme_Set_Reduced_Motion: nil theme")
 	theme.inner.reduced_motion = enabled
 }
-Theme_Set_Tactile_Controls :: proc(theme: ^Theme, enabled: bool) {
-	assert(theme != nil, "Fit.Theme_Set_Tactile_Controls: nil theme")
-	theme.inner.tactile_controls = enabled
-}
 Theme_Set_Square_Corners :: proc(theme: ^Theme, enabled: bool) {
 	assert(theme != nil, "Fit.Theme_Set_Square_Corners: nil theme")
 	ui.Theme_Set_Square_Corners(&theme.inner, enabled)

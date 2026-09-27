@@ -189,13 +189,15 @@ draw_dither_rect :: proc(frame: ^Ui_Frame, rect: Rectangle, color: Color) {
 
 // surface_takes_bevel reports which surface classes read as raised or inset
 // objects. Page-level regions and rows are ground, not objects, and a bevel
-// on them would outline every panel in the window.
+// on them would outline every panel in the window. Buttons are excluded too:
+// an inner bevel against their outline reads as a border two pixels thick on
+// the lit sides and a gap on the shaded ones.
 surface_takes_bevel :: proc(surface: Surface) -> bool {
 	switch surface {
 	case .Card, .Popup, .Chip, .Table_Header, .Input, .Code:
 		return true
 	case .Button_Primary, .Button_Secondary, .Button_Danger:
-		return true
+		return false
 	case .App, .Panel, .Row, .Button_Ghost:
 		return false
 	}

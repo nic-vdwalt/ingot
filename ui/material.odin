@@ -200,23 +200,6 @@ overlay_rounded_border :: proc(
 	)
 }
 
-draw_control_shadow :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius, press: f32) {
-	assert(frame != nil && frame.open, "control shadow: invalid frame")
-	assert(press >= 0 && press <= 1, "control shadow: invalid press")
-	if !ui_frame_theme(frame).tactile_controls || rect.width <= 0 || rect.height <= 0 do return
-	base := ui_frame_theme(frame).shadow_color
-	if surface_is_pixel(frame) {
-		// A pixel press has two frames, up and down, not a tween: a shadow
-		// a fraction of an art pixel long would sit off the grid.
-		if press < 0.5 do draw_pixel_shadow(frame, rect, pixel_shadow_offset(frame, .Lifted))
-		return
-	}
-	offset := elevation_offset(frame, .Lifted) * (1 - press)
-	if base.a == 0 || offset == 0 do return
-	shifted := Rectangle{rect.x + offset, rect.y + offset, rect.width, rect.height}
-	draw_rounded_fill(frame, shifted, radius, base)
-}
-
 draw_shadow_hard :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius, elevation: Elevation) {
 	assert(frame != nil, "draw_shadow_hard: nil frame")
 	assert(rect.width > 0 && rect.height > 0, "draw_shadow_hard: empty rect")

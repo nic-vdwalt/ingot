@@ -48,12 +48,11 @@ gallery_pilot_render :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: r
 }
 
 @(test)
-gallery_tactile_pilot_keeps_values_caller_owned :: proc(t: ^testing.T) {
+gallery_pilot_keeps_values_caller_owned :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
 	fit.Test_Driver_Init(&driver)
 	defer fit.Test_Driver_Destroy(&driver)
 	theme := palette_theme(.Ingot)
-	fit.Theme_Set_Tactile_Controls(&theme, true)
 	fit.Test_Driver_Set_Theme(&driver, theme)
 	state := Gallery_Pilot_Test_State {
 		widgets = {volume = 40},
@@ -67,15 +66,11 @@ gallery_tactile_pilot_keeps_values_caller_owned :: proc(t: ^testing.T) {
 	state.widgets.toggle, state.open = true, true
 	state.widgets.tab_active = 1
 	testing.expect(t, fit.Test_Driver_Frame(&driver, input, gallery_pilot_draw, &state))
+	testing.expect_value(t, state.widgets.toggle_motion.value.current, f32(1))
+	testing.expect_value(t, state.header.value.current, f32(1))
 	testing.expect(
 		t,
-		state.widgets.toggle_motion.value.current > 0 &&
-		state.widgets.toggle_motion.value.current < 1,
-	)
-	testing.expect(t, state.header.value.current > 0 && state.header.value.current < 1)
-	testing.expect(
-		t,
-		state.widgets.tabs_motion.indicator.current != state.widgets.tabs_motion.indicator.target,
+		state.widgets.tabs_motion.indicator.current == state.widgets.tabs_motion.indicator.target,
 	)
 	testing.expect_value(t, state.widgets.volume, f32(40))
 	input.mouse_position = {10, 10}
@@ -98,7 +93,6 @@ gallery_tactile_pilot_keeps_values_caller_owned :: proc(t: ^testing.T) {
 	testing.expect(t, fit.Test_Driver_Frame(&driver, input, gallery_pilot_draw, &state))
 	testing.expect_value(t, state.widgets.toggle_motion.value.current, f32(1))
 	testing.expect_value(t, state.header.value.current, f32(1))
-	fit.Theme_Set_Tactile_Controls(&theme, false)
 	fit.Theme_Set_Reduced_Motion(&theme, false)
 	fit.Test_Driver_Set_Theme(&driver, theme)
 	state.widgets.toggle, state.open = false, false
@@ -212,7 +206,7 @@ gallery_buttons_click_before_keyboard_focus :: proc(t: ^testing.T) {
 @(test)
 nav_strip_respects_scaled_width_and_sidebar_height :: proc(t: ^testing.T) {
 	scales := [?]f32{0.5, 1, 1.5, 2, 3}
-	heights := [?]i32{237, 472, 707, 942, 1412}
+	heights := [?]i32{221, 440, 659, 878, 1316}
 	for scale, index in scales {
 		minimum := nav_sidebar_min_height_scale(scale)
 		testing.expect_value(t, minimum, heights[index])

@@ -148,7 +148,9 @@ shadow helpers in `material.odin` to `material_pixel.odin`.
 - It draws notched fills and borders one art pixel thick (the Emphasis weight),
   with hard shadows offset by whole art pixels.
 - Raised or inset objects get a two-tone bevel from the `bevel_light` and
-  `bevel_shade` roles, swapped when pressed.
+  `bevel_shade` roles, swapped when pressed. Buttons are the exception: they
+  keep a single even outline, because an inner bevel against it reads as a
+  lopsided border.
 - Every pixel surface is a fixed handful of rectangle commands, 14 at most.
 - The modal dim is a row dither bounded by `DITHER_ROWS_MAX`. The renderer has
   no texture fill, so a true checkerboard would cost one command per cell.

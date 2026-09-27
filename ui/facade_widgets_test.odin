@@ -15,7 +15,6 @@ animated_tabs_emit_one_final_selection :: proc(t: ^testing.T) {
 	)
 	sem_enable(&runtime, true)
 	theme := theme_dark()
-	theme.tactile_controls = true
 	ui_runtime_set_theme(&runtime, theme)
 	output := new(Ui_Output)
 	defer free(output)
@@ -72,12 +71,12 @@ animated_tabs_emit_one_final_selection :: proc(t: ^testing.T) {
 		second = frame.semantics.cur.nodes[1].rect
 		if iteration == 2 {
 			testing.expect_value(t, active, i32(1))
-			testing.expect(t, motion.indicator.current.x < motion.indicator.target.x)
-			testing.expect(t, output.platform.request_redraw)
+			testing.expect(t, transition_rect_settled(&motion.indicator))
+			testing.expect(t, !output.platform.request_redraw)
 		}
 		if iteration == 5 {
 			testing.expect_value(t, active, i32(0))
-			testing.expect(t, motion.indicator.current.x > motion.indicator.target.x)
+			testing.expect(t, transition_rect_settled(&motion.indicator))
 		}
 		if iteration == 3 {
 			testing.expect(t, transition_rect_settled(&motion.indicator))
@@ -99,7 +98,6 @@ animated_tabs_bound_geometry_and_snap_when_hidden :: proc(t: ^testing.T) {
 	)
 	sem_enable(&runtime, true)
 	theme := theme_dark()
-	theme.tactile_controls = true
 	ui_runtime_set_theme(&runtime, theme)
 	output := new(Ui_Output)
 	defer free(output)
@@ -148,12 +146,8 @@ animated_tabs_bound_geometry_and_snap_when_hidden :: proc(t: ^testing.T) {
 		_ = tab_bar(&u, "tabs", labels, &active, motion = &motion)
 		end(&u)
 		if iteration == 1 || iteration == 2 {
-			testing.expect(t, !transition_rect_settled(&motion.indicator))
+			testing.expect(t, transition_rect_settled(&motion.indicator))
 			testing.expect(t, motion.indicator.current.x >= 0)
-			testing.expect(
-				t,
-				motion.indicator.current.x <= motion.indicator.target.x || iteration == 1,
-			)
 		}
 		if iteration == 3 || iteration == 4 {
 			testing.expect_value(t, output.main.count, 0)

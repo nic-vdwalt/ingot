@@ -10,7 +10,6 @@ control_motion_retargets_and_stops_redrawing :: proc(t: ^testing.T) {
 	ui_runtime_init(&runtime)
 	defer ui_runtime_destroy(&runtime)
 	theme := theme_dark()
-	theme.tactile_controls = true
 	ui_runtime_set_theme(&runtime, theme)
 	input := Ui_Input {
 		frame_time = 1.0 / 60.0,
@@ -53,7 +52,6 @@ control_motion_retargets_and_stops_redrawing :: proc(t: ^testing.T) {
 	input.frame_time = 1.0 / 60.0
 	for mode in 0 ..< 3 {
 		theme.reduced_motion = mode == 0
-		theme.tactile_controls = mode != 1
 		ui_runtime_set_theme(&runtime, theme)
 		ui_frame_begin(&frame, &runtime, &input)
 		transition_rect_reset(&state.indicator, {0, 0, 10, 2})

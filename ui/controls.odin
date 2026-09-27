@@ -127,12 +127,6 @@ toggle_draw_fraction :: proc(
 	knob_end := f32(track.x + track.w) - knob_r - f32(ui_frame_sc(frame, 2))
 	knob_x += (knob_end - knob_x) * fraction
 	knob := color_mix(style.fg_secondary, style.button_text, fraction)
-	draw_control_shadow(
-		frame,
-		{knob_x - knob_r, f32(track.y) + f32(track.h) / 2 - knob_r, knob_r * 2, knob_r * 2},
-		.Pill,
-		0,
-	)
 	draw_circle_v(frame, {knob_x, f32(track.y) + f32(track.h) / 2}, knob_r, knob)
 	if hovered || focus_opt_focused(focus) {
 		draw_focus_ring(frame, track.x, track.y, track.w, track.h)
@@ -687,12 +681,6 @@ slider_resolve_and_paint :: proc(
 		}
 		knob_x := track_x + track_w * frac
 		knob_col := color_mix(style.fg_secondary, style.fg_accent, emphasis)
-		draw_control_shadow(
-			frame,
-			{knob_x - knob_r, cy - knob_r, knob_r * 2, knob_r * 2},
-			.Pill,
-			1 if apply_pointer else 0,
-		)
 		draw_circle_v(frame, {knob_x, cy}, knob_r, style.bg_input)
 		draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
 		draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)
