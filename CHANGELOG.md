@@ -9,28 +9,11 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
-### Removed
-
-- **Tactile controls** (breaking): `Theme.tactile_controls` and
-  `fit.Theme_Set_Tactile_Controls` are gone, along with the effects they
-  enabled: eased hover/press/selection motion, the hard offset shadow under
-  Primary/Secondary buttons, knob shadows on toggles and sliders, and the
-  collapsible-header hover fill. `Control_Motion_State` and the `motion`
-  options remain for source compatibility; control motion now always snaps
-  to its target. The gallery's "Tactile" navigation toggle is removed.
-
-### Changed
-
-- **Pixel buttons** no longer draw an inner bevel. Against the button outline
-  the bevel read as a border two art pixels thick on the top and left and a
-  dark gap on the bottom and right. Buttons keep the notched fill, a one art
-  pixel outline on all four sides, and the hard shadow while up.
-  `surface_takes_bevel` now returns `false` for `.Button_Primary`,
-  `.Button_Secondary` and `.Button_Danger`.
-
 ## [0.3.2] - 2026-09-27
 
 This is a source-only release; no binaries, installers, or web bundles are attached.
+It contains breaking public API changes: tactile controls are removed, and
+`ui.Text_Font_Proc` takes a `Font_Face` parameter.
 
 ### Added
 
@@ -99,7 +82,12 @@ This is a source-only release; no binaries, installers, or web bundles are attac
   `draw_rounded_fill`/`_border`, and the shadows draw notched corners, borders
   one art pixel thick, a raised or sunken two-tone bevel, and hard
   whole-pixel shadow offsets, all from plain rectangles.
-  - Pixel buttons invert their bevel and nudge their label while held.
+  - Buttons take no inner bevel; against the button outline it read as a
+    border two art pixels thick on the top and left and a dark gap on the
+    bottom and right. They keep the notched fill, an even one art pixel
+    outline, and the hard shadow while up, and nudge their label while held.
+    `surface_takes_bevel` returns `false` for `.Button_Primary`,
+    `.Button_Secondary` and `.Button_Danger`.
   - The focus ring is notched.
   - Modal backdrops are dithered.
   - Setters: `ui.Theme_Set_Font_Face`, `ui.Theme_Set_Surface_Style`, and their
@@ -126,6 +114,16 @@ This is a source-only release; no binaries, installers, or web bundles are attac
 - Gallery: the narrow nav strip switches to a compact previous / current /
   next row when the full section grid would take more than half the height
   under the header.
+
+### Removed
+
+- **Tactile controls** (breaking): `Theme.tactile_controls` and
+  `fit.Theme_Set_Tactile_Controls` are gone, along with the effects they
+  enabled: eased hover/press/selection motion, the hard offset shadow under
+  Primary/Secondary buttons, knob shadows on toggles and sliders, and the
+  collapsible-header hover fill. `Control_Motion_State` and the `motion`
+  options remain for source compatibility; control motion now always snaps
+  to its target. The gallery's "Tactile" navigation toggle is removed.
 
 ### Fixed
 
