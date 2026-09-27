@@ -9,8 +9,19 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+## [0.3.2] - 2026-09-27
+
+This is a source-only release; no binaries, installers, or web bundles are attached.
+
 ### Added
 
+- `gfx.context_set_vsync` / `gfx.set_vsync` switch the surface present mode
+  at runtime (Fifo when enabled, Immediate when disabled and the surface
+  offers it) and report whether the request was applied. On web the browser
+  always syncs, so disabling returns `false`.
+- `gfx.context_set_window_fullscreen` / `gfx.set_window_fullscreen` set
+  fullscreen explicitly instead of toggling; a no-op when the window already
+  matches.
 - **Host import**: `gfx` registers a WebGPU device-lost callback on web and
   calls the new `ingot.ingot_device_lost(reason: i32)` import when the browser
   revokes the device (long backgrounding, GPU process reset, memory pressure).
@@ -52,7 +63,8 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   device pixels (`ui.frame_text_size` / `ui.pixel_text_size`). The atlas is
   sampled with nearest filtering, and glyph origins are snapped to device
   pixels, so glyph edges stay hard. Switching face through a theme resets the
-  font table and bumps the font epoch.
+  font table and bumps the font epoch at the next `ui_frame_begin`, once no
+  recorded paint command still names the old table.
   `ui.Text_Font_Proc` now takes the face:
   `proc(data: rawptr, face: Font_Face, size: i32) -> Font_Id`.
   Custom text backends must add the parameter.
@@ -1129,7 +1141,8 @@ Not validated:
 - Prevented a libvterm UTF-8 decode buffer overflow.
 - Validated `LoadFontFromMemory`'s caller-supplied buffer.
 
-[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.3.1...HEAD
+[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.3.2...HEAD
+[0.3.2]: https://github.com/Nic-vdwalt/ingot/compare/0.3.1...0.3.2
 [0.3.1]: https://github.com/Nic-vdwalt/ingot/compare/0.3.0...0.3.1
 [0.3.0]: https://github.com/Nic-vdwalt/ingot/compare/0.2.1...0.3.0
 [0.2.1]: https://github.com/Nic-vdwalt/ingot/compare/0.2.0...0.2.1
