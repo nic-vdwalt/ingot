@@ -5,6 +5,8 @@ Icon :: enum u8 {
 	Close,
 	Chevron_Left,
 	Chevron_Right,
+	Play,
+	Pause,
 }
 
 @(private = "file")
@@ -86,6 +88,32 @@ draw_chevron_icon_frame :: proc(frame: ^Ui_Frame, icon: Icon, rect: Rect_I32, co
 	)
 }
 
+@(private = "file")
+draw_play_icon_frame :: proc(frame: ^Ui_Frame, rect: Rect_I32, color: Color) {
+	assert(frame != nil && frame.open, "draw_play_icon_frame: invalid frame")
+	assert(rect.w > 0 && rect.h > 0, "draw_play_icon_frame: invalid rect")
+	cx := f32(rect.x) + f32(rect.w) * 0.5
+	cy := f32(rect.y) + f32(rect.h) * 0.5
+	extent := f32(min(rect.w, rect.h)) * 0.25
+	left := cx - extent * 0.8
+	right := cx + extent
+	draw_triangle(frame, {left, cy - extent}, {left, cy + extent}, {right, cy}, color)
+}
+
+@(private = "file")
+draw_pause_icon_frame :: proc(frame: ^Ui_Frame, rect: Rect_I32, color: Color) {
+	assert(frame != nil && frame.open, "draw_pause_icon_frame: invalid frame")
+	assert(rect.w > 0 && rect.h > 0, "draw_pause_icon_frame: invalid rect")
+	size := min(rect.w, rect.h)
+	bar_w := max(size / 7, 1)
+	bar_h := max(size / 2, 1)
+	gap := max(size / 7, 1)
+	left := rect.x + (rect.w - (bar_w * 2 + gap)) / 2
+	top := rect.y + (rect.h - bar_h) / 2
+	draw_rectangle(frame, left, top, bar_w, bar_h, color)
+	draw_rectangle(frame, left + bar_w + gap, top, bar_w, bar_h, color)
+}
+
 draw_icon_frame :: proc(frame: ^Ui_Frame, icon: Icon, rect: Rect_I32, color: Color) {
 	assert(frame != nil && frame.open, "draw_icon_frame: invalid frame")
 	assert(rect.w >= 0 && rect.h >= 0, "draw_icon_frame: invalid rect")
@@ -97,5 +125,9 @@ draw_icon_frame :: proc(frame: ^Ui_Frame, icon: Icon, rect: Rect_I32, color: Col
 		draw_close_icon_frame(frame, rect, color)
 	case .Chevron_Left, .Chevron_Right:
 		draw_chevron_icon_frame(frame, icon, rect, color)
+	case .Play:
+		draw_play_icon_frame(frame, rect, color)
+	case .Pause:
+		draw_pause_icon_frame(frame, rect, color)
 	}
 }
