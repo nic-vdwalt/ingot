@@ -1291,7 +1291,7 @@ context_set_vsync :: proc(ctx: ^Context, enabled: bool) -> bool {
 	}
 }
 
-SetVSync :: proc(enabled: bool) -> bool {return context_set_vsync(default_context(), enabled)}
+set_vsync :: proc(enabled: bool) -> bool {return context_set_vsync(default_context(), enabled)}
 GetFrameTime :: proc() -> f32 {return context_frame_time(default_context())}
 GetTime :: proc() -> f64 {return context_time(default_context())}
 GetFPS :: proc() -> i32 {return context_fps(default_context())}

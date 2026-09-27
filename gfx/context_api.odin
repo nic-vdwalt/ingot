@@ -284,7 +284,7 @@ context_set_window_fullscreen :: proc(ctx: ^Context, fullscreen: bool) {
 	context_set_fullscreen_impl(ctx, fullscreen)
 }
 
-SetWindowFullscreen :: proc(fullscreen: bool) {
+set_window_fullscreen :: proc(fullscreen: bool) {
 	context_set_window_fullscreen(default_context(), fullscreen)
 }
 
