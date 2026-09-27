@@ -246,6 +246,7 @@ Context :: struct {
 	last_time:                   f64,
 	frame_time:                  f32, // clamped to MAX_FRAME_TIME (what GetFrameTime returns)
 	real_frame_time:             f32, // unclamped, for GetFPS accuracy
+	fps_meter:                   Fps_Meter,
 	target_fps:                  i32,
 
 	// event-driven frame scheduling (idle.odin)
@@ -1234,6 +1235,40 @@ _frame_timing :: proc(ctx: ^Context, close_requested: bool) {
 	// doesn't feed a huge step into animations/physics on the next frame.
 	ctx.frame_time = min(raw, MAX_FRAME_TIME)
 	ctx.last_time = now
+	_fps_meter_record(&ctx.fps_meter, raw, now)
+}
+
+// GetFPS reports the average rate over the last FPS_HISTORY_FRAMES frames and
+// refreshes at most every FPS_REFRESH_SECONDS so the readout does not flicker
+// with per-frame scheduler jitter.
+FPS_HISTORY_FRAMES :: 30
+FPS_REFRESH_SECONDS :: 0.25
+#assert(FPS_HISTORY_FRAMES > 0)
+#assert(FPS_REFRESH_SECONDS > 0)
+
+Fps_Meter :: struct {
+	samples:      [FPS_HISTORY_FRAMES]f32,
+	count:        i32,
+	next:         i32,
+	displayed:    i32,
+	refreshed_at: f64,
+}
+
+@(private)
+_fps_meter_record :: proc(meter: ^Fps_Meter, frame_seconds: f32, now: f64) {
+	assert(meter != nil, "_fps_meter_record: nil meter")
+	assert(meter.next >= 0 && meter.next < FPS_HISTORY_FRAMES)
+	if frame_seconds <= 0 do return
+	meter.samples[meter.next] = frame_seconds
+	meter.next = (meter.next + 1) % FPS_HISTORY_FRAMES
+	meter.count = min(meter.count + 1, FPS_HISTORY_FRAMES)
+	due := meter.displayed == 0 || now - meter.refreshed_at >= FPS_REFRESH_SECONDS || now < meter.refreshed_at
+	if !due do return
+	total: f64
+	for sample in meter.samples[:meter.count] do total += f64(sample)
+	if total <= 0 do return
+	meter.displayed = i32(f64(meter.count) / total + 0.5)
+	meter.refreshed_at = now
 }
 
 // MAX_FRAME_TIME caps GetFrameTime's reported delta (seconds).
@@ -1261,8 +1296,8 @@ context_time :: proc(ctx: ^Context) -> f64 {
 	return platform_now() - ctx.start_time_s
 }
 context_fps :: proc(ctx: ^Context) -> i32 {
-	if ctx == nil || ctx.real_frame_time <= 0 do return 0
-	return i32(1.0 / ctx.real_frame_time + 0.5)
+	if ctx == nil do return 0
+	return ctx.fps_meter.displayed
 }
 
 GetScreenWidth :: proc() -> i32 {return context_screen_width(default_context())}

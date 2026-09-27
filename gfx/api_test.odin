@@ -146,6 +146,30 @@ frame_pacing_remaining_is_bounded :: proc(t: ^testing.T) {
 }
 
 @(test)
+fps_meter_averages_and_holds_between_refreshes :: proc(t: ^testing.T) {
+	meter: Fps_Meter
+	now := 1.0
+	_fps_meter_record(&meter, 1.0 / 60.0, now)
+	testing.expect_value(t, meter.displayed, i32(60))
+	for index in 0 ..< 10 {
+		now += 0.01
+		frame := f32(1.0 / 50.0) if index % 2 == 0 else f32(1.0 / 75.0)
+		_fps_meter_record(&meter, frame, now)
+	}
+	testing.expect_value(t, meter.displayed, i32(60))
+	for _ in 0 ..< FPS_HISTORY_FRAMES {
+		now += 0.01
+		_fps_meter_record(&meter, 1.0 / 120.0, now)
+	}
+	now += FPS_REFRESH_SECONDS
+	_fps_meter_record(&meter, 1.0 / 120.0, now)
+	testing.expect_value(t, meter.displayed, i32(120))
+	held := meter.displayed
+	_fps_meter_record(&meter, 0, now + 1)
+	testing.expect_value(t, meter.displayed, held)
+}
+
+@(test)
 close_requested_disables_frame_pacing :: proc(t: ^testing.T) {
 	testing.expect(t, _frame_pacing_enabled(60, false))
 	testing.expect(t, !_frame_pacing_enabled(60, true))
