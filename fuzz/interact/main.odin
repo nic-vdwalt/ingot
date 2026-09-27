@@ -393,7 +393,7 @@ check_invariants :: proc(c: ^fuzzx.Ctx, frame: ^ui.Ui_Frame, s: ^Scene, overlay_
 	}
 }
 
-fuzz_text_font :: proc(data: rawptr, size: i32) -> ui.Font_Id {
+fuzz_text_font :: proc(data: rawptr, face: ui.Font_Face, size: i32) -> ui.Font_Id {
 	return ui.Font_Id(size)
 }
 

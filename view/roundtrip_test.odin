@@ -40,7 +40,7 @@ MONO_CELL :: f32(8)
 g_roundtrip_harness_guard: sync.Mutex
 
 @(private = "file")
-mono_font :: proc(data: rawptr, size: i32) -> ui.Font_Id {
+mono_font :: proc(data: rawptr, face: ui.Font_Face, size: i32) -> ui.Font_Id {
 	return ui.Font_Id(1)
 }
 

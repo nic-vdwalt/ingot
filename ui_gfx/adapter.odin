@@ -22,6 +22,7 @@ Adapter :: struct {
 	clipboard:        [ui.INPUT_CLIPBOARD_CAP]u8,
 	fonts:            [FONT_CAP]rl.Font,
 	font_sizes:       [FONT_CAP]i32,
+	font_faces:       [FONT_CAP]ui.Font_Face,
 	font_count:       int,
 	font_dpi:         f32,
 	font_codepoints:  []rune,

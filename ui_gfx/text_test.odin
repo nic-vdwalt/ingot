@@ -64,7 +64,7 @@ test_adapter_font_limit_returns_closest_font :: proc(t: ^testing.T) {
 			_atlas     = u32(index + 1),
 		}
 	}
-	id := adapter_register_font(&adapter, 70, {glyphCount = 1, _atlas = 999})
+	id := adapter_register_font(&adapter, .Mono, 70, {glyphCount = 1, _atlas = 999})
 	testing.expect_value(t, id, ui.Font_Id(FONT_CAP))
 	testing.expect_value(t, adapter.font_count, FONT_CAP)
 }

@@ -73,11 +73,13 @@ replay_text_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui
 	assert(ok, "replay_text_command: invalid font")
 	for byte in transmute([]u8)text do if byte == 0 do return
 	value := strings.clone_to_cstring(text, context.temp_allocator)
+	origin := command.p0
+	if adapter_font_snaps(adapter, command.font) do origin = adapter_snap_point(adapter, origin)
 	rl.frame_draw_text(
 		adapter.gfx_frame,
 		font,
 		value,
-		vec_to_gfx(command.p0),
+		vec_to_gfx(origin),
 		command.font_size,
 		command.spacing,
 		color_to_gfx(command.color),
@@ -90,11 +92,13 @@ replay_codepoint_command :: proc(adapter: ^Adapter, command: ui.Paint_Command) {
 	assert(adapter.graphics_open, "replay_codepoint_command: graphics frame not open")
 	font, ok := adapter_font(adapter, command.font)
 	assert(ok, "replay_codepoint_command: invalid font")
+	origin := command.p0
+	if adapter_font_snaps(adapter, command.font) do origin = adapter_snap_point(adapter, origin)
 	rl.frame_draw_codepoint(
 		adapter.gfx_frame,
 		font,
 		command.codepoint,
-		vec_to_gfx(command.p0),
+		vec_to_gfx(origin),
 		command.font_size,
 		color_to_gfx(command.color),
 	)

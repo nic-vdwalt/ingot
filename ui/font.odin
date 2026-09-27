@@ -239,17 +239,57 @@ frame_font_for_size :: proc(frame: ^Ui_Frame, size: i32) -> Font_Id {
 	assert(size > 0, "frame_font_for_size: invalid size")
 	assert(frame.runtime != nil, "frame_font_for_size: nil runtime")
 	epoch := frame.runtime.font_epoch
-	if size == frame.font_memo_size && epoch == frame.font_memo_epoch {
+	face := frame.runtime.style.font_face
+	if size == frame.font_memo_size &&
+	   epoch == frame.font_memo_epoch &&
+	   face == frame.font_memo_face {
 		return frame.font_memo_id
 	}
 	font := Font_Id(0)
 	if text_backend_valid(frame.runtime.text_backend) {
-		font = text_backend_font(frame.runtime.text_backend, size)
+		font = text_backend_font(frame.runtime.text_backend, face, size)
 		frame.font_memo_size = size
 		frame.font_memo_id = font
 		frame.font_memo_epoch = epoch
+		frame.font_memo_face = face
 	}
 	return font
+}
+
+// PIXEL_FONT_GRID_PX is the design grid of the Pixel face: Pixel Operator is
+// drawn on a 16 px em, so one font pixel is one device pixel at 16 px and
+// two at 32 px. Any size between two multiples lands font pixels on fractions
+// of a device pixel and smears them, which is the look the face exists to
+// avoid.
+PIXEL_FONT_GRID_PX :: 16
+
+// frame_text_size returns the size text is actually drawn and measured at.
+//
+// The monospace face draws at any size. The pixel face is quantised to the
+// nearest whole multiple of its grid in device pixels, never below one, so
+// every glyph edge falls on a device pixel. Every draw and measure entry
+// point routes through here so a label is measured at the size it is drawn.
+frame_text_size :: proc(frame: ^Ui_Frame, size: i32) -> i32 {
+	assert(frame != nil && frame.runtime != nil, "frame_text_size: invalid frame")
+	assert(size > 0, "frame_text_size: invalid size")
+	if frame.runtime.style.font_face != .Pixel do return size
+	result := pixel_text_size(size, frame.runtime.text.font_dpi)
+	assert(result > 0, "frame_text_size: quantised size is not positive")
+	return result
+}
+
+// pixel_text_size quantises a logical text size so that it spans a whole
+// number of Pixel face grids in device pixels. Pure, so the rounding table is
+// testable without a frame.
+pixel_text_size :: proc(size: i32, font_dpi: f32) -> i32 {
+	assert(size > 0, "pixel_text_size: invalid size")
+	dpi := font_dpi if font_dpi > 0 else 1
+	assert(!math.is_nan(dpi) && !math.is_inf(dpi, 0), "pixel_text_size: non-finite dpi")
+	device := f32(size) * dpi
+	steps := max(1, i32(device / PIXEL_FONT_GRID_PX + 0.5))
+	result := max(1, i32(f32(steps * PIXEL_FONT_GRID_PX) / dpi + 0.5))
+	assert(result > 0, "pixel_text_size: quantised size is not positive")
+	return result
 }
 
 text_metrics_valid :: proc(metrics: Text_Metrics) -> bool {
@@ -285,19 +325,21 @@ text_metrics_frame :: proc(
 text_metrics_for_size_frame :: proc(frame: ^Ui_Frame, font_size: i32) -> (Text_Metrics, bool) {
 	assert(frame != nil && frame.runtime != nil, "text metrics for size: invalid frame")
 	assert(font_size > 0, "text metrics for size: invalid size")
-	font := frame_font_for_size(frame, font_size)
-	return text_metrics_frame(frame, font, f32(font_size))
+	drawn_size := frame_text_size(frame, font_size)
+	font := frame_font_for_size(frame, drawn_size)
+	return text_metrics_frame(frame, font, f32(drawn_size))
 }
 
 draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color: Color) {
 	assert(frame != nil, "draw_text_frame: nil frame")
 	assert(size > 0, "draw_text_frame: invalid size")
-	font := frame_font_for_size(frame, size)
+	drawn_size := frame_text_size(frame, size)
+	font := frame_font_for_size(frame, drawn_size)
 	assert(
 		frame.output == nil || font != 0,
 		"draw_text_frame: paint output requires a text backend",
 	)
-	draw_cstring_command(frame, text, x, y, size, color, font)
+	draw_cstring_command(frame, text, x, y, drawn_size, color, font)
 }
 
 // draw_text_string is the layer-friendly string draw: it resolves the backend
@@ -306,8 +348,9 @@ draw_text_frame :: proc(frame: ^Ui_Frame, text: cstring, x, y, size: i32, color:
 draw_text_string :: proc(frame: ^Ui_Frame, text: string, x, y, size: i32, color: Color) {
 	assert(frame != nil, "draw_text_string: nil frame")
 	assert(size > 0, "draw_text_string: invalid size")
-	font := frame_font_for_size(frame, size)
-	draw_text_command(frame, text, x, y, size, color, font)
+	drawn_size := frame_text_size(frame, size)
+	font := frame_font_for_size(frame, drawn_size)
+	draw_text_command(frame, text, x, y, drawn_size, color, font)
 }
 
 // draw_text_string_frame is draw_text_frame for string labels: it skips the
@@ -315,12 +358,13 @@ draw_text_string :: proc(frame: ^Ui_Frame, text: string, x, y, size: i32, color:
 draw_text_string_frame :: proc(frame: ^Ui_Frame, text: string, x, y, size: i32, color: Color) {
 	assert(frame != nil, "draw_text_string_frame: nil frame")
 	assert(size > 0, "draw_text_string_frame: invalid size")
-	font := frame_font_for_size(frame, size)
+	drawn_size := frame_text_size(frame, size)
+	font := frame_font_for_size(frame, drawn_size)
 	assert(
 		frame.output == nil || font != 0,
 		"draw_text_string_frame: paint output requires a text backend",
 	)
-	draw_text_command(frame, text, x, y, size, color, font)
+	draw_text_command(frame, text, x, y, drawn_size, color, font)
 }
 
 // Refresh an entry's LRU stamp only after it ages by this much, so cache
@@ -381,8 +425,9 @@ measure_text_frame :: proc(frame: ^Ui_Frame, text: cstring, size: i32) -> i32 {
 	assert(frame != nil, "measure_text_frame: nil frame")
 	assert(size > 0, "measure_text_frame: invalid size")
 	if text_backend_valid(frame.runtime.text_backend) {
-		font := frame_font_for_size(frame, size)
-		return measure_text_backend_cached(frame, string(text), size, font)
+		drawn_size := frame_text_size(frame, size)
+		font := frame_font_for_size(frame, drawn_size)
+		return measure_text_backend_cached(frame, string(text), drawn_size, font)
 	}
 	return measure_text_with(ui_frame_text(frame), text, size)
 }
@@ -444,8 +489,9 @@ measure_text_string_frame :: proc(frame: ^Ui_Frame, text: string, size: i32) -> 
 	assert(frame != nil, "measure_text_string_frame: nil frame")
 	assert(size > 0, "measure_text_string_frame: invalid size")
 	if text_backend_valid(frame.runtime.text_backend) {
-		font := frame_font_for_size(frame, size)
-		return measure_text_backend_cached(frame, text, size, font)
+		drawn_size := frame_text_size(frame, size)
+		font := frame_font_for_size(frame, drawn_size)
+		return measure_text_backend_cached(frame, text, drawn_size, font)
 	}
 	text_c := strings.clone_to_cstring(text, context.temp_allocator)
 	return measure_text_with(ui_frame_text(frame), text_c, size)
@@ -485,8 +531,9 @@ rune_width_frame :: proc(frame: ^Ui_Frame, value: rune, size: i32) -> i32 {
 	assert(frame != nil && frame.open, "rune_width_frame: invalid frame")
 	assert(size > 0, "rune_width_frame: invalid size")
 	if text_backend_valid(frame.runtime.text_backend) {
-		font := frame_font_for_size(frame, size)
-		return rune_advance_backend_cached(frame, value, size, font)
+		drawn_size := frame_text_size(frame, size)
+		font := frame_font_for_size(frame, drawn_size)
+		return rune_advance_backend_cached(frame, value, drawn_size, font)
 	}
 	buf: [5]u8
 	rune_utf8_encode(value, &buf)
@@ -597,7 +644,8 @@ draw_codepoint_frame :: proc(
 ) {
 	assert(frame != nil, "draw_codepoint_frame: nil frame")
 	assert(size > 0, "draw_codepoint_frame: invalid size")
-	font := frame_font_for_size(frame, size)
+	drawn_size := frame_text_size(frame, size)
+	font := frame_font_for_size(frame, drawn_size)
 	assert(
 		frame.output == nil || font != 0,
 		"draw_codepoint_frame: paint output requires a text backend",
@@ -607,7 +655,7 @@ draw_codepoint_frame :: proc(
 		frame.unsupported_glyphs += 1
 		return
 	}
-	draw_codepoint_command(frame, codepoint, x, y, size, color, font)
+	draw_codepoint_command(frame, codepoint, x, y, drawn_size, color, font)
 }
 
 draw_target_codepoint_frame :: proc(
@@ -619,7 +667,8 @@ draw_target_codepoint_frame :: proc(
 ) {
 	assert(frame != nil, "draw_target_codepoint_frame: nil frame")
 	assert(size > 0, "draw_target_codepoint_frame: invalid size")
-	font := frame_font_for_size(frame, size)
+	drawn_size := frame_text_size(frame, size)
+	font := frame_font_for_size(frame, drawn_size)
 	assert(font != 0, "draw_target_codepoint_frame: text backend required")
-	draw_target_codepoint_command(frame, codepoint, x, y, size, color, font)
+	draw_target_codepoint_command(frame, codepoint, x, y, drawn_size, color, font)
 }

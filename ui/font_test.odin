@@ -9,7 +9,7 @@ Test_Text_Backend_State :: struct {
 	advance:       f32,
 }
 
-test_text_font_for_size :: proc(data: rawptr, size: i32) -> Font_Id {
+test_text_font_for_size :: proc(data: rawptr, face: Font_Face, size: i32) -> Font_Id {
 	state := cast(^Test_Text_Backend_State)data
 	state.font_calls += 1
 	return Font_Id(size)
@@ -290,7 +290,7 @@ Test_Resetting_Backend_State :: struct {
 	invalid_use: int,
 }
 
-test_resetting_font_for_size :: proc(data: rawptr, size: i32) -> Font_Id {
+test_resetting_font_for_size :: proc(data: rawptr, face: Font_Face, size: i32) -> Font_Id {
 	state := cast(^Test_Resetting_Backend_State)data
 	state.font_calls += 1
 	state.live_size = size

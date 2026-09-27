@@ -153,7 +153,7 @@ harness_destroy :: proc(h: ^Harness, layer: Ingot_Layer) {
 	free(h)
 }
 
-benchmark_font :: proc(data: rawptr, size: i32) -> ui.Font_Id {
+benchmark_font :: proc(data: rawptr, face: ui.Font_Face, size: i32) -> ui.Font_Id {
 	assert(data != nil && size > 0, "benchmark_font: invalid argument")
 	return ui.Font_Id(size)
 }

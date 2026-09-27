@@ -1,7 +1,7 @@
 package ui
 
 Text_Measure_Proc :: proc(data: rawptr, font: Font_Id, text: string, size, spacing: f32) -> Vec2
-Text_Font_Proc :: proc(data: rawptr, size: i32) -> Font_Id
+Text_Font_Proc :: proc(data: rawptr, face: Font_Face, size: i32) -> Font_Id
 Text_Has_Glyph_Proc :: proc(data: rawptr, font: Font_Id, value: rune) -> bool
 Text_Metrics_Proc :: proc(data: rawptr, font: Font_Id, size: f32) -> (Text_Metrics, bool)
 Text_Reset_Proc :: proc(data: rawptr)
@@ -40,10 +40,10 @@ ui_runtime_set_backend_measure_cache_enabled :: proc(runtime: ^Ui_Runtime, enabl
 	runtime.text.backend_measure_cache_enabled = enabled
 }
 
-text_backend_font :: proc(backend: Text_Backend, size: i32) -> Font_Id {
+text_backend_font :: proc(backend: Text_Backend, face: Font_Face, size: i32) -> Font_Id {
 	assert(text_backend_valid(backend), "text_backend_font: invalid backend")
 	assert(size > 0, "text_backend_font: invalid size")
-	return backend.font_for_size(backend.data, size)
+	return backend.font_for_size(backend.data, face, size)
 }
 
 text_backend_measure :: proc(

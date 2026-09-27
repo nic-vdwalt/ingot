@@ -161,10 +161,42 @@ Theme :: struct {
 	// once; the zero value keeps every existing palette rounded.
 	square_corners:             bool,
 
+	// font_face selects the typeface every text role draws with. A pixel
+	// palette drawn in a smooth vector face reads as a skin rather than as
+	// pixel art, so the face belongs to the theme with the colours. The zero
+	// value keeps every existing palette on the monospace face.
+	font_face:                  Font_Face,
+	// surface_style selects how material.odin paints surfaces. The Pixel style
+	// swaps rounded fills and soft shadows for notched corners, bevels and
+	// hard integer-offset shadows at that one choke point, so no widget has to
+	// learn about pixel art. The zero value keeps every surface smooth.
+	surface_style:              Surface_Style,
+	// Bevel roles light the top-left and shade the bottom-right edge of a
+	// pixel surface. They are theme roles rather than a lighten/darken of the
+	// fill because the token checker forbids colour arithmetic in widgets and
+	// because a pixel palette picks its bevel from a fixed set of inks.
+	bevel_light:                Color,
+	bevel_shade:                Color,
+
 	// Accessibility. reduced_motion snaps animations (hover ease, caret
 	// blink) to their final state for vestibular/motion-sensitive users.
 	reduced_motion:             bool,
 	tactile_controls:           bool,
+}
+
+// Font_Face names a bundled typeface. Mono is JetBrains Mono, the default
+// for every palette; Pixel is Pixel Operator, a bitmap-grid face that only
+// looks right at whole multiples of its design grid.
+Font_Face :: enum u8 {
+	Mono,
+	Pixel,
+}
+
+// Surface_Style names how surfaces are painted. Smooth is rounded with soft
+// shadows; Pixel is notched, bevelled and hard-shadowed.
+Surface_Style :: enum u8 {
+	Smooth,
+	Pixel,
 }
 
 // Substrate_Kind names the page texture drawn behind a surface.
@@ -427,6 +459,8 @@ THEME_DARK :: Theme {
 	caption_close_pressed = Color{180, 40, 32, 255},
 	spell_error = Color{255, 120, 120, 255},
 	substrate = Substrate{kind = .None, margin_rule = false},
+	bevel_light = Color{255, 255, 255, 255},
+	bevel_shade = Color{0, 0, 0, 255},
 }
 
 // THEME_LIGHT is a light counterpart tuned for equivalent contrast roles.
@@ -521,6 +555,8 @@ THEME_LIGHT :: Theme {
 	caption_close_pressed = Color{180, 40, 32, 255},
 	spell_error = Color{190, 40, 40, 255},
 	substrate = Substrate{kind = .None, margin_rule = false},
+	bevel_light = Color{255, 255, 255, 255},
+	bevel_shade = Color{0, 0, 0, 255},
 }
 
 // THEME_HIGH_CONTRAST is a maximum-legibility palette: opaque black
@@ -626,6 +662,8 @@ THEME_HIGH_CONTRAST :: Theme {
 	caption_close_pressed = Color{255, 140, 140, 255},
 	spell_error = Color{255, 100, 100, 255},
 	substrate = Substrate{kind = .None, margin_rule = false},
+	bevel_light = Color{255, 255, 255, 255},
+	bevel_shade = Color{0, 0, 0, 255},
 }
 
 // THEME_COLOR is the zero-color sentinel for widget color parameters whose
@@ -1164,7 +1202,9 @@ theme_pixel :: proc() -> Theme {
 theme_pixel_materials :: proc(result: ^Theme, navy, blue, green, orange: Color) {
 	assert(result != nil, "theme_pixel_materials: nil theme")
 	assert(navy.a == 255 && blue.a == 255, "theme_pixel_materials: translucent base colour")
-	result.modal_dim = Color{0, 0, 0, 190}
+	// Opaque black: the pixel style lays the dim as a 50% checkerboard, so
+	// the dither supplies the transparency and each cell must be solid ink.
+	result.modal_dim = Color{0, 0, 0, 255}
 	// A near-opaque black offset reads as a hard pixel drop shadow rather
 	// than as the soft ambient shadow the screen palettes imitate.
 	result.shadow_color = Color{0, 0, 0, 220}
@@ -1194,6 +1234,12 @@ theme_pixel_materials :: proc(result: ^Theme, navy, blue, green, orange: Color) 
 		margin_rule = false,
 	}
 	result.square_corners = true
+	result.font_face = .Pixel
+	result.surface_style = .Pixel
+	// PICO-8 light grey and black: the two inks a PICO-8 sprite uses for a
+	// raised edge, so the bevel stays inside the sixteen-colour set.
+	result.bevel_light = Color{194, 195, 199, 255}
+	result.bevel_shade = Color{0, 0, 0, 255}
 	assert(result.substrate.kind == .Grid, "theme_pixel_materials: substrate not stored")
 }
 
@@ -1274,7 +1320,18 @@ theme_reading_matrix_min_ratio :: proc(style: ^Theme) -> f64 {
 ui_runtime_apply_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
 	assert(runtime != nil, "apply_theme: nil runtime")
 	assert(runtime.initialized, "apply_theme: runtime not initialized")
+	face_changed := runtime.style.font_face != value.font_face
 	runtime.style = value
+	// A new face invalidates every loaded font and every cached width, so the
+	// reset publishes a new epoch exactly as a scale change does: a frame's
+	// memoised Font_Id would otherwise name a font of the other face.
+	if face_changed {
+		if runtime.text_backend.reset != nil do runtime.text_backend.reset(runtime.text_backend.data)
+		assert(runtime.font_epoch < max(u64), "apply_theme: font epoch exhausted")
+		runtime.font_epoch += 1
+		clear_measure_cache_with(&runtime.text)
+		clear_wrap_cache_with(&runtime.text)
+	}
 	runtime.style.bg_app = value.bg_app_windowed
 	runtime.style.bg_chat = value.bg_chat_windowed
 	runtime.style.bg_panel = value.bg_panel_windowed

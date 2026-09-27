@@ -179,6 +179,33 @@ copyright notice and license are in `assets/fonts/OFL.txt`. The font declares
 no Reserved Font Names in that file. It is separately licensed and is not
 covered by Ingot's Apache-2.0 grant.
 
+## Pixel Operator Regular 2018.10.04-1
+
+Bundled file:
+
+- `assets/fonts/PixelOperator.ttf`
+
+Source: <https://www.dafont.com/pixel-operator.font>
+
+The file is `PixelOperator.ttf` from the `pixel_operator.zip` archive of
+release 2018.10.04-1, retrieved on 2026-09-27 without modification. The
+archive's `LICENSE.txt` is stored as `assets/fonts/PixelOperator-LICENSE.txt`
+with its line endings converted from CRLF to LF. Upstream did not publish a
+checksum or signature for the archive; the repository records the verified
+local hashes below.
+
+SHA-256:
+
+```text
+95b33667e4884f5714db33d8324472df28f9d5ffed49108824c5819c1a217dad  pixel_operator.zip
+8d805274eaf227855147153182a96a86ff395ddbc7d2d378095af8831b764a3e  assets/fonts/PixelOperator.ttf
+a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499  assets/fonts/PixelOperator-LICENSE.txt
+```
+
+Pixel Operator is made by Jayvee Enaguas (HarvettFox96) and is dedicated to
+the public domain under Creative Commons Zero (CC0) 1.0 Universal. The full
+dedication is in `assets/fonts/PixelOperator-LICENSE.txt`.
+
 ## TigerBeetle TigerStyle
 
 `docs/TIGER_STYLE.md` is an Odin-focused adaptation of TigerBeetle's

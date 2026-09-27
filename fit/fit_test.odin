@@ -413,7 +413,7 @@ fit_session_try_theme_rejects_without_mutation :: proc(t: ^testing.T) {
 }
 
 @(private = "file")
-fit_test_font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
+fit_test_font_for_size :: proc(data: rawptr, face: ui.Font_Face, size: i32) -> ui.Font_Id {
 	assert(data != nil && size > 0, "fit test font: invalid argument")
 	return ui.Font_Id(size)
 }

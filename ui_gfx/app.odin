@@ -260,7 +260,8 @@ app_ui_runtime :: proc(app: ^App) -> ^ui.Ui_Runtime {
 app_font :: proc(app: ^App, size: i32) -> (gfx.Font, bool) {
 	assert(app != nil && app.state != .Empty, "app_font: invalid app")
 	assert(size > 0, "app_font: invalid size")
-	id := adapter_font_for_size(&app.session.adapter, size)
+	face := session_runtime(&app.session).style.font_face
+	id := adapter_font_for_size(&app.session.adapter, face, size)
 	return adapter_font(&app.session.adapter, id)
 }
 

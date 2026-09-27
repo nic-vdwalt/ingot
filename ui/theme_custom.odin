@@ -274,6 +274,21 @@ Theme_Set_Square_Corners :: proc(theme: ^Theme, enabled: bool) {
 	assert(theme.square_corners == enabled, "Theme_Set_Square_Corners: flag not stored")
 }
 
+Theme_Set_Font_Face :: proc(theme: ^Theme, face: Font_Face) {
+	assert(theme != nil, "Theme_Set_Font_Face: nil theme")
+	assert(face >= min(Font_Face) && face <= max(Font_Face), "Theme_Set_Font_Face: invalid face")
+	theme.font_face = face
+}
+
+Theme_Set_Surface_Style :: proc(theme: ^Theme, style: Surface_Style) {
+	assert(theme != nil, "Theme_Set_Surface_Style: nil theme")
+	assert(
+		style >= min(Surface_Style) && style <= max(Surface_Style),
+		"Theme_Set_Surface_Style: invalid style",
+	)
+	theme.surface_style = style
+}
+
 // tigerstyle: pure
 @(private = "file")
 theme_palette_colors_present :: proc(palette: Theme_Palette) -> bool {

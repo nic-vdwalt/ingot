@@ -84,6 +84,11 @@ draw_surface :: proc(
 	if rect.width <= 0 || rect.height <= 0 do return
 	colors := surface_colors(frame, surface, state)
 	draw_surface_colors(frame, rect, colors, radius, border, elevation)
+	// The pixel style lights raised objects here rather than in each widget:
+	// only this call knows both the surface class and its state.
+	if surface_is_pixel(frame) && state != .Disabled && surface_takes_bevel(surface) {
+		draw_pixel_bevel(frame, rect, surface_bevel_sunken(surface, state))
+	}
 }
 
 draw_surface_colors :: proc(
@@ -96,6 +101,10 @@ draw_surface_colors :: proc(
 ) {
 	assert(frame != nil, "draw_surface_colors: nil frame")
 	if rect.width <= 0 || rect.height <= 0 do return
+	if surface_is_pixel(frame) {
+		draw_pixel_surface_colors(frame, rect, colors, border, elevation)
+		return
+	}
 	ratio := radius_ratio(frame, radius, rect)
 	segments := radius_segments(radius_pixels(frame, radius, min(rect.width, rect.height)))
 
@@ -120,6 +129,10 @@ draw_surface_colors :: proc(
 draw_rounded_fill :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius, color: Color) {
 	assert(frame != nil, "draw_rounded_fill: nil frame")
 	if rect.width <= 0 || rect.height <= 0 || color.a == 0 do return
+	if surface_is_pixel(frame) {
+		draw_pixel_fill(frame, rect, color)
+		return
+	}
 	radius_px := radius_pixels(frame, radius, min(rect.width, rect.height))
 	draw_rectangle_rounded(
 		frame,
@@ -139,6 +152,10 @@ draw_rounded_border :: proc(
 ) {
 	assert(frame != nil, "draw_rounded_border: nil frame")
 	if rect.width <= 0 || rect.height <= 0 || border == .None || color.a == 0 do return
+	if surface_is_pixel(frame) {
+		draw_pixel_border(frame, rect, color)
+		return
+	}
 	radius_px := radius_pixels(frame, radius, min(rect.width, rect.height))
 	draw_rectangle_rounded_lines_ex(
 		frame,
@@ -188,6 +205,12 @@ draw_control_shadow :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius, p
 	assert(press >= 0 && press <= 1, "control shadow: invalid press")
 	if !ui_frame_theme(frame).tactile_controls || rect.width <= 0 || rect.height <= 0 do return
 	base := ui_frame_theme(frame).shadow_color
+	if surface_is_pixel(frame) {
+		// A pixel press has two frames, up and down, not a tween: a shadow
+		// a fraction of an art pixel long would sit off the grid.
+		if press < 0.5 do draw_pixel_shadow(frame, rect, pixel_shadow_offset(frame, .Lifted))
+		return
+	}
 	offset := elevation_offset(frame, .Lifted) * (1 - press)
 	if base.a == 0 || offset == 0 do return
 	shifted := Rectangle{rect.x + offset, rect.y + offset, rect.width, rect.height}
@@ -198,6 +221,10 @@ draw_shadow_hard :: proc(frame: ^Ui_Frame, rect: Rectangle, radius: Radius, elev
 	assert(frame != nil, "draw_shadow_hard: nil frame")
 	assert(rect.width > 0 && rect.height > 0, "draw_shadow_hard: empty rect")
 	base := ui_frame_theme(frame).shadow_color
+	if surface_is_pixel(frame) {
+		draw_pixel_shadow(frame, rect, pixel_shadow_offset(frame, elevation))
+		return
+	}
 	offset := elevation_offset(frame, elevation)
 	// A palette may disable shadows outright by zeroing shadow_color alpha,
 	// which is how the high-contrast theme opts out without a special case

@@ -20,7 +20,7 @@ Fit_Fuzz_Counts :: struct {
 }
 
 @(private = "file")
-fit_fuzz_font_for_size :: proc(data: rawptr, size: i32) -> ui.Font_Id {
+fit_fuzz_font_for_size :: proc(data: rawptr, face: ui.Font_Face, size: i32) -> ui.Font_Id {
 	assert(data != nil && size >= 0, "fit fuzz font: invalid argument")
 	return ui.Font_Id(size)
 }

@@ -126,7 +126,7 @@ wrap_text_frame :: proc(
 		len   = len(text),
 		width = max_width,
 		size  = font_size,
-		font  = frame_font_for_size(frame, font_size),
+		font  = frame_font_for_size(frame, frame_text_size(frame, font_size)),
 		epoch = frame.runtime.font_epoch,
 	}
 	if entry, ok := system.wrap_frame_cache[key]; ok {

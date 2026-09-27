@@ -82,6 +82,7 @@ Ui_Frame :: struct {
 	font_memo_size:                 i32,
 	font_memo_id:                   Font_Id,
 	font_memo_epoch:                u64,
+	font_memo_face:                 Font_Face,
 	text_cull_top:                  i32,
 	text_cull_bottom:               i32,
 	open_roots:                     int,
