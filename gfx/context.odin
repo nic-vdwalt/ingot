@@ -1235,40 +1235,34 @@ _frame_timing :: proc(ctx: ^Context, close_requested: bool) {
 	// doesn't feed a huge step into animations/physics on the next frame.
 	ctx.frame_time = min(raw, MAX_FRAME_TIME)
 	ctx.last_time = now
-	_fps_meter_record(&ctx.fps_meter, raw, now)
+	_fps_meter_record(&ctx.fps_meter, raw)
 }
 
-// GetFPS reports the average rate over the last FPS_HISTORY_FRAMES frames and
-// refreshes at most every FPS_REFRESH_SECONDS so the readout does not flicker
-// with per-frame scheduler jitter.
-FPS_HISTORY_FRAMES :: 30
-FPS_REFRESH_SECONDS :: 0.25
-#assert(FPS_HISTORY_FRAMES > 0)
+// GetFPS reports frames counted over each FPS_REFRESH_SECONDS window and holds
+// that value until the next window closes, so the readout stays legible.
+FPS_REFRESH_SECONDS :: 1.0
 #assert(FPS_REFRESH_SECONDS > 0)
 
 Fps_Meter :: struct {
-	samples:      [FPS_HISTORY_FRAMES]f32,
-	count:        i32,
-	next:         i32,
+	frames:       i32,
+	elapsed:      f64,
 	displayed:    i32,
-	refreshed_at: f64,
 }
 
 @(private)
-_fps_meter_record :: proc(meter: ^Fps_Meter, frame_seconds: f32, now: f64) {
+_fps_meter_record :: proc(meter: ^Fps_Meter, frame_seconds: f32) {
 	assert(meter != nil, "_fps_meter_record: nil meter")
-	assert(meter.next >= 0 && meter.next < FPS_HISTORY_FRAMES)
+	assert(meter.frames >= 0 && meter.elapsed >= 0)
 	if frame_seconds <= 0 do return
-	meter.samples[meter.next] = frame_seconds
-	meter.next = (meter.next + 1) % FPS_HISTORY_FRAMES
-	meter.count = min(meter.count + 1, FPS_HISTORY_FRAMES)
-	due := meter.displayed == 0 || now - meter.refreshed_at >= FPS_REFRESH_SECONDS || now < meter.refreshed_at
-	if !due do return
-	total: f64
-	for sample in meter.samples[:meter.count] do total += f64(sample)
-	if total <= 0 do return
-	meter.displayed = i32(f64(meter.count) / total + 0.5)
-	meter.refreshed_at = now
+	meter.frames += 1
+	meter.elapsed += f64(frame_seconds)
+	if meter.displayed == 0 {
+		meter.displayed = i32(1.0 / f64(frame_seconds) + 0.5)
+	}
+	if meter.elapsed < FPS_REFRESH_SECONDS do return
+	meter.displayed = i32(f64(meter.frames) / meter.elapsed + 0.5)
+	meter.frames = 0
+	meter.elapsed = 0
 }
 
 // MAX_FRAME_TIME caps GetFrameTime's reported delta (seconds).

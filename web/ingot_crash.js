@@ -34,7 +34,11 @@
 	const CASCADE_MAX = 5;
 	// Console lines matching this are engine-authored failures worth
 	// promoting to the panel on their own, without waiting for a throw.
-	const FATAL_PATTERN = /panic|assert|fatal|gfx: /i;
+	// Deliberately narrow: informational "gfx:" lines (stream overflow,
+	// constrained GPU budget, reduced pools) used to match a bare "gfx: "
+	// and made a healthy, still-rendering demo look crashed. Those lines
+	// still land in the ring and the black box as ordinary breadcrumbs.
+	const FATAL_PATTERN = /panic|assertion|unreachable|unsatisfied ensure|not yet implemented|is out of range|invalid slice indices|fatal|device lost|request(Adapter|Device) failed|(adapter|device) request failed|creation failed|returned no queue|cannot configure swapchain|webgpu is not supported|allocation failed|out of memory/i;
 
 	// --- black box --------------------------------------------------------
 	// sessionStorage (not localStorage) so a report belongs to one tab, does

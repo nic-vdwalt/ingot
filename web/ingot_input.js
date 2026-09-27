@@ -111,8 +111,12 @@
 			ime.setAttribute("autocorrect", "off");
 			ime.setAttribute("spellcheck", "false");
 			ime.setAttribute("tabindex", "-1");
+			ime.setAttribute("inputmode", "text");
+			ime.setAttribute("enterkeyhint", "done");
+			// font-size 16px: iOS zooms the page when focusing any field
+			// whose computed font size is below 16px.
 			ime.style.cssText =
-				"position:absolute;width:1px;height:1px;padding:0;border:0;" +
+				"position:absolute;width:1px;height:1px;padding:0;border:0;font-size:16px;" +
 				"margin:0;outline:none;opacity:0;overflow:hidden;resize:none;" +
 				"background:transparent;color:transparent;caret-color:transparent;" +
 				"pointer-events:none;left:0;top:0;";
@@ -130,12 +134,38 @@
 				pressedKeys.add(k);
 				x.ingot_web_key(k, true, e.repeat);
 				if (CONSUME.has(k)) e.preventDefault();
+				if (k === KEY.Backspace) lastKeydownEdit = { kind: "backspace", time: nowMs() };
+				if (k === KEY.Enter || k === KEY.NumpadEnter) lastKeydownEdit = { kind: "enter", time: nowMs() };
 			}
 			// printable char (no ctrl/meta) → char queue, like GLFW's char cb
 			if (!e.ctrlKey && !e.metaKey && e.key && e.key.length === 1) {
 				x.ingot_web_char(e.key.codePointAt(0));
+				lastKeydownEdit = { kind: "char", data: e.key, time: nowMs() };
 			}
 		}
+
+		// Hardware keyboards deliver text through keydown; soft keyboards
+		// (Android especially) send keyCode 229 and deliver the text only via
+		// `input`. This window lets the input handler skip what keydown
+		// already forwarded so desktop typing is never doubled.
+		const KEYDOWN_ECHO_MS = 50;
+		let lastKeydownEdit = null;
+		const nowMs = () => (typeof performance !== "undefined" && performance.now)
+			? performance.now() : Date.now();
+		const echoedByKeydown = (kind, data) => {
+			const last = lastKeydownEdit;
+			if (!last || last.kind !== kind) return false;
+			if (nowMs() - last.time > KEYDOWN_ECHO_MS) return false;
+			if (kind === "char" && last.data !== data) return false;
+			lastKeydownEdit = null;
+			return true;
+		};
+		const tapKey = (k) => {
+			const x = ex();
+			if (!x) return;
+			x.ingot_web_key(k, true, false);
+			x.ingot_web_key(k, false, false);
+		};
 
 		function onKeyup(e) {
 			const k = KEY[e.code];
@@ -193,8 +223,60 @@
 		// forwarded from keydown); keep it empty so stale text can't leak into
 		// the next composition.
 		listen(ime, "input", function (e) {
-			if (!e.isComposing) ime.value = "";
+			if (e.isComposing) return;
+			const x = ex();
+			const type = e.inputType || "";
+			if (x && (type === "insertText" || type === "insertReplacementText") && e.data) {
+				if (!echoedByKeydown("char", e.data)) {
+					for (const ch of e.data) x.ingot_web_char(ch.codePointAt(0));
+				}
+			} else if (type === "deleteContentBackward") {
+				if (!echoedByKeydown("backspace")) tapKey(KEY.Backspace);
+			} else if (type === "insertLineBreak" || type === "insertParagraph") {
+				if (!echoedByKeydown("enter")) tapKey(KEY.Enter);
+			}
+			ime.value = "";
 		});
+
+		// Soft keyboards only open when focus moves inside a user gesture.
+		// The engine's own focus call (ingot_ime_rect) runs from the frame
+		// loop, so on touch the proxy is focused here, synchronously in the
+		// tap, against the text-field rects the engine published last frame.
+		const IME_TAP_SLOP_PX = 4;
+		const textInputRects = () => {
+			const web = window.ingotWeb;
+			return web && typeof web.textInputs === "function" ? web.textInputs() : [];
+		};
+		const textInputAt = (px, py) => {
+			for (const r of textInputRects()) {
+				if (px >= r.x - IME_TAP_SLOP_PX && px <= r.x + r.w + IME_TAP_SLOP_PX &&
+					py >= r.y - IME_TAP_SLOP_PX && py <= r.y + r.h + IME_TAP_SLOP_PX) {
+					return r;
+				}
+			}
+			return null;
+		};
+		function focusImeForTap(px, py) {
+			const hit = textInputAt(px, py);
+			if (hit) {
+				const r = canvas.getBoundingClientRect();
+				ime.style.left = (r.left + (window.scrollX || 0) + hit.x) + "px";
+				ime.style.top = (r.top + (window.scrollY || 0) + hit.y) + "px";
+				ime.style.height = Math.max(hit.h, 1) + "px";
+				if (document.activeElement !== ime) ime.focus({ preventScroll: true });
+				// The engine polls input (and deactivates the IME when no
+				// field is active) before it processes this tap, so its next
+				// "inactive" report must not undo the gesture's focus.
+				ime.ingotTapFocusAt = nowMs();
+				return true;
+			}
+			if (document.activeElement === ime) {
+				ime.blur();
+				ime.value = "";
+				canvas.focus({ preventScroll: true });
+			}
+			return false;
+		}
 
 		// isTouch centralises the one predicate every branch below depends on.
 		// Pen reports its own type and keeps the mouse path: a stylus has the
@@ -257,8 +339,12 @@
 			const x = ex();
 			if (!x) return;
 			// preventScroll: iOS otherwise scrolls the page to the canvas on
-			// every tap, which fires resize and refits the swapchain.
-			canvas.focus({ preventScroll: true });
+			// every tap, which fires resize and refits the swapchain. A touch
+			// while the IME proxy is focused keeps it: moving focus here would
+			// dismiss the soft keyboard; pointerup decides instead.
+			if (!(isTouch(e) && document.activeElement === ime)) {
+				canvas.focus({ preventScroll: true });
+			}
 			syncModifiers(e);
 			const record = pointerRecord(e);
 			if (!activePointers.has(record.id) && activePointers.size >= ACTIVE_POINTERS_MAX) return;
@@ -305,6 +391,10 @@
 				if (!touch.panning && touch.button !== undefined) {
 					x.ingot_web_mouse_button(touch.button, true);
 					x.ingot_web_mouse_button(touch.button, false);
+					focusImeForTap(
+						Number.isFinite(e.offsetX) ? e.offsetX : 0,
+						Number.isFinite(e.offsetY) ? e.offsetY : 0,
+					);
 				}
 				return;
 			}

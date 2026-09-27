@@ -183,11 +183,7 @@ context_load_font_from_memory_impl :: proc(
 		return {}
 	}
 
-	baked: i32 = 0
-	for i in 0 ..< int(codepointCount) {
-		cp := codepoints[i]
-		if _bake_glyph(ctx, a, cp) do baked += 1
-	}
+	baked := _bake_glyphs_batched(ctx, a, codepoints[:codepointCount])
 
 	id := _atlas_register(ctx.id, &ctx.resources.atlases, a)
 	if id == 0 {
@@ -230,48 +226,158 @@ LoadFontFromMemory :: proc(
 }
 
 @(private)
-_bake_glyph :: proc(ctx: ^Context, a: ^Atlas, cp: rune) -> bool {
-	assert(ctx != nil, "_bake_glyph: nil context")
-	assert(a != nil, "_bake_glyph: nil a")
-	if _, ok := a.glyphs[cp]; ok do return true
+Glyph_Prepare_Status :: enum u8 {
+	Already_Baked,
+	Dropped,
+	Missing,
+	Empty,
+	Packed,
+}
+
+// _glyph_prepare does the metric and packing half of a bake. Everything but
+// .Packed has already been recorded in a.glyphs; .Packed reserves the atlas
+// cell (px, py, gw, gh) and leaves rasterisation and upload to the caller.
+@(private)
+_glyph_prepare :: proc(
+	a: ^Atlas,
+	cp: rune,
+) -> (
+	px, py, gw, gh: i32,
+	ixoff, iyoff: i32,
+	xadvance: f32,
+	status: Glyph_Prepare_Status,
+) {
+	assert(a != nil, "_glyph_prepare: nil atlas")
+	if _, ok := a.glyphs[cp]; ok do return 0, 0, 0, 0, 0, 0, 0, .Already_Baked
 	if len(a.glyphs) >= FONT_GLYPHS_MAX {
 		a.glyphs_dropped += 1
-		return false
+		return 0, 0, 0, 0, 0, 0, 0, .Dropped
 	}
 
 	gi := tt.FindGlyphIndex(&a.info, cp)
 	adv, lsb: c.int
 	tt.GetCodepointHMetrics(&a.info, cp, &adv, &lsb)
-	xadvance := f32(adv) * a.scale
+	xadvance = f32(adv) * a.scale
 
 	if gi == 0 && cp != ' ' {
-		// no glyph in font; still record advance so layout matches
 		a.glyphs[cp] = Glyph {
 			xadvance = xadvance,
 			valid    = false,
 		}
-		return false
+		return 0, 0, 0, 0, 0, 0, xadvance, .Missing
 	}
 
 	ix0, iy0, ix1, iy1: c.int
 	tt.GetCodepointBitmapBox(&a.info, cp, a.scale, a.scale, &ix0, &iy0, &ix1, &iy1)
-	gw := i32(ix1 - ix0)
-	gh := i32(iy1 - iy0)
+	gw = i32(ix1 - ix0)
+	gh = i32(iy1 - iy0)
 	if gw <= 0 || gh <= 0 {
 		a.glyphs[cp] = Glyph {
 			xadvance = xadvance,
 			valid    = false,
 		}
-		return true // e.g. space
+		return 0, 0, 0, 0, 0, 0, xadvance, .Empty
 	}
 
-	px, py, ok := _atlas_pack(a, gw, gh)
+	ok: bool
+	px, py, ok = _atlas_pack(a, gw, gh)
 	if !ok {
 		a.glyphs[cp] = Glyph {
 			xadvance = xadvance,
 			valid    = false,
 		}
+		return 0, 0, 0, 0, 0, 0, xadvance, .Missing
+	}
+	return px, py, gw, gh, i32(ix0), i32(iy0), xadvance, .Packed
+}
+
+@(private)
+_glyph_record :: proc(a: ^Atlas, cp: rune, px, py, gw, gh, ixoff, iyoff: i32, xadvance: f32) {
+	assert(a != nil, "_glyph_record: nil atlas")
+	a.glyphs[cp] = Glyph {
+		x        = u16(px),
+		y        = u16(py),
+		w        = u16(gw),
+		h        = u16(gh),
+		xoff     = f32(ixoff),
+		yoff     = a.ascent + f32(iyoff),
+		xadvance = xadvance,
+		valid    = true,
+	}
+}
+
+// _bake_glyphs_batched rasterises every requested codepoint into one CPU
+// staging image and uploads it with a single QueueWriteTexture. Per-glyph
+// uploads cost one allocation and one browser staging copy each (~2.3k per
+// atlas); on iOS that burst killed the tab's GPU process on the first frame
+// of a page that needed a new font size.
+@(private)
+_bake_glyphs_batched :: proc(ctx: ^Context, a: ^Atlas, codepoints: []rune) -> i32 {
+	assert(ctx != nil, "_bake_glyphs_batched: nil context")
+	assert(a != nil && a.tex != nil, "_bake_glyphs_batched: invalid atlas")
+	if len(codepoints) == 0 do return 0
+	staging := make([]byte, ATLAS_DIM * ATLAS_DIM)
+	defer delete(staging)
+	baked: i32 = 0
+	for cp in codepoints {
+		px, py, gw, gh, ixoff, iyoff, xadvance, status := _glyph_prepare(a, cp)
+		switch status {
+		case .Already_Baked, .Empty:
+			baked += 1
+		case .Dropped, .Missing:
+		case .Packed:
+			assert(px >= 0 && py >= 0 && px + gw <= ATLAS_DIM && py + gh <= ATLAS_DIM)
+			tt.MakeCodepointBitmap(
+				&a.info,
+				&staging[int(py) * ATLAS_DIM + int(px)],
+				c.int(gw),
+				c.int(gh),
+				ATLAS_DIM,
+				a.scale,
+				a.scale,
+				cp,
+			)
+			_glyph_record(a, cp, px, py, gw, gh, ixoff, iyoff, xadvance)
+			baked += 1
+		}
+	}
+	used_h := min(a.cur_y + a.shelf_h, ATLAS_DIM)
+	if used_h > 0 {
+		wg.QueueWriteTexture(
+			ctx.queue,
+			&{texture = a.tex},
+			raw_data(staging),
+			uint(int(used_h) * ATLAS_DIM),
+			&{bytesPerRow = ATLAS_DIM, rowsPerImage = u32(used_h)},
+			&{ATLAS_DIM, u32(used_h), 1},
+		)
+		when GPU_TIMING_DIAGNOSTICS {
+			_gpu_timing_atlas_upload(
+				&ctx.gpu_timing.diagnostics[0].atlas,
+				a.diagnostic_id[0],
+				0,
+				0,
+				ATLAS_DIM,
+				u32(used_h),
+				ATLAS_DIM,
+				staging[:int(used_h) * ATLAS_DIM],
+			)
+		}
+	}
+	return baked
+}
+
+@(private)
+_bake_glyph :: proc(ctx: ^Context, a: ^Atlas, cp: rune) -> bool {
+	assert(ctx != nil, "_bake_glyph: nil context")
+	assert(a != nil, "_bake_glyph: nil a")
+	px, py, gw, gh, ixoff, iyoff, xadvance, status := _glyph_prepare(a, cp)
+	switch status {
+	case .Already_Baked, .Empty:
+		return true
+	case .Dropped, .Missing:
 		return false
+	case .Packed:
 	}
 
 	if !_atlas_upload_glyph(ctx, a, cp, px, py, gw, gh) {
@@ -281,17 +387,7 @@ _bake_glyph :: proc(ctx: ^Context, a: ^Atlas, cp: rune) -> bool {
 		}
 		return false
 	}
-
-	a.glyphs[cp] = Glyph {
-		x        = u16(px),
-		y        = u16(py),
-		w        = u16(gw),
-		h        = u16(gh),
-		xoff     = f32(ix0),
-		yoff     = a.ascent + f32(iy0),
-		xadvance = xadvance,
-		valid    = true,
-	}
+	_glyph_record(a, cp, px, py, gw, gh, ixoff, iyoff, xadvance)
 	return true
 }
 
@@ -388,16 +484,8 @@ _atlas_gpu_init :: proc(ctx: ^Context, a: ^Atlas) -> bool {
 		state.atlas_count += 1
 		a.diagnostic_id[0] = state.atlas_count
 	}
-	zeros := make([]byte, ATLAS_DIM * ATLAS_DIM)
-	wg.QueueWriteTexture(
-		ctx.queue,
-		&{texture = a.tex},
-		raw_data(zeros),
-		uint(len(zeros)),
-		&{bytesPerRow = ATLAS_DIM, rowsPerImage = ATLAS_DIM},
-		&{ATLAS_DIM, ATLAS_DIM, 1},
-	)
-	delete(zeros)
+	// No zero-fill upload: WebGPU guarantees new textures read as zero, and
+	// a 4 MiB staging copy per atlas was part of the iOS memory spike.
 	a.view = wg.TextureCreateView(a.tex, nil)
 	if a.view == nil do return false
 	_atlas_build_bind(ctx, a)

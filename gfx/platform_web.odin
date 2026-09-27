@@ -46,6 +46,8 @@ foreign dom {
 	_js_web_input_frame_begin :: proc() ---
 	@(link_name = "ingot_web_input_frame_end")
 	_js_web_input_frame_end :: proc() ---
+	@(link_name = "ingot_web_mark")
+	_js_web_mark :: proc(label_ptr: rawptr, label_len: i32) ---
 	@(link_name = "ingot_web_input_sync")
 	_js_web_input_sync :: proc(form_ptr: rawptr, form_len: i32, field_ptr: rawptr, field_len: i32, name_ptr: rawptr, name_len: i32, placeholder_ptr: rawptr, placeholder_len: i32, value_ptr: rawptr, value_len: i32, x, y, w, h, input_type, autocomplete, active: i32) -> i32 ---
 	@(link_name = "ingot_web_input_value_len")

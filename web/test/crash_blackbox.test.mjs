@@ -140,7 +140,7 @@ function load(store, { readyState = "complete", pathname = PATH } = {}) {
 	const frame = () => {
 		if (rafCallback) rafCallback(0);
 	};
-	return { api, hook, crash, msg, fire, listeners, timers, tick, frame, win };
+	return { api, hook, crash, msg, fire, listeners, timers, tick, frame, win, console: sandbox.console };
 }
 
 test("a session that shuts down cleanly leaves no record", () => {
@@ -431,6 +431,45 @@ test("a live crash and a recovered one are reported together", () => {
 	assert.match(second.crash.textContent, /reason: device lost/);
 	assert.match(second.msg.textContent, /^crashed/);
 });
+
+// --- fatal console lines ----------------------------------------------------
+//
+// The engine logs informational "gfx:" lines (stream overflow, constrained
+// GPU budget) while it keeps rendering. A bare "gfx: " match used to turn
+// those into the crash headline, so a healthy demo looked dead on phones.
+
+test("informational gfx lines are breadcrumbs, not crashes", () => {
+	const store = makeStorage();
+	const session = load(store);
+	session.console.warn("gfx: geometry stream overflow; dropped 12 quads");
+	session.console.log("gfx: constrained GPU budget; reduced pools");
+	session.console.error("gfx: adapter limits unavailable; using default GPU budget");
+	assert.doesNotMatch(session.msg.textContent, /^crashed/);
+	assert.doesNotMatch(session.crash.textContent, /reason:/);
+	assert.equal(session.api.crashed(), false);
+	session.hook.boxFlush(true);
+	const record = JSON.parse(store.data.get(KEY));
+	assert.ok(
+		record.crumbs.some((crumb) => crumb.includes("geometry stream overflow")),
+		"the line must still be kept as a breadcrumb",
+	);
+});
+
+for (const line of [
+	"panic: boom",
+	"main.odin(3:4) runtime assertion: bad state",
+	"main.odin(1:1) Index 5 is out of range 0..<3",
+	"gfx: WebGPU surface creation failed",
+	"gfx: web device returned no queue",
+	"gfx: GPU stream buffer allocation failed; device out of memory",
+]) {
+	test(`a fatal console line opens the panel: ${line}`, () => {
+		const session = load(makeStorage());
+		session.console.error(line);
+		assert.match(session.msg.textContent, /^crashed/);
+		assert.match(session.crash.textContent, /reason:/);
+	});
+}
 
 // --- heartbeat --------------------------------------------------------------
 //

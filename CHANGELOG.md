@@ -11,9 +11,10 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
-- **Smoothed FPS readout**: `GetFPS`/`context_fps` now report the average over the
-  last 30 frames, refreshed every 0.25 s, instead of the instantaneous rate of the
-  previous frame, so FPS HUDs (e.g. the Box3D demo) no longer flicker.
+- **Steady FPS readout**: `GetFPS`/`context_fps` now report the frame rate
+  measured over each 1 s window and hold it until the next window closes,
+  instead of the instantaneous rate of the previous frame. The Box3D advanced
+  demo HUD also averages its physics time and steps per frame over 1 s.
 
 ## [0.3.2] - 2026-09-27
 

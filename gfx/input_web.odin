@@ -211,3 +211,12 @@ ingot_web_resume :: proc "contextless" () {
 	ctx.force_reconfigure = true
 	_idle_note_activity(&ctx.idle)
 }
+
+// ingot_web_atlas_count feeds the crash recorder's heartbeat so a tab killed
+// right after a new font size was baked shows the atlas count stepping up.
+@(export)
+ingot_web_atlas_count :: proc "contextless" () -> i32 {
+	ctx := _web_owner_context()
+	if ctx == nil do return -1
+	return i32(ctx.resources.atlases.count)
+}

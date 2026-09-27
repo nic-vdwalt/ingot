@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { install, stubDocument } from "./dom_stub.mjs";
 
-await install();
+const { hook } = await install();
 await import("../ingot_input.js");
 
 const exports = {
@@ -283,6 +283,139 @@ test("key repeat is reported as repeat, not as a fresh press", async () => {
 	await ime.dispatch("keyup", keyEvent("Backspace"));
 
 	assert.deepEqual(keys, [[259, true, false], [259, true, true], [259, false, false]]);
+	detach();
+});
+
+// --- soft keyboard -----------------------------------------------------------
+//
+// iOS and Android only raise the soft keyboard when focus moves inside a user
+// gesture. The engine's own IME focus runs from the frame loop, so a touch tap
+// on a canvas-drawn text field must focus the proxy synchronously, in the
+// pointerup handler, against the rects the engine published last frame.
+
+const ROLE_TEXT_INPUT = 5;
+
+function publishTextInput(x, y, w, h) {
+	hook.beginSemanticFrame();
+	assert.equal(hook.syncSemanticControl("7:1", ROLE_TEXT_INPUT, "Name", x, y, w, h, 0, 0, 0, 0), 0);
+	hook.endSemanticFrame();
+}
+
+function clearTextInputs() {
+	hook.beginSemanticFrame();
+	hook.endSemanticFrame();
+}
+
+function editRecorder() {
+	const events = [];
+	return {
+		events,
+		exports: {
+			...exports,
+			ingot_web_key: (k, down, repeat) => events.push(["key", k, down, repeat]),
+			ingot_web_char: (cp) => events.push(["char", String.fromCodePoint(cp)]),
+			ingot_web_mouse_button: (b, down) => events.push(["button", b, down]),
+		},
+	};
+}
+
+test("a touch tap on a text field focuses the IME proxy inside the gesture", async () => {
+	const canvas = stubDocument.getElementById("ingot-canvas");
+	const { exports: ex } = editRecorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	const ime = stubDocument.getElementById("ingot-ime");
+	publishTextInput(20, 40, 200, 32);
+
+	await canvas.dispatch("pointerdown", touch(1, 60, 50));
+	assert.notEqual(stubDocument.activeElement, ime, "focus must not move before the tap completes");
+	await canvas.dispatch("pointerup", touch(1, 60, 50));
+	assert.equal(stubDocument.activeElement, ime, "the tap itself must focus the proxy");
+
+	// A second tap inside the field keeps the keyboard up: pointerdown must
+	// not steal focus back to the canvas.
+	await canvas.dispatch("pointerdown", touch(2, 80, 52));
+	assert.equal(stubDocument.activeElement, ime, "a tap inside the field keeps focus");
+	await canvas.dispatch("pointerup", touch(2, 80, 52));
+	assert.equal(stubDocument.activeElement, ime);
+
+	// A tap elsewhere dismisses the keyboard.
+	await canvas.dispatch("pointerdown", touch(3, 400, 400));
+	await canvas.dispatch("pointerup", touch(3, 400, 400));
+	assert.notEqual(stubDocument.activeElement, ime, "a tap outside must blur the proxy");
+	clearTextInputs();
+	detach();
+});
+
+test("a tap with no published text field never focuses the IME proxy", async () => {
+	const canvas = stubDocument.getElementById("ingot-canvas");
+	const { exports: ex } = editRecorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	const ime = stubDocument.getElementById("ingot-ime");
+	clearTextInputs();
+	await canvas.dispatch("pointerdown", touch(1, 60, 50));
+	await canvas.dispatch("pointerup", touch(1, 60, 50));
+	assert.notEqual(stubDocument.activeElement, ime);
+	detach();
+});
+
+test("the IME proxy is sized so iOS does not zoom on focus", () => {
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports });
+	const ime = stubDocument.getElementById("ingot-ime");
+	assert.match(ime.style.cssText, /font-size:16px/);
+	assert.equal(ime.getAttribute("inputmode"), "text");
+	detach();
+});
+
+test("soft keyboard input events reach the engine", async () => {
+	const { events, exports: ex } = editRecorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	const ime = stubDocument.getElementById("ingot-ime");
+
+	await ime.dispatch("input", { inputType: "insertText", data: "hé", isComposing: false });
+	await ime.dispatch("input", { inputType: "deleteContentBackward", data: null, isComposing: false });
+	await ime.dispatch("input", { inputType: "insertLineBreak", data: null, isComposing: false });
+
+	assert.deepEqual(events, [
+		["char", "h"],
+		["char", "é"],
+		["key", 259, true, false],
+		["key", 259, false, false],
+		["key", 257, true, false],
+		["key", 257, false, false],
+	]);
+	assert.equal(ime.value, "", "the proxy must not accumulate text");
+	detach();
+});
+
+test("composition input is left to the composition handlers", async () => {
+	const { events, exports: ex } = editRecorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	const ime = stubDocument.getElementById("ingot-ime");
+	await ime.dispatch("input", { inputType: "insertCompositionText", data: "k", isComposing: true });
+	assert.deepEqual(events, []);
+	detach();
+});
+
+test("hardware keys are not doubled by the input event that follows them", async () => {
+	const { events, exports: ex } = editRecorder();
+	const detach = globalThis.ingotInput.attach("ingot-canvas", { exports: ex });
+	const ime = stubDocument.getElementById("ingot-ime");
+
+	await ime.dispatch("keydown", keyEvent("KeyA", { key: "a" }));
+	await ime.dispatch("input", { inputType: "insertText", data: "a", isComposing: false });
+	await ime.dispatch("keydown", keyEvent("Backspace"));
+	await ime.dispatch("input", { inputType: "deleteContentBackward", data: null, isComposing: false });
+
+	assert.deepEqual(
+		events.filter((e) => e[0] === "char"),
+		[["char", "a"]],
+		"the typed character must arrive exactly once",
+	);
+	assert.deepEqual(
+		events.filter((e) => e[0] === "key" && e[1] === 259 && e[2] === true),
+		[["key", 259, true, false]],
+		"Backspace must press exactly once",
+	);
 	detach();
 });
 

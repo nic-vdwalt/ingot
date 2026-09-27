@@ -33,6 +33,12 @@
 	// interactive for everyone else.
 	const SEMANTIC_CONTROLS_MAX = 256;
 	let semanticControlsSynced = 0;
+// Canvas-drawn text fields (Sem_Role 5) get no DOM mirror; their rects are
+// kept so a touch tap can focus the IME proxy inside the user gesture, the
+// only way iOS and Android will raise the soft keyboard.
+let semanticTextInputs = [];
+const IME_TAP_FOCUS_GRACE_MS = 300;
+let semanticTextInputsNext = [];
 	// Shared codecs: per-call `new TextDecoder()` allocations at 1000+ calls
 	// per frame create GC pressure that stalls mobile browsers.
 	const textDecoder = new TextDecoder();
@@ -557,6 +563,14 @@
 	}
 
 	function syncSemanticControl(key, role, label, x, y, width, height, stateBits, value, lo, hi, positionInSet = 0, sizeOfSet = 0) {
+		if (role === 5) {
+			if (semanticTextInputsNext.length < SEMANTIC_CONTROLS_MAX) {
+				semanticTextInputsNext.push({
+					key, x, y, w: width, h: height, focused: (stateBits & 4) !== 0,
+				});
+			}
+			return 0;
+		}
 		let state = semanticControls.get(key);
 		if (state && state.role !== role) {
 			state.el.remove();
@@ -604,6 +618,8 @@
 	}
 
 	function endSemanticFrame() {
+		semanticTextInputs = semanticTextInputsNext;
+		semanticTextInputsNext = [];
 		for (const [fieldId, state] of semanticInputs) {
 			if (state.seen === semanticFrame) continue;
 			state.input.remove();
@@ -737,6 +753,13 @@
 				canvasRectCache = null;
 			},
 			ingot_web_input_frame_end: endSemanticFrame,
+			ingot_web_mark: (ptr, len) => {
+				if (!window.ingotCrash || typeof window.ingotCrash.mark !== "function") return;
+				if (!ptr || len <= 0) return;
+				try {
+					window.ingotCrash.mark(wasmText(ptr, len));
+				} catch (_) {}
+			},
 			ingot_web_input_sync: (formPointer, formLength, fieldPointer, fieldLength,
 				namePointer, nameLength, placeholderPointer, placeholderLength,
 				valuePointer, valueLength, x, y, width, height, inputType,
@@ -797,6 +820,15 @@
 						ime.focus({ preventScroll: true });
 					}
 				} else if (document.activeElement === ime) {
+					// A touch tap focused the proxy inside the gesture (see
+					// focusImeForTap in ingot_input.js); give the engine a
+					// few frames to activate the field before treating an
+					// inactive report as "no field focused".
+					const tapAt = ime.ingotTapFocusAt || 0;
+					const now = (typeof performance !== "undefined" && performance.now)
+						? performance.now() : Date.now();
+					if (tapAt > 0 && now - tapAt < IME_TAP_FOCUS_GRACE_MS) return;
+					ime.ingotTapFocusAt = 0;
 					ime.blur();
 					ime.value = "";
 					c.focus({ preventScroll: true });
@@ -1239,6 +1271,14 @@
 			window.ingotCrash.watch("domNodes", () => {
 				return document.getElementsByTagName("*").length;
 			});
+			// Each font size is a 2048x2048 GPU atlas. A kill right after
+			// this steps up points at atlas creation rather than the canvas.
+			window.ingotCrash.watch("atlases", () => {
+				const x = wmi.exports;
+				if (!x || typeof x.ingot_web_atlas_count !== "function") return null;
+				const count = x.ingot_web_atlas_count();
+				return count < 0 ? null : count;
+			});
 		}
 		const listeners = [];
 		const listen = (target, type, handler) => {
@@ -1372,6 +1412,7 @@
 		ingotImports: ingotImports,
 		httpImports: httpImports,
 		audioImports: audioImports,
+		textInputs: () => semanticTextInputs,
 	};
 
 	// Test-only export hook: node --test (web/test/) exercises the semantic
@@ -1385,6 +1426,7 @@
 			endSemanticFrame,
 			beginSemanticFrame: () => { semanticFrame += 1; },
 			semanticState: () => ({ semanticInputs, semanticForms, semanticControls }),
+			textInputs: () => semanticTextInputs,
 			attachDrop,
 			box3dWorkerImports,
 			clearDeviceLost,

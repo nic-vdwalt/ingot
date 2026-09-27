@@ -148,25 +148,22 @@ frame_pacing_remaining_is_bounded :: proc(t: ^testing.T) {
 @(test)
 fps_meter_averages_and_holds_between_refreshes :: proc(t: ^testing.T) {
 	meter: Fps_Meter
-	now := 1.0
-	_fps_meter_record(&meter, 1.0 / 60.0, now)
+	_fps_meter_record(&meter, 1.0 / 60.0)
 	testing.expect_value(t, meter.displayed, i32(60))
-	for index in 0 ..< 10 {
-		now += 0.01
+	for index in 0 ..< 20 {
 		frame := f32(1.0 / 50.0) if index % 2 == 0 else f32(1.0 / 75.0)
-		_fps_meter_record(&meter, frame, now)
+		_fps_meter_record(&meter, frame)
+		testing.expect_value(t, meter.displayed, i32(60))
 	}
+	meter = {displayed = 60}
+	for _ in 0 ..< 119 do _fps_meter_record(&meter, 1.0 / 120.0)
 	testing.expect_value(t, meter.displayed, i32(60))
-	for _ in 0 ..< FPS_HISTORY_FRAMES {
-		now += 0.01
-		_fps_meter_record(&meter, 1.0 / 120.0, now)
-	}
-	now += FPS_REFRESH_SECONDS
-	_fps_meter_record(&meter, 1.0 / 120.0, now)
+	_fps_meter_record(&meter, 1.0 / 120.0 + 0.0001)
 	testing.expect_value(t, meter.displayed, i32(120))
-	held := meter.displayed
-	_fps_meter_record(&meter, 0, now + 1)
-	testing.expect_value(t, meter.displayed, held)
+	testing.expect_value(t, meter.frames, i32(0))
+	_fps_meter_record(&meter, 0)
+	testing.expect_value(t, meter.displayed, i32(120))
+	testing.expect_value(t, meter.frames, i32(0))
 }
 
 @(test)

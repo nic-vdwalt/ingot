@@ -15,6 +15,7 @@ FIXED_DT :: f32(1.0 / 60.0)
 PHYSICS_SUBSTEPS :: 4
 MAX_STEPS_PER_FRAME :: 8
 MAX_FRAME_DT :: f32(0.25)
+HUD_REFRESH_SECONDS :: f32(1)
 SCREEN_WIDTH :: 1280
 SCREEN_HEIGHT :: 720
 BOX_LIGHT :: rl.Gpu_3D_Light {
@@ -90,6 +91,34 @@ State :: struct {
 	orbit_config:    rl.Orbit_Camera_Config,
 	orbit_bindings:  rl.Orbit_Camera_Bindings,
 	graphics_ready:  bool,
+	hud:             Hud_Readout,
+}
+
+Hud_Readout :: struct {
+	physics_ms_sum: f64,
+	steps_sum:      u32,
+	frames:         u32,
+	elapsed:        f32,
+	physics_ms:     f64,
+	steps:          f32,
+	primed:         bool,
+}
+
+hud_readout_update :: proc(hud: ^Hud_Readout, frame_dt: f32, physics_micros, steps: u32) {
+	assert(hud != nil)
+	assert(frame_dt >= 0)
+	hud.physics_ms_sum += f64(physics_micros) / 1000
+	hud.steps_sum += steps
+	hud.frames += 1
+	hud.elapsed += frame_dt
+	if hud.primed && hud.elapsed < HUD_REFRESH_SECONDS do return
+	hud.physics_ms = hud.physics_ms_sum / f64(hud.frames)
+	hud.steps = f32(hud.steps_sum) / f32(hud.frames)
+	hud.primed = true
+	hud.physics_ms_sum = 0
+	hud.steps_sum = 0
+	hud.frames = 0
+	hud.elapsed = 0
 }
 
 state: State
@@ -439,6 +468,7 @@ frame :: proc() {
 	physics_input(&state)
 	camera_update(&state, frame_dt)
 	physics_update(&state, frame_dt)
+	hud_readout_update(&state.hud, frame_dt, state.physics_micros, state.fixed_steps)
 	graphics_target_resize(&state)
 	draw_world(&state)
 	draw_screen(&state)
@@ -502,14 +532,14 @@ draw_screen :: proc(value: ^State) {
 	}
 	mode := "stress" if value.active_mode == .Stress else "visual"
 	hud := fmt.ctprintf(
-		"box3d %s  mode %s  bodies %d  workers %d  fps %d  physics %.3fms  steps %d  dropped %d",
+		"box3d %s  mode %s  bodies %d  workers %d  fps %d  physics %.2fms  steps/frame %.1f  dropped %d",
 		status,
 		mode,
 		value.body_count,
 		value.worker_count,
 		rl.GetFPS(),
-		f64(value.physics_micros) / 1000,
-		value.fixed_steps,
+		value.hud.physics_ms,
+		value.hud.steps,
 		value.dropped_steps,
 	)
 	rl.DrawText(hud, 18, 18, 22, rl.RAYWHITE)

@@ -443,7 +443,75 @@ test_measure_metrics :: proc(t: ^testing.T) {
 	test_lazy_glyph_first_target_paint(t)
 	test_lazy_glyph_batch_boundary(t, f)
 	test_default_font_is_real(t)
+	test_batched_bake_matches_per_glyph(t)
+	test_unbaked_glyph_reads_as_present(t)
 	_flush_retired(g)
+}
+
+// test_batched_bake_matches_per_glyph pins the load-time batched bake (one
+// staging image, one texture write) to the per-glyph lazy path: both must
+// pack every glyph at the same cell with the same metrics, or text laid out
+// from one would sample the wrong texels of the other.
+test_batched_bake_matches_per_glyph :: proc(t: ^testing.T) {
+	cps := make([dynamic]rune, context.temp_allocator)
+	for cp in rune(0x20) ..= rune(0x7E) do append(&cps, cp)
+	for cp in rune(0xA0) ..= rune(0xFF) do append(&cps, cp)
+	for cp in rune(0x2500) ..= rune(0x257F) do append(&cps, cp)
+	append(&cps, rune(0xE000))
+
+	batched := LoadFontFromMemory(
+		".ttf",
+		raw_data(FONT_TTF),
+		i32(len(FONT_TTF)),
+		40,
+		raw_data(cps[:]),
+		i32(len(cps)),
+	)
+	defer UnloadFont(batched)
+	lazy := LoadFontFromMemory(".ttf", raw_data(FONT_TTF), i32(len(FONT_TTF)), 40, nil, 0)
+	defer UnloadFont(lazy)
+
+	batched_atlas := context_get_atlas(g, batched._atlas)
+	lazy_atlas := context_get_atlas(g, lazy._atlas)
+	testing.expect(t, batched_atlas != nil && lazy_atlas != nil, "both fonts should own an atlas")
+	if batched_atlas == nil || lazy_atlas == nil do return
+	testing.expect(t, len(lazy_atlas.glyphs) == 0, "a font loaded without codepoints bakes nothing")
+
+	baked: i32 = 0
+	for cp in cps {
+		if _bake_glyph(g, lazy_atlas, cp) do baked += 1
+	}
+	testing.expectf(t, batched.glyphCount == baked, "baked count %d != %d", batched.glyphCount, baked)
+	testing.expect(t, len(batched_atlas.glyphs) == len(lazy_atlas.glyphs))
+	for cp in cps {
+		want, want_ok := lazy_atlas.glyphs[cp]
+		got, got_ok := batched_atlas.glyphs[cp]
+		testing.expectf(t, want_ok && got_ok, "U+%04X missing from a glyph table", cp)
+		testing.expectf(t, got == want, "U+%04X: batched %v != per-glyph %v", cp, got, want)
+	}
+	testing.expect(t, batched_atlas.cur_x == lazy_atlas.cur_x && batched_atlas.cur_y == lazy_atlas.cur_y)
+	testing.expect(t, batched_atlas.shelf_h == lazy_atlas.shelf_h)
+	testing.expect(t, !batched_atlas.glyphs[0xE000].valid, "a missing glyph stays invalid")
+}
+
+// test_unbaked_glyph_reads_as_present covers the web eager/lazy split: a
+// codepoint outside the eager ranges is not baked at load, but the font
+// still has it, so fallback selection must not skip this face.
+test_unbaked_glyph_reads_as_present :: proc(t: ^testing.T) {
+	cps: [95]rune
+	for i in 0 ..< 95 {cps[i] = rune(32 + i)}
+	f := LoadFontFromMemory(".ttf", raw_data(FONT_TTF), i32(len(FONT_TTF)), 24, raw_data(cps[:]), 95)
+	defer UnloadFont(f)
+	atlas := context_get_atlas(g, f._atlas)
+	testing.expect(t, atlas != nil, "font should own an atlas")
+	if atlas == nil do return
+	box: rune = 0x2500
+	_, baked := atlas.glyphs[box]
+	testing.expect(t, !baked, "box drawing must not be baked by an ASCII-only load")
+	testing.expect(t, context_font_has_glyph_impl(g, f, box), "an unbaked glyph the font has must read as present")
+	testing.expect(t, !context_font_has_glyph_impl(g, f, 0xE000), "a glyph the font lacks must read as absent")
+	testing.expect(t, _bake_glyph(g, atlas, box), "the lazy path must still bake it on demand")
+	testing.expect(t, atlas.glyphs[box].valid)
 }
 
 // test_default_font_is_real checks that DrawText/MeasureText are backed by an

@@ -24,6 +24,7 @@ package main
 import "core:fmt"
 import "core:slice"
 import fit "ingot:fit"
+import gfx "ingot:gfx"
 import "ingot:sys"
 
 // SMOKE enables the self-driving crash harness in smoke.odin (native only;
@@ -515,6 +516,7 @@ nav_strip_height_scale :: proc(scale: f32, width, available_height: i32) -> i32 
 // nav_select_section is the one place a nav switches section, so the sidebar,
 // the full strip and the compact strip cannot disagree about the side effects.
 nav_select_section :: proc(s: Section) {
+	if s != section do gfx.web_mark(fmt.tprintf("section %s", SECTION_NAMES[s]))
 	section = s
 	fit.Pane_Reset(&content_pane)
 	assert(section == s, "nav_select_section: section not applied")

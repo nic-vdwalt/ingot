@@ -143,6 +143,28 @@ test("control mirror: links expose and stage activation", async () => {
 	hook.endSemanticFrame();
 });
 
+test("canvas text fields publish rects for tap-to-focus without DOM nodes", async () => {
+	const { hook } = await hookP;
+	const ROLE_TEXT_INPUT = 5, STATE_FOCUSED = 4;
+	const before = stubDocument._all.size;
+	hook.beginSemanticFrame();
+	assert.equal(hook.syncSemanticControl("5:1", ROLE_TEXT_INPUT, "Name", 10, 20, 200, 30, STATE_FOCUSED, 0, 0, 0), 0);
+	hook.syncSemanticControl("5:2", ROLE_TEXT_INPUT, "City", 10, 60, 200, 30, 0, 0, 0, 0);
+	assert.deepEqual(hook.textInputs(), [], "rects become visible only when the frame ends");
+	hook.endSemanticFrame();
+
+	assert.equal(hook.semanticState().semanticControls.has("5:1"), false, "no control mirror for text inputs");
+	assert.equal(stubDocument._all.size, before, "no DOM element is created");
+	assert.deepEqual(hook.textInputs(), [
+		{ key: "5:1", x: 10, y: 20, w: 200, h: 30, focused: true },
+		{ key: "5:2", x: 10, y: 60, w: 200, h: 30, focused: false },
+	]);
+
+	hook.beginSemanticFrame();
+	hook.endSemanticFrame();
+	assert.deepEqual(hook.textInputs(), [], "fields not drawn this frame are dropped");
+});
+
 test("control mirror: role change replaces the element", async () => {
 	const { hook } = await hookP;
 	hook.beginSemanticFrame();

@@ -20,11 +20,13 @@ Codepoint_Range :: struct {
 	end:   rune,
 }
 
+// The first EAGER_CODEPOINT_RANGE_COUNT ranges (ASCII, Latin-1 Supplement,
+// General Punctuation) are the ones web builds bake up front.
 CODEPOINT_RANGES :: [?]Codepoint_Range {
 	{0x0020, 0x007E},
 	{0x00A0, 0x00FF},
-	{0x0100, 0x024F},
 	{0x2000, 0x206F},
+	{0x0100, 0x024F},
 	{0x2190, 0x21FF},
 	{0x2200, 0x22FF},
 	{0x2300, 0x23FF},
@@ -37,15 +39,24 @@ CODEPOINT_RANGES :: [?]Codepoint_Range {
 	{0x2B00, 0x2B73},
 }
 
+EAGER_CODEPOINT_RANGE_COUNT :: 3
+#assert(EAGER_CODEPOINT_RANGE_COUNT <= len(CODEPOINT_RANGES))
+
 adapter_text_init :: proc(adapter: ^Adapter) {
 	assert(adapter != nil && adapter.initialized, "adapter_text_init: invalid adapter")
+	// On web only the eager ranges are baked when an atlas is created; the
+	// rest bake lazily on first draw/measure (gfx/text.odin _bake_glyph).
+	// Baking every range up front made each new font size a multi-thousand
+	// glyph burst, which iOS answered by killing the tab.
+	eager := EAGER_CODEPOINT_RANGE_COUNT when ODIN_OS == .JS else len(CODEPOINT_RANGES)
+	ranges := CODEPOINT_RANGES
 	total := 0
-	for value in CODEPOINT_RANGES {
+	for value in ranges[:eager] {
 		total += int(value.end - value.start) + 1
 	}
 	adapter.font_codepoints = make([]rune, total)
 	index := 0
-	for value in CODEPOINT_RANGES {
+	for value in ranges[:eager] {
 		for codepoint := value.start; codepoint <= value.end; codepoint += 1 {
 			adapter.font_codepoints[index] = codepoint
 			index += 1
