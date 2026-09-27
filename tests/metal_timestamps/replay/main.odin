@@ -29,7 +29,7 @@ SLOTS :: 8
 ATLAS_DIM :: 2048
 // Bounded so an unresponsive device fails the run instead of hanging it.
 DRAIN_POLLS :: 4096
-VERTEX_STRIDE :: 36
+VERTEX_STRIDE :: 24
 
 SAMPLE_FORMAT ::
 	`{{"kind":"sample","iteration":%d,"slot":%d,"submit":%d,"resolve_submit":%d,` +

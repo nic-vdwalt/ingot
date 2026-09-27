@@ -247,11 +247,11 @@ class EvaluateReplayTests(unittest.TestCase):
 def frozen_capture_payload():
     vertex = {"position_bits": [0, 0], "color_bits": [0, 0, 0, 1065353216],
               "uv_bits": [0, 0], "mode": 0}
-    pipeline = {"known": True, "format": 27, "vertex_stride": 36, "step_mode": 1,
+    pipeline = {"known": True, "format": 27, "vertex_stride": 24, "step_mode": 1,
                 "attributes": [{"format": 29, "offset": 0, "shader_location": 0},
-                               {"format": 31, "offset": 8, "shader_location": 1},
-                               {"format": 29, "offset": 24, "shader_location": 2},
-                               {"format": 32, "offset": 32, "shader_location": 3}],
+                               {"format": 9, "offset": 16, "shader_location": 1},
+                               {"format": 29, "offset": 8, "shader_location": 2},
+                               {"format": 32, "offset": 20, "shader_location": 3}],
                 "topology": 4, "strip_index": 0, "front_face": 1, "cull_mode": 1,
                 "unclipped_depth": False, "sample_count": 1, "sample_mask": 0xffffffff,
                 "alpha_to_coverage": False, "blend_enabled": True,
@@ -298,7 +298,7 @@ class ExportBundleTests(unittest.TestCase):
         payload = frozen_capture_payload()
         with tempfile.TemporaryDirectory() as directory:
             manifest, bundle = export_from_frozen_build(payload, directory)
-            self.assertEqual((bundle / "draw0.vertices.bin").stat().st_size, 36 * 3)
+            self.assertEqual((bundle / "draw0.vertices.bin").stat().st_size, 24 * 3)
             self.assertEqual((bundle / "draw0.indices.bin").read_bytes(),
                              b"\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00")
             self.assertEqual(manifest["draws"][0]["fragment_entry"], "fs_ui")

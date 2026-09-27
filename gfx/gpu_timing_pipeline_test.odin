@@ -47,14 +47,9 @@ gpu_timing_pipeline_retains_swapchain_descriptor :: proc(t: ^testing.T) {
 		renderer.cust_src = .SrcAlpha
 		renderer.cust_dst = .One
 		renderer.cust_op = .Subtract
-		attrs := [4]wg.VertexAttribute {
-			{format = .Float32x2, offset = 0, shaderLocation = 0},
-			{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
-			{format = .Float32x2, offset = u64(offset_of(Vertex, uv)), shaderLocation = 2},
-			{format = .Uint32, offset = u64(offset_of(Vertex, mode)), shaderLocation = 3},
-		}
+		attrs := _gpu_vertex_attributes()
 		vertex := wg.VertexBufferLayout {
-			arrayStride    = size_of(Vertex),
+			arrayStride    = size_of(Gpu_Vertex),
 			stepMode       = .Vertex,
 			attributeCount = 4,
 			attributes     = raw_data(attrs[:]),
@@ -85,12 +80,13 @@ gpu_timing_pipeline_retains_swapchain_descriptor :: proc(t: ^testing.T) {
 		for entry, index in output {
 			testing.expect(t, entry.known)
 			testing.expect_value(t, entry.format, wg.TextureFormat.BGRA8Unorm)
-			testing.expect_value(t, entry.vertex_stride, u64(36))
+			testing.expect_value(t, entry.vertex_stride, u64(24))
 			testing.expect_value(t, entry.step_mode, wg.VertexStepMode.Vertex)
 			testing.expect_value(t, entry.attributes[0].offset, u64(0))
-			testing.expect_value(t, entry.attributes[1].offset, u64(8))
-			testing.expect_value(t, entry.attributes[2].offset, u64(24))
-			testing.expect_value(t, entry.attributes[3].offset, u64(32))
+			testing.expect_value(t, entry.attributes[1].offset, u64(16))
+			testing.expect_value(t, entry.attributes[1].format, wg.VertexFormat.Unorm8x4)
+			testing.expect_value(t, entry.attributes[2].offset, u64(8))
+			testing.expect_value(t, entry.attributes[3].offset, u64(20))
 			testing.expect_value(t, entry.attributes[3].format, wg.VertexFormat.Uint32)
 			testing.expect_value(t, entry.primitive.topology, wg.PrimitiveTopology.TriangleList)
 			testing.expect_value(t, entry.multisample.count, u32(1))

@@ -10,9 +10,12 @@ three draws (1080, 66, 318 indices), all of which must be represented.
 
 ## GPU input layout
 
-- Vertex stride 36 bytes; little-endian position Float32x2 at 0, color Float32x4
-  at 8, UV Float32x2 at 24 and mode Uint32 at 32. Vertex step mode is per vertex.
-- Index format Uint32; DrawIndexed uses instance count 1, first index 0, base
+- Vertex stride 24 bytes; little-endian position Float32x2 at 0, UV Float32x2 at
+  8, color Unorm8x4 (RGBA8) at 16 and mode Uint32 at 20. Vertex step mode is per
+  vertex.
+- The live batch uses Uint16 indices when a run has at most 65536 vertices and
+  Uint32 otherwise; replay always uses Uint32, which draws the same values.
+  DrawIndexed uses instance count 1, first index 0, base
   vertex 0 and first instance 0. TriangleList topology, CCW front face, no culling.
 - Projection is four f32 words in a 16-byte uniform buffer. Group 0 binding 0 is
   a vertex-visible Uniform with minimum binding size 16 and no dynamic offsets.

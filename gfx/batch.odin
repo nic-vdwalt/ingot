@@ -23,6 +23,45 @@ Vertex_Mode :: enum u32 {
 	Text,
 }
 
+// Gpu_Vertex is the layout the 2D batch uploads. Vertex stays the CPU-side
+// authoring form; flush packs into this, colour as RGBA8 read by Unorm8x4, so
+// WGSL still sees vec4<f32>. 24 bytes instead of 36 cuts per-frame uploads,
+// which is what iOS WebKit's GPU process runs out of.
+Gpu_Vertex :: struct {
+	pos:  [2]f32,
+	uv:   [2]f32,
+	col:  u32,
+	mode: Vertex_Mode,
+}
+#assert(size_of(Gpu_Vertex) == 24)
+
+// _pack_color is lossless for every producer: all batch colours come from an
+// 8-bit Color through col_f.
+@(private)
+_pack_color :: #force_inline proc "contextless" (c: [4]f32) -> u32 {
+	r := u32(clamp(c[0], 0, 1) * 255 + 0.5)
+	g := u32(clamp(c[1], 0, 1) * 255 + 0.5)
+	b := u32(clamp(c[2], 0, 1) * 255 + 0.5)
+	a := u32(clamp(c[3], 0, 1) * 255 + 0.5)
+	return r | g << 8 | b << 16 | a << 24
+}
+
+@(private)
+_pack_vertex :: #force_inline proc "contextless" (v: Vertex) -> Gpu_Vertex {
+	return {pos = v.pos, uv = v.uv, col = _pack_color(v.col), mode = v.mode}
+}
+
+// _gpu_vertex_attributes is the single source of the batch vertex layout for
+// every pipeline that consumes batch geometry, built-in or custom shader.
+_gpu_vertex_attributes :: proc "contextless" () -> [4]wg.VertexAttribute {
+	return {
+		{format = .Float32x2, offset = u64(offset_of(Gpu_Vertex, pos)), shaderLocation = 0},
+		{format = .Unorm8x4, offset = u64(offset_of(Gpu_Vertex, col)), shaderLocation = 1},
+		{format = .Float32x2, offset = u64(offset_of(Gpu_Vertex, uv)), shaderLocation = 2},
+		{format = .Uint32, offset = u64(offset_of(Gpu_Vertex, mode)), shaderLocation = 3},
+	}
+}
+
 Pipe_Kind :: enum {
 	Solid,
 	Image,
@@ -257,14 +296,9 @@ _make_pipe :: proc(
 	assert(r.shader != nil, "_make_pipe: nil shader")
 	assert(r.ubind_layout != nil, "_make_pipe: nil uniform layout")
 	if textured do assert(r.tex_layout != nil, "_make_pipe: nil texture layout")
-	attrs := [4]wg.VertexAttribute {
-		{format = .Float32x2, offset = 0, shaderLocation = 0},
-		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
-		{format = .Float32x2, offset = u64(offset_of(Vertex, uv)), shaderLocation = 2},
-		{format = .Uint32, offset = u64(offset_of(Vertex, mode)), shaderLocation = 3},
-	}
+	attrs := _gpu_vertex_attributes()
 	vbl := wg.VertexBufferLayout {
-		arrayStride    = size_of(Vertex),
+		arrayStride    = size_of(Gpu_Vertex),
 		stepMode       = .Vertex,
 		attributeCount = 4,
 		attributes     = raw_data(attrs[:]),
@@ -974,27 +1008,21 @@ renderer_flush :: proc(
 	// that accumulated since the last flush, which is exactly the quantity
 	// BATCH_MAX_VERTICES has to cover.
 	_batch_record_peak(r, n, index_count)
-	vertex_bytes := u64(n) * size_of(Vertex)
-	index_bytes := u64(index_count) * size_of(u32)
+	layout := _batch_upload_layout(n, index_count)
+	vertex_bytes := layout.vertex_bytes
+	index_bytes := layout.index_bytes
 	vertex_buffer, index_buffer: wg.Buffer
 	vertex_offset, index_offset: u64
 	if STREAMED_RENDERER_ENABLED {
 		buffer, uploaded_vertex_offset, uploaded_index_offset, upload_ok :=
-			_geometry_upload_indexed(
-				ctx,
-				r,
-				raw_data(r.verts[:]),
-				vertex_bytes,
-				raw_data(r.indices[:]),
-				index_bytes,
-			)
+			_geometry_upload_batch(ctx, r, layout, r.verts[:], r.indices[:])
 		if upload_ok {
 			vertex_buffer = buffer
 			index_buffer = buffer
 			vertex_offset = uploaded_vertex_offset
 			index_offset = uploaded_index_offset
 		} else {
-			vertex_buffer, index_buffer = _geometry_upload_transient(ctx, r)
+			vertex_buffer, index_buffer = _geometry_upload_transient(ctx, r, layout)
 			if vertex_buffer == nil || index_buffer == nil {
 				clear(&r.verts)
 				clear(&r.indices)
@@ -1002,7 +1030,7 @@ renderer_flush :: proc(
 			}
 		}
 	} else {
-		vertex_buffer, index_buffer = _geometry_upload_transient(ctx, r)
+		vertex_buffer, index_buffer = _geometry_upload_transient(ctx, r, layout)
 		if vertex_buffer == nil || index_buffer == nil {
 			clear(&r.verts)
 			clear(&r.indices)
@@ -1025,6 +1053,7 @@ renderer_flush :: proc(
 			vertex_offset,
 			index_buffer,
 			index_offset,
+			layout.index_format,
 			u32(index_count),
 		) {
 			clear(&r.verts)
@@ -1048,7 +1077,7 @@ renderer_flush :: proc(
 		_stats_bind_group_switches(ctx, 1)
 	}
 	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vertex_buffer, vertex_offset, vertex_bytes)
-	wg.RenderPassEncoderSetIndexBuffer(pass, index_buffer, .Uint32, index_offset, index_bytes)
+	wg.RenderPassEncoderSetIndexBuffer(pass, index_buffer, layout.index_format, index_offset, index_bytes)
 	wg.RenderPassEncoderDrawIndexed(pass, u32(index_count), 1, 0, 0, 0)
 	when GPU_TIMING_DIAGNOSTICS {
 		_gpu_timing_diagnostic_batch_draw(ctx, r, pass, u32(index_count))
@@ -1095,19 +1124,30 @@ _renderer_report_overflow :: proc(r: ^Renderer) {
 }
 
 @(private)
-_geometry_upload_transient :: proc(ctx: ^Context, r: ^Renderer) -> (wg.Buffer, wg.Buffer) {
+_geometry_upload_transient :: proc(
+	ctx: ^Context,
+	r: ^Renderer,
+	layout: Batch_Upload_Layout,
+) -> (
+	wg.Buffer,
+	wg.Buffer,
+) {
 	assert(ctx != nil, "_geometry_upload_transient: nil context")
 	assert(r == &ctx.rend, "_geometry_upload_transient: foreign renderer")
 	// Record the overflow before attempting the allocation: a scene reaching
 	// this path at all is the signal worth reporting, whether or not the
 	// fallback itself succeeds.
-	r.overflow_bytes += u64(len(r.verts)) * size_of(Vertex) + u64(len(r.indices)) * size_of(u32)
+	r.overflow_bytes += layout.vertex_bytes + layout.index_bytes
 	r.overflow_draws += 1
 	// Two buffers are appended below, so stop one pair short of the cap.
 	if len(r.transient_buffers) > BATCH_TRANSIENT_BUFFERS_MAX - 2 do return nil, nil
-	vertex_buffer := wg.DeviceCreateBufferWithData(ctx.device, &{usage = {.Vertex}}, r.verts[:])
+	vertex_data := make([]byte, int(layout.vertex_bytes), context.temp_allocator)
+	index_data := make([]byte, int(layout.index_bytes), context.temp_allocator)
+	if vertex_data == nil || index_data == nil do return nil, nil
+	_batch_pack(layout, r.verts[:], r.indices[:], vertex_data, index_data)
+	vertex_buffer := wg.DeviceCreateBufferWithData(ctx.device, &{usage = {.Vertex}}, vertex_data)
 	if vertex_buffer == nil do return nil, nil
-	index_buffer := wg.DeviceCreateBufferWithData(ctx.device, &{usage = {.Index}}, r.indices[:])
+	index_buffer := wg.DeviceCreateBufferWithData(ctx.device, &{usage = {.Index}}, index_data)
 	if index_buffer == nil {
 		wg.BufferRelease(vertex_buffer)
 		return nil, nil
@@ -1119,14 +1159,70 @@ _geometry_upload_transient :: proc(ctx: ^Context, r: ^Renderer) -> (wg.Buffer, w
 	return vertex_buffer, index_buffer
 }
 
+// Batch_Upload_Layout is the packed GPU form of one flushed run: 24-byte
+// vertices and 16-bit indices whenever the run's vertices fit them. Index
+// values are run-relative (DrawIndexed uses base vertex 0), so the check on the
+// vertex count is exact. The index byte size is padded to 4 because
+// writeBuffer requires a 4-byte multiple; the pad is never read because the
+// draw uses the index count.
+Batch_Upload_Layout :: struct {
+	vertex_bytes: u64,
+	index_bytes:  u64,
+	index_format: wg.IndexFormat,
+}
+
+BATCH_U16_VERTICES_MAX :: 65536
+
 @(private)
-_geometry_upload_indexed :: proc(
+_batch_upload_layout :: proc "contextless" (vertex_count, index_count: int) -> Batch_Upload_Layout {
+	layout := Batch_Upload_Layout {
+		vertex_bytes = u64(vertex_count) * size_of(Gpu_Vertex),
+		index_format = .Uint32,
+	}
+	index_size := u64(size_of(u32))
+	if vertex_count <= BATCH_U16_VERTICES_MAX {
+		layout.index_format = .Uint16
+		index_size = size_of(u16)
+	}
+	layout.index_bytes = (u64(index_count) * index_size + 3) &~ u64(3)
+	return layout
+}
+
+// _batch_pack writes verts and indices into destination buffers in the GPU
+// layout. Both destinations must be exactly the sizes from layout.
+@(private)
+_batch_pack :: proc(
+	layout: Batch_Upload_Layout,
+	verts: []Vertex,
+	indices: []u32,
+	vertex_out: []byte,
+	index_out: []byte,
+) {
+	assert(u64(len(vertex_out)) == layout.vertex_bytes, "_batch_pack: vertex size")
+	assert(u64(len(index_out)) == layout.index_bytes, "_batch_pack: index size")
+	gpu_verts := ([^]Gpu_Vertex)(raw_data(vertex_out))[:len(verts)]
+	for v, i in verts do gpu_verts[i] = _pack_vertex(v)
+	if layout.index_format == .Uint16 {
+		gpu_indices := ([^]u16)(raw_data(index_out))[:len(indices)]
+		for index, i in indices {
+			assert(index < BATCH_U16_VERTICES_MAX, "_batch_pack: index exceeds u16 range")
+			gpu_indices[i] = u16(index)
+		}
+		if len(indices) % 2 == 1 {
+			([^]u16)(raw_data(index_out))[len(indices)] = 0
+		}
+	} else {
+		mem.copy(raw_data(index_out), raw_data(indices), len(indices) * size_of(u32))
+	}
+}
+
+@(private)
+_geometry_upload_batch :: proc(
 	ctx: ^Context,
 	r: ^Renderer,
-	vertex_data: rawptr,
-	vertex_bytes: u64,
-	index_data: rawptr,
-	index_bytes: u64,
+	layout: Batch_Upload_Layout,
+	verts: []Vertex,
+	indices: []u32,
 ) -> (
 	wg.Buffer,
 	u64,
@@ -1135,9 +1231,11 @@ _geometry_upload_indexed :: proc(
 ) {
 	assert(ctx != nil)
 	assert(r == &ctx.rend)
-	assert(vertex_data != nil)
+	assert(len(verts) > 0)
+	assert(len(indices) > 0)
+	vertex_bytes := layout.vertex_bytes
+	index_bytes := layout.index_bytes
 	assert(vertex_bytes > 0)
-	assert(index_data != nil)
 	assert(index_bytes > 0)
 	if r.active_stream_slot < 0 do return nil, 0, 0, false
 	assert(r.active_stream_slot < len(r.stream_slots))
@@ -1160,8 +1258,13 @@ _geometry_upload_indexed :: proc(
 		_stats_reservation_failure(ctx, false)
 		return nil, 0, 0, false
 	}
-	mem.copy(raw_data(slot.geometry_shadow[vertex_offset:]), vertex_data, int(vertex_bytes))
-	mem.copy(raw_data(slot.geometry_shadow[index_offset:]), index_data, int(index_bytes))
+	_batch_pack(
+		layout,
+		verts,
+		indices,
+		slot.geometry_shadow[vertex_offset:vertex_offset + vertex_bytes],
+		slot.geometry_shadow[index_offset:index_offset + index_bytes],
+	)
 	_stream_record_peak(r, slot.geometry_write, r.peak_uniform_bytes)
 	_stats_stream_copy(ctx, platform_now() - copy_started)
 	when RENDER_STATS_ENABLED {

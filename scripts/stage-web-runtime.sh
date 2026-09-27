@@ -231,6 +231,177 @@ for label, sentinel, count in EXPECTED:
     if result.count(sentinel) != count:
         raise SystemExit("invalid WebGPU failure-path transform: %s" % label)
 PY
+# Crash telemetry in the vendored WebGPU glue. An iPhone capture showed every
+# in-page metric flat while the tab was still killed, so the growth is in the
+# browser's GPU process. These hooks expose what the page can see of it to the
+# heartbeat in ingot_web.js: live objects per manager (a missing *Release shows
+# up as one type climbing) and bytes handed to writeBuffer/writeTexture. They
+# count only; no allocation per call. This file is regenerated from the Odin
+# vendor copy on every stage, so hand edits to web/wgpu.js do not survive.
+python3 - "$DEST/wgpu.js" <<'PY'
+import sys
+path = sys.argv[1]
+source = open(path).read()
+
+CTOR_OLD = "\t\tthis.zeroMessageAddr = 0;\n\t}\n\n\tstruct(start) {"
+CTOR_NEW = (
+    "\t\tthis.zeroMessageAddr = 0;\n"
+    "\n"
+    "\t\tthis.uploadBytes = 0; // ingot: telemetry\n"
+    "\t}\n"
+    "\n"
+    "\t// ingot: live object counts per manager, for crash telemetry.\n"
+    "\tliveObjectCounts() {\n"
+    "\t\tconst byName = {};\n"
+    "\t\tlet total = 0;\n"
+    "\t\tfor (const key of Object.keys(this)) {\n"
+    "\t\t\tconst manager = this[key];\n"
+    "\t\t\tif (!(manager instanceof WebGPUObjectManager)) continue;\n"
+    "\t\t\tconst count = manager.live();\n"
+    "\t\t\tbyName[manager.name] = count;\n"
+    "\t\t\ttotal += count;\n"
+    "\t\t}\n"
+    "\t\treturn { total, byName };\n"
+    "\t}\n"
+    "\n"
+    "\t// ingot: returns and resets the upload byte counter.\n"
+    "\ttakeUploadBytes() {\n"
+    "\t\tconst bytes = this.uploadBytes;\n"
+    "\t\tthis.uploadBytes = 0;\n"
+    "\t\treturn bytes;\n"
+    "\t}\n"
+    "\n"
+    "\tstruct(start) {"
+)
+WB_OLD = "\t\t\t\tsize = this.unwrapBigInt(size);\n\t\t\t\tqueue.writeBuffer("
+WB_NEW = (
+    "\t\t\t\tsize = this.unwrapBigInt(size);\n"
+    "\t\t\t\tthis.uploadBytes += Number(size); // ingot: upload telemetry\n"
+    "\t\t\t\tqueue.writeBuffer("
+)
+WT_OLD = (
+    "\t\t\t\tdataSize = this.unwrapBigInt(dataSize);\n"
+    "\t\t\t\tconst dataLayout = this.TexelCopyBufferLayout(dataLayoutPtr);"
+)
+WT_NEW = (
+    "\t\t\t\tdataSize = this.unwrapBigInt(dataSize);\n"
+    "\t\t\t\tthis.uploadBytes += Number(dataSize); // ingot: upload telemetry\n"
+    "\t\t\t\tconst dataLayout = this.TexelCopyBufferLayout(dataLayoutPtr);"
+)
+LIVE_OLD = "\t\tthis.objects[idx-1].references += 1;\n\t}\n"
+LIVE_NEW = (
+    "\t\tthis.objects[idx-1].references += 1;\n"
+    "\t}\n"
+    "\n"
+    "\t// ingot: number of objects still held (not yet fully released).\n"
+    "\tlive() {\n"
+    "\t\tlet count = 0;\n"
+    "\t\tfor (const _ in this.objects) count += 1;\n"
+    "\t\treturn count;\n"
+    "\t}\n"
+)
+
+# (label, already-applied sentinel, old text, new text).
+TRANSFORMS = (
+    ("interface counters", "// ingot: live object counts per manager", CTOR_OLD, CTOR_NEW),
+    ("writeBuffer bytes", "this.uploadBytes += Number(size); // ingot: upload telemetry", WB_OLD, WB_NEW),
+    ("writeTexture bytes", "this.uploadBytes += Number(dataSize); // ingot: upload telemetry", WT_OLD, WT_NEW),
+    ("manager live count", "// ingot: number of objects still held", LIVE_OLD, LIVE_NEW),
+)
+
+changed = False
+for label, sentinel, old, new in TRANSFORMS:
+    if sentinel in source:
+        continue
+    if source.count(old) != 1:
+        raise SystemExit("unexpected Odin WebGPU %s implementation" % label)
+    source = source.replace(old, new, 1)
+    changed = True
+if changed:
+    open(path, "w").write(source)
+
+result = open(path).read()
+for label, sentinel, _old, _new in TRANSFORMS:
+    if result.count(sentinel) != 1:
+        raise SystemExit("invalid WebGPU telemetry transform: %s" % label)
+PY
+# Upload staging. Upstream hands writeBuffer/writeTexture a Uint8Array view into
+# the whole wasm memory ArrayBuffer. On iOS the tab is killed after tens of MB
+# of such uploads while every in-page metric stays flat, so WebKit's GPU-process
+# IPC is suspected of copying or retaining far more than the viewed range.
+# stagedBytes copies each upload into one pooled, dedicated buffer instead; it is
+# safe to reuse because both calls copy synchronously. `?ingot_upload=view` in
+# ingot_web.js sets uploadMode = "view" to restore the upstream path for A/B.
+# Must run after the telemetry block above, whose text it anchors on.
+python3 - "$DEST/wgpu.js" <<'PY'
+import sys
+path = sys.argv[1]
+source = open(path).read()
+
+CTOR_OLD = "\t\tthis.uploadBytes = 0; // ingot: telemetry\n"
+CTOR_NEW = (
+    "\t\tthis.uploadBytes = 0; // ingot: telemetry\n"
+    "\t\tthis.uploadMode = \"pooled\"; // ingot: upload staging\n"
+    "\t\tthis.uploadStaging = null;\n"
+)
+METHOD_OLD = (
+    "\ttakeUploadBytes() {\n"
+    "\t\tconst bytes = this.uploadBytes;\n"
+    "\t\tthis.uploadBytes = 0;\n"
+    "\t\treturn bytes;\n"
+    "\t}\n"
+)
+METHOD_NEW = METHOD_OLD + (
+    "\n"
+    "\t// ingot: copies an upload out of wasm memory into a pooled buffer.\n"
+    "\tstagedBytes(ptr, size) {\n"
+    "\t\tconst STAGING_MIN = 64 * 1024;\n"
+    "\t\tconst STAGING_MAX = 16 * 1024 * 1024;\n"
+    "\t\tsize = Number(size);\n"
+    "\t\tconst src = this.mem.loadBytes(ptr, size);\n"
+    "\t\tif (this.uploadMode === \"view\" || size === 0) return src;\n"
+    "\t\tif (size > STAGING_MAX) return src.slice();\n"
+    "\t\tif (this.uploadStaging === null || this.uploadStaging.byteLength < size) {\n"
+    "\t\t\tlet cap = Math.max(STAGING_MIN, this.uploadStaging ? this.uploadStaging.byteLength * 2 : 0);\n"
+    "\t\t\twhile (cap < size) cap *= 2;\n"
+    "\t\t\tthis.uploadStaging = new Uint8Array(Math.min(cap, STAGING_MAX));\n"
+    "\t\t}\n"
+    "\t\tconst view = this.uploadStaging.subarray(0, size);\n"
+    "\t\tview.set(src);\n"
+    "\t\treturn view;\n"
+    "\t}\n"
+)
+WB_OLD = "this.mem.loadBytes(dataPtr, size), 0, size);"
+WB_NEW = "this.stagedBytes(dataPtr, size), 0, size);"
+WT_OLD = "queue.writeTexture(destination, this.mem.loadBytes(dataPtr, dataSize), dataLayout, writeSize);"
+WT_NEW = "queue.writeTexture(destination, this.stagedBytes(dataPtr, dataSize), dataLayout, writeSize);"
+
+# (label, already-applied sentinel, old text, new text).
+TRANSFORMS = (
+    ("staging fields", "// ingot: upload staging", CTOR_OLD, CTOR_NEW),
+    ("staging method", "// ingot: copies an upload out of wasm memory", METHOD_OLD, METHOD_NEW),
+    ("writeBuffer staging", "this.stagedBytes(dataPtr, size), 0, size);", WB_OLD, WB_NEW),
+    ("writeTexture staging", "this.stagedBytes(dataPtr, dataSize)", WT_OLD, WT_NEW),
+)
+
+changed = False
+for label, sentinel, old, new in TRANSFORMS:
+    if sentinel in source:
+        continue
+    if source.count(old) != 1:
+        raise SystemExit("unexpected Odin WebGPU %s implementation" % label)
+    source = source.replace(old, new, 1)
+    changed = True
+if changed:
+    open(path, "w").write(source)
+
+result = open(path).read()
+for label, sentinel, _old, _new in TRANSFORMS:
+    if result.count(sentinel) != 1:
+        raise SystemExit("invalid WebGPU upload staging transform: %s" % label)
+if "this.mem.loadBytes(dataPtr, size), 0, size)" in result:
+    raise SystemExit("invalid WebGPU upload staging transform: writeBuffer still uses a view")
+PY
 if [ "$ROOT/web" != "$(cd "$DEST" && pwd)" ]; then
 	cp "$ROOT/web/ingot_web.js" "$DEST/ingot_web.js"
 	cp "$ROOT/web/ingot_input.js" "$DEST/ingot_input.js"

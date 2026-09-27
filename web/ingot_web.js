@@ -260,10 +260,128 @@ let semanticTextInputsNext = [];
 	// they are actually drawn at, rather than at dpr and then minified.
 	let canvasCapScale = 1;
 
+	// On-device bisect switches, read once from the page URL. They exist to
+	// narrow a mobile kill down without a debugger: ?ingot_dpr=1 caps the
+	// backing-store ratio (framebuffer-scaled memory), ?ingot_fps=20 caps the
+	// rAF rate the engine sees (per-frame growth). Invalid values are ignored
+	// and nothing changes without the parameters.
+	const BISECT_DPR_MIN = 0.5;
+	const BISECT_FPS_MIN = 1;
+	const BISECT_FPS_MAX = 120;
+	// Default limits for iOS WebKit, whose GPU process kills the tab under
+	// continuous presenting while every in-page metric stays flat. Fewer and
+	// smaller frames are the only levers the page has. `off` in the URL
+	// switch removes a default so the uncapped path stays reproducible.
+	const IOS_WEBKIT_FPS_DEFAULT = 30;
+	const IOS_WEBKIT_DPR_DEFAULT = 1.5;
+	const BISECT_OFF = -1;
+	const GC_NUDGE_BYTES = 8 * 1024 * 1024;
+	const GC_NUDGE_INTERVAL_MS = 1000;
+
+	function parseBisectSwitches(search) {
+		const switches = { dpr: 0, fps: 0, upload: "pooled", gc: false };
+		if (typeof search !== "string" || typeof URLSearchParams !== "function") return switches;
+		let params;
+		try {
+			params = new URLSearchParams(search);
+		} catch (_) {
+			return switches;
+		}
+		const dprText = params.get("ingot_dpr");
+		if (dprText === "off") switches.dpr = BISECT_OFF;
+		const dpr = dprText === null || dprText === "" ? NaN : Number(dprText);
+		if (Number.isFinite(dpr) && dpr >= BISECT_DPR_MIN && dpr <= CANVAS_DPR_MAX) switches.dpr = dpr;
+		const fpsText = params.get("ingot_fps");
+		if (fpsText === "off") switches.fps = BISECT_OFF;
+		const fps = fpsText === null || fpsText === "" ? NaN : Number(fpsText);
+		if (Number.isFinite(fps) && fps >= BISECT_FPS_MIN && fps <= BISECT_FPS_MAX) switches.fps = fps;
+		if (params.get("ingot_upload") === "view") switches.upload = "view";
+		if (params.get("ingot_gc") === "1") switches.gc = true;
+		return switches;
+	}
+
+	function describeBisectSwitches(switches) {
+		const parts = [];
+		if (switches.dpr !== 0) parts.push("dpr=" + (switches.dpr > 0 ? switches.dpr : "off"));
+		if (switches.fps !== 0) parts.push("fps=" + (switches.fps > 0 ? switches.fps : "off"));
+		if (switches.upload === "view") parts.push("upload=view");
+		if (switches.gc) parts.push("gc=1");
+		return parts.length ? parts.join(" ") : "none";
+	}
+
+	const bisectSwitches = parseBisectSwitches(
+		typeof location !== "undefined" && location ? location.search : "",
+	);
+
+	function isIosWebKit(nav) {
+		if (!nav) return false;
+		const ua = String(nav.userAgent || "");
+		if (/\b(iPhone|iPad|iPod)\b/.test(ua)) return true;
+		return nav.platform === "MacIntel" && Number(nav.maxTouchPoints) > 1;
+	}
+
+	// Final limits: an explicit URL value wins, `off` means none, otherwise
+	// the platform default. 0 means "no limit" for both fields.
+	function resolveFrameLimits(switches, iosWebKit) {
+		const pick = (value, fallback) => (value > 0 ? value : value === BISECT_OFF ? 0 : fallback);
+		return {
+			fps: pick(switches.fps, iosWebKit ? IOS_WEBKIT_FPS_DEFAULT : 0),
+			dpr: pick(switches.dpr, iosWebKit ? IOS_WEBKIT_DPR_DEFAULT : 0),
+			ios: iosWebKit,
+		};
+	}
+
+	function describeFrameLimits(limits) {
+		return `fps=${limits.fps || "none"} dpr=${limits.dpr || "none"}${limits.ios ? " ios" : ""}`;
+	}
+
+	const frameLimits = resolveFrameLimits(
+		bisectSwitches,
+		isIosWebKit(typeof navigator !== "undefined" ? navigator : null),
+	);
+
+	// Throttles every rAF callback to at most `fps` deliveries per second by
+	// re-queueing early ticks. odin.js drives step() through window rAF, so
+	// this is the only seam that caps the engine without patching the
+	// vendored runtime. Returns an uninstall function.
+	function installFrameRateCap(win, fps) {
+		if (!(fps > 0) || !win || typeof win.requestAnimationFrame !== "function") return () => {};
+		const original = win.requestAnimationFrame;
+		const interval = 1000 / fps;
+		let last = -Infinity;
+		const capped = function (callback) {
+			const gate = (timestamp) => {
+				if (timestamp - last < interval - 1) return original.call(win, gate);
+				last = timestamp;
+				return callback(timestamp);
+			};
+			return original.call(win, gate);
+		};
+		win.requestAnimationFrame = capped;
+		return () => {
+			if (win.requestAnimationFrame === capped) win.requestAnimationFrame = original;
+		};
+	}
+
+	// Bisect experiment (?ingot_gc=1): JavaScriptCore schedules a collection
+	// sooner as external ArrayBuffer memory grows. If WebKit only frees the
+	// GPU-process memory behind released WebGPU wrappers on collection, this
+	// makes Stress survive. Returns an uninstall function.
+	function installGcNudge(win, enabled) {
+		if (!enabled || !win || typeof win.setInterval !== "function") return () => {};
+		let sink = null;
+		const id = win.setInterval(() => {
+			sink = new ArrayBuffer(GC_NUDGE_BYTES);
+			sink = null;
+		}, GC_NUDGE_INTERVAL_MS);
+		return () => win.clearInterval(id);
+	}
+
 	function canvasDpr() {
 		const dpr = Number(window.devicePixelRatio);
 		if (!Number.isFinite(dpr) || dpr <= 0) return 1;
-		return Math.min(dpr, CANVAS_DPR_MAX);
+		const cap = frameLimits.dpr > 0 ? Math.min(frameLimits.dpr, CANVAS_DPR_MAX) : CANVAS_DPR_MAX;
+		return Math.min(dpr, cap);
 	}
 
 	// The ratio between the backing store and the CSS box after every cap,
@@ -294,6 +412,19 @@ let semanticTextInputsNext = [];
 			if (!webgpu || typeof webgpu.liveObjectCounts !== "function") return null;
 			return webgpu.liveObjectCounts();
 		};
+		let createdBefore = 0;
+		const createdTotal = () => {
+			if (!webgpu) return null;
+			let total = 0;
+			let managers = 0;
+			for (const key of Object.keys(webgpu)) {
+				const manager = webgpu[key];
+				if (!manager || typeof manager.idx !== "number" || typeof manager.create !== "function") continue;
+				total += manager.idx;
+				managers += 1;
+			}
+			return managers ? total : null;
+		};
 		return [
 			["gpuObjs", safeProbe(() => {
 				const c = counts();
@@ -318,6 +449,13 @@ let semanticTextInputsNext = [];
 				if (!x || typeof x.ingot_web_app_frame_count !== "function") return null;
 				const count = x.ingot_web_app_frame_count();
 				return count < 0 ? null : count;
+			})],
+			["gpuNew", safeProbe(() => {
+				const total = createdTotal();
+				if (total === null) return null;
+				const delta = total - createdBefore;
+				createdBefore = total;
+				return delta;
 			})],
 		];
 	}
@@ -370,6 +508,16 @@ let semanticTextInputsNext = [];
 		);
 		if (!Number.isFinite(limit)) return 0;
 		return Math.floor(limit / CANVAS_DPR_STEP) * CANVAS_DPR_STEP;
+	}
+
+	// Android Chrome flashes a highlight over any tapped element it treats as
+	// interactive; the focusable canvas qualifies, so every button press
+	// flashed the whole app. Applied from here so every embedding page gets it.
+	function suppressTapHighlight(canvas) {
+		if (!canvas || !canvas.style) return;
+		if (typeof canvas.style.setProperty === "function") {
+			canvas.style.setProperty("-webkit-tap-highlight-color", "transparent");
+		}
 	}
 
 	function fitCanvas() {
@@ -1287,6 +1435,7 @@ let semanticTextInputsNext = [];
 		}
 		wasmMemoryInterface = wmi;
 		const webgpu = new window.odin.WebGPUInterface(wmi);
+		if (bisectSwitches.upload === "view" && "uploadMode" in webgpu) webgpu.uploadMode = "view";
 		// Feed the crash recorder the metrics that can explain a kill from
 		// inside the page. The wasm heap alone proved insufficient: a real
 		// capture showed it flat at 43 MiB while the tab died anyway, so the
@@ -1332,6 +1481,15 @@ let semanticTextInputsNext = [];
 				window.ingotCrash.watch(name, probe);
 			}
 		}
+		if (window.ingotCrash && typeof window.ingotCrash.mark === "function") {
+			try {
+				window.ingotCrash.mark("switches " + describeBisectSwitches(bisectSwitches));
+				window.ingotCrash.mark("limits " + describeFrameLimits(frameLimits));
+			} catch (_) {}
+		}
+		const uninstallFrameRateCap = installFrameRateCap(window, frameLimits.fps);
+		const uninstallGcNudge = installGcNudge(window, bisectSwitches.gc);
+		suppressTapHighlight(document.getElementById(CANVAS_ID));
 		const listeners = [];
 		const listen = (target, type, handler) => {
 			target.addEventListener(type, handler);
@@ -1431,6 +1589,8 @@ let semanticTextInputsNext = [];
 					safely(() => window.cancelAnimationFrame(resizeFrame));
 				}
 				resizeFrame = 0;
+				safely(uninstallFrameRateCap);
+				safely(uninstallGcNudge);
 				safely(clearDeviceLost);
 				safely(clearSemanticOverlays);
 				if (wasmMemoryInterface === wmi) wasmMemoryInterface = null;
@@ -1482,6 +1642,16 @@ let semanticTextInputsNext = [];
 			attachDrop,
 			box3dWorkerImports,
 			clearDeviceLost,
+			gpuHeartbeatProbes,
+			parseBisectSwitches,
+			describeBisectSwitches,
+			installFrameRateCap,
+			bisectSwitches,
+			isIosWebKit,
+			resolveFrameLimits,
+			describeFrameLimits,
+			installGcNudge,
+			suppressTapHighlight,
 		});
 	}
 })();

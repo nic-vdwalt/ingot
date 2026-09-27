@@ -183,6 +183,7 @@ func blendOperation(_ value: Int) -> MTLBlendOperation {
 }
 func vertexFormat(_ value: Int) -> MTLVertexFormat {
     switch value {
+    case 0x09: return .uchar4Normalized
     case 0x1D: return .float2
     case 0x1F: return .float4
     case 0x20: return .uint

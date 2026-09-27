@@ -713,14 +713,9 @@ _shader_pipeline :: proc(
 	}
 	if e.pipe_n >= len(e.pipe_obj) do return nil
 
-	attrs := [4]wg.VertexAttribute {
-		{format = .Float32x2, offset = 0, shaderLocation = 0},
-		{format = .Float32x4, offset = u64(offset_of(Vertex, col)), shaderLocation = 1},
-		{format = .Float32x2, offset = u64(offset_of(Vertex, uv)), shaderLocation = 2},
-		{format = .Uint32, offset = u64(offset_of(Vertex, mode)), shaderLocation = 3},
-	}
+	attrs := _gpu_vertex_attributes()
 	vbl := wg.VertexBufferLayout {
-		arrayStride    = size_of(Vertex),
+		arrayStride    = size_of(Gpu_Vertex),
 		stepMode       = .Vertex,
 		attributeCount = 4,
 		attributes     = raw_data(attrs[:]),
@@ -816,6 +811,7 @@ _shader_flush :: proc(
 	vertex_offset: u64,
 	ibuf: wg.Buffer,
 	index_offset: u64,
+	index_format: wg.IndexFormat,
 	index_count: u32,
 ) -> bool {
 	assert(ctx != nil, "_shader_flush: nil context")
@@ -846,7 +842,7 @@ _shader_flush :: proc(
 		_stats_bind_group_switches(ctx, 1)
 	}
 	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vbuf, vertex_offset, wg.WHOLE_SIZE)
-	wg.RenderPassEncoderSetIndexBuffer(pass, ibuf, .Uint32, index_offset, wg.WHOLE_SIZE)
+	wg.RenderPassEncoderSetIndexBuffer(pass, ibuf, index_format, index_offset, wg.WHOLE_SIZE)
 	wg.RenderPassEncoderDrawIndexed(pass, index_count, 1, 0, 0, 0)
 	when GPU_TIMING_DIAGNOSTICS {
 		_gpu_timing_diagnostic_draw(&ctx.gpu_timing.diagnostics[0], pass)

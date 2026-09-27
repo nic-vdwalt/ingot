@@ -29,7 +29,7 @@ class ClearReplayTests(unittest.TestCase):
 class GeometryReplayTests(unittest.TestCase):
     def setUp(self):
         self.vertex = dict(position_bits=[0x80000000, 1],
-                           color_bits=[0x7fc01234, 0xff800000, 0x3f800000, 0],
+                           color_bits=[0x3f800000, 0xbf800000, 0x3f000000, 0x40000000],
                            uv_bits=[0x3ab60b61, 0x3f800001], mode=1)
         self.payload = dict(version=7, geometry=[dict(vertices=[self.vertex], indices=[0])])
         self.draw = dict(geometry_id=1, projection_known=True, indexed=True,
@@ -47,9 +47,10 @@ class GeometryReplayTests(unittest.TestCase):
 
     def test_exact_little_endian_vertex_layout(self):
         vertices, indices, projection = window_geometry(self.payload, self.draw)
-        self.assertEqual(len(vertices), 36)
+        self.assertEqual(len(vertices), 24)
         self.assertEqual(vertices[:8].hex(), "0000008001000000")
-        self.assertEqual(vertices[8:12].hex(), "3412c07f")
+        self.assertEqual(vertices[8:16].hex(), "610bb63a0100803f")
+        self.assertEqual(vertices[16:20].hex(), "ff0080ff")
         self.assertEqual(vertices[-4:], b"\x01\x00\x00\x00")
         self.assertEqual(indices, bytes(4))
         self.assertEqual(projection.hex(), "01000000020000000300000004000000")

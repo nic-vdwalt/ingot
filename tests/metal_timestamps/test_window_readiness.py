@@ -12,9 +12,9 @@ from window_readiness import selected_window_readiness
 
 def batch_pipeline_set(fmt=27):
     attributes = [dict(format=0x1D, offset=0, shader_location=0),
-                  dict(format=0x1F, offset=8, shader_location=1),
-                  dict(format=0x1D, offset=24, shader_location=2),
-                  dict(format=0x20, offset=32, shader_location=3)]
+                  dict(format=0x09, offset=16, shader_location=1),
+                  dict(format=0x1D, offset=8, shader_location=2),
+                  dict(format=0x20, offset=20, shader_location=3)]
     blends = [(0, 2, 6), (0, 2, 2), (0, 7, 6), (0, 5, 2)]
     pipelines = []
     for kind in range(2):
@@ -22,7 +22,7 @@ def batch_pipeline_set(fmt=27):
             operation, src, dst = blends[style]
             blend = dict(operation=operation, src_factor=src, dst_factor=dst)
             pipelines.append(dict(
-                known=True, format=fmt, vertex_stride=36, step_mode=1,
+                known=True, format=fmt, vertex_stride=24, step_mode=1,
                 attributes=copy.deepcopy(attributes), topology=4, strip_index=0,
                 front_face=1, cull_mode=1, unclipped_depth=False, sample_count=1,
                 sample_mask=0xffffffff, alpha_to_coverage=False, blend_enabled=True,

@@ -39,6 +39,18 @@ def attachment_clear_bytes(record):
     return struct.pack("<4Q", *words), packed_words([record.get("depth_clear_bits")], 1)
 
 
+def packed_unorm8(color_bits):
+    """Pack four f32 colour channels, given as raw bits, into the RGBA8 word
+    the batch uploads (gfx._pack_color: clamp, *255 + 0.5, truncate)."""
+    channels = struct.unpack("<4f", packed_words(color_bits, 4))
+    word = 0
+    for shift, channel in zip((0, 8, 16, 24), channels):
+        if channel != channel:
+            raise ValueError("NaN vertex colour")
+        word |= int(min(max(channel, 0.0), 1.0) * 255 + 0.5) << shift
+    return struct.pack("<I", word)
+
+
 def window_geometry(payload, draw):
     checked_object(payload)
     checked_object(draw)
@@ -68,8 +80,8 @@ def window_geometry(payload, draw):
     for vertex in vertices:
         checked_object(vertex)
         vertex_bytes.extend(packed_words(vertex.get("position_bits"), 2))
-        vertex_bytes.extend(packed_words(vertex.get("color_bits"), 4))
         vertex_bytes.extend(packed_words(vertex.get("uv_bits"), 2))
+        vertex_bytes.extend(packed_unorm8(vertex.get("color_bits")))
         if checked_u32(vertex.get("mode")) not in (0, 1):
             raise ValueError("unsupported vertex mode")
         vertex_bytes.extend(packed_words([vertex["mode"]], 1))
@@ -137,9 +149,10 @@ def atlas_pixels(payload, draw):
 
 # Pinned wgpu enum values (tools/odin-902106f/vendor/wgpu/wgpu.odin) the batch
 # pipeline contract is written against. Any other value is a different pipeline.
+VERTEX_UNORM8X4 = 0x09
 VERTEX_FLOAT32X2 = 0x1D
-VERTEX_FLOAT32X4 = 0x1F
 VERTEX_UINT32 = 0x20
+BATCH_VERTEX_STRIDE = 24
 STEP_MODE_VERTEX = 1
 TOPOLOGY_TRIANGLE_LIST = 4
 FRONT_FACE_CCW = 1
@@ -153,9 +166,9 @@ BATCH_PIPELINE_COUNT = 8
 BLEND_SLOT_COUNT = 4
 BATCH_ATTRIBUTES = (
     (VERTEX_FLOAT32X2, 0, 0),
-    (VERTEX_FLOAT32X4, 8, 1),
-    (VERTEX_FLOAT32X2, 24, 2),
-    (VERTEX_UINT32, 32, 3),
+    (VERTEX_UNORM8X4, 16, 1),
+    (VERTEX_FLOAT32X2, 8, 2),
+    (VERTEX_UINT32, 20, 3),
 )
 BATCH_BLENDS = {
     0: (BLEND_ADD, BLEND_ONE, BLEND_ONE_MINUS_SRC_ALPHA),
@@ -190,7 +203,7 @@ def batch_pipeline(payload, draw, record):
         raise ValueError("selected pipeline descriptor not retained")
     if checked_u32(entry.get("format")) != checked_u32(record.get("format")):
         raise ValueError("retained pipeline targets another format")
-    if type(entry.get("vertex_stride")) is not int or entry["vertex_stride"] != 36:
+    if type(entry.get("vertex_stride")) is not int or entry["vertex_stride"] != BATCH_VERTEX_STRIDE:
         raise ValueError("unexpected vertex stride")
     if checked_u32(entry.get("step_mode")) != STEP_MODE_VERTEX:
         raise ValueError("unexpected vertex step mode")

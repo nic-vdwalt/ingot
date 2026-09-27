@@ -94,7 +94,7 @@ verified before claiming an exact binary-source match.
 
 ## Selected window evidence readiness
 
-`replay_inputs.py` reconstructs little-endian 36-byte vertices, u32 indices and
+`replay_inputs.py` reconstructs little-endian 24-byte vertices (RGBA8 colour), u32 indices and
 16-byte projection uniforms without parsing float text. Geometry supports schemas
 6–9; atlas reconstruction supports 7–9; pipeline descriptors require schema 9. Atlas uploads apply in recorded order to a
 zero 2048-square R8 base, using only the draw's submitted upload prefix. Later
