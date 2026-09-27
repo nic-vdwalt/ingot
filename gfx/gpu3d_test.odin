@@ -770,8 +770,16 @@ test_gpu_3d_uniforms_layout_locked :: proc(t: ^testing.T) {
 	// through the WGSL views, so their sizes are load-bearing contracts.
 	testing.expect(t, size_of(Gpu_3D_Uniforms) >= 784, "uniforms smaller than extended WGSL view")
 	testing.expect_value(t, size_of(Gpu_3D_Uniforms) % 16, 0)
-	testing.expect_value(t, offset_of(Gpu_3D_Uniforms, atmosphere_0), offset_of(Gpu_3D_Uniforms, custom_params_31) + 16)
-	testing.expect_value(t, offset_of(Gpu_3D_Uniforms, atmosphere_2), offset_of(Gpu_3D_Uniforms, atmosphere_0) + 32)
+	testing.expect_value(
+		t,
+		offset_of(Gpu_3D_Uniforms, atmosphere_0),
+		offset_of(Gpu_3D_Uniforms, custom_params_31) + 16,
+	)
+	testing.expect_value(
+		t,
+		offset_of(Gpu_3D_Uniforms, atmosphere_2),
+		offset_of(Gpu_3D_Uniforms, atmosphere_0) + 32,
+	)
 	testing.expect_value(t, size_of(Gpu_3D_Vertex), 36)
 	testing.expect_value(t, size_of(Matrix), 64)
 	testing.expect_value(
