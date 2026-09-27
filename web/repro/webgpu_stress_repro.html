@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+	<title>WebGPU stress repro (no ingot)</title>
+	<!--
+	Standalone reproduction of the per-frame load the ingot gallery puts on
+	WebGPU while scrolling its Stress section, with no ingot code involved:
+	a large per-frame queue.writeBuffer from a view into a big ArrayBuffer
+	(the shape of wasm memory), 24-byte vertices with a unorm8x4 colour, a
+	ring of vertex slots, and optionally N invisible position:fixed buttons
+	restyled every frame. If an iPhone tab dies here, the kill is WebKit's.
+
+	URL parameters: kib (KiB uploaded per frame, 400), fps (0 = every rAF),
+	dpr (canvas ratio, min(devicePixelRatio, 2)), slots (3), slotMiB (4),
+	src (big | own), dom (hidden buttons moved per frame, 0), draw (1 | 0).
+	-->
+	<style>
+		html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
+			background: #111; color: #ddd; font: 13px ui-monospace, monospace; }
+		canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+			touch-action: none; -webkit-tap-highlight-color: transparent; }
+		#hud { position: fixed; left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top));
+			z-index: 5; background: rgba(0, 0, 0, 0.7); padding: 8px 10px; border-radius: 6px;
+			white-space: pre-wrap; word-break: break-word; pointer-events: none; }
+		#prev { color: #ff8080; }
+		#start { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6;
+			font: 20px sans-serif; padding: 18px 36px; border-radius: 10px; border: 0;
+			background: #3c64b4; color: #fff; }
+		.ghost { position: fixed; opacity: 0; pointer-events: none; box-sizing: border-box; }
+	</style>
+</head>
+<body>
+	<canvas id="c"></canvas>
+	<div id="hud"><span id="prev"></span><span id="stat">idle - tap Start</span></div>
+	<button id="start" type="button">Start</button>
+	<script>
+	"use strict";
+	(() => {
+		const RECORD_KEY = "webgpu-repro-last";
+		const RECORD_INTERVAL_MS = 500;
+		const HUD_INTERVAL_MS = 250;
+		const VERTEX_BYTES = 24;
+		const BIG_SOURCE_BYTES = 64 * 1024 * 1024;
+		const BIG_SOURCE_OFFSET = 32 * 1024 * 1024;
+		const UNIFORM_BYTES = 256;
+		const QUAD_PX = 8;
+
+		const hudPrev = document.getElementById("prev");
+		const hudStat = document.getElementById("stat");
+		const startButton = document.getElementById("start");
+		const canvas = document.getElementById("c");
+
+		function numberParam(params, name, fallback, lo, hi) {
+			const text = params.get(name);
+			if (text === null || text === "") return fallback;
+			const value = Number(text);
+			if (!Number.isFinite(value)) return fallback;
+			return Math.min(hi, Math.max(lo, value));
+		}
+
+		function readParams() {
+			const params = new URLSearchParams(location.search);
+			const deviceDpr = Number(window.devicePixelRatio) > 0 ? Number(window.devicePixelRatio) : 1;
+			const slotMiB = Math.floor(numberParam(params, "slotMiB", 4, 1, 64));
+			return {
+				kib: Math.floor(numberParam(params, "kib", 400, 1, slotMiB * 1024)),
+				fps: numberParam(params, "fps", 0, 0, 120),
+				dpr: numberParam(params, "dpr", Math.min(deviceDpr, 2), 0.5, 3),
+				slots: Math.floor(numberParam(params, "slots", 3, 1, 8)),
+				slotMiB,
+				src: params.get("src") === "own" ? "own" : "big",
+				dom: Math.floor(numberParam(params, "dom", 0, 0, 1000)),
+				draw: params.get("draw") === "0" ? 0 : 1,
+			};
+		}
+
+		function describeParams(p) {
+			return `kib=${p.kib} fps=${p.fps || "raf"} dpr=${p.dpr} slots=${p.slots} ` +
+				`slotMiB=${p.slotMiB} src=${p.src} dom=${p.dom} draw=${p.draw}`;
+		}
+
+		function loadRecord() {
+			try {
+				const text = localStorage.getItem(RECORD_KEY);
+				return text ? JSON.parse(text) : null;
+			} catch (_) {
+				return null;
+			}
+		}
+
+		function saveRecord(record) {
+			try {
+				localStorage.setItem(RECORD_KEY, JSON.stringify(record));
+			} catch (_) {}
+		}
+
+		const previous = loadRecord();
+		if (previous && previous.alive) {
+			hudPrev.textContent =
+				`Previous run was killed after ${(previous.elapsedMs / 1000).toFixed(1)} s, ` +
+				`${previous.uploadedMiB.toFixed(1)} MiB, ${previous.frames} frames ` +
+				`(${previous.params})\n`;
+		} else if (previous) {
+			hudPrev.textContent =
+				`Previous run ended normally after ${(previous.elapsedMs / 1000).toFixed(1)} s ` +
+				`(${previous.params})\n`;
+			hudPrev.style.color = "#a0d0a0";
+		}
+
+		const params = readParams();
+		hudStat.textContent = `idle - tap Start\n${describeParams(params)}\n${navigator.userAgent}`;
+
+		function fail(message) {
+			hudStat.textContent = `ERROR: ${message}\n${describeParams(params)}`;
+			hudStat.style.color = "#ff8080";
+		}
+
+		const SHADER = `
+struct U { size: vec2f, t: f32, pad: f32 };
+@group(0) @binding(0) var<uniform> u: U;
+struct VO {
+	@builtin(position) pos: vec4f,
+	@location(0) col: vec4f,
+	@location(1) uv: vec2f,
+};
+@vertex fn vs(@location(0) p: vec2f, @location(1) uv: vec2f,
+	@location(2) col: vec4f, @location(3) mode: u32) -> VO {
+	var o: VO;
+	let ndc = vec2f(p.x / u.size.x * 2.0 - 1.0, 1.0 - p.y / u.size.y * 2.0);
+	o.pos = vec4f(ndc, 0.0, 1.0);
+	o.col = col * select(1.0, 0.9, mode == 1u);
+	o.uv = uv;
+	return o;
+}
+@fragment fn fs(i: VO) -> @location(0) vec4f {
+	return vec4f(i.col.rgb * (0.75 + 0.25 * i.uv.x), i.col.a);
+}`;
+
+		function fitCanvas() {
+			const cssW = Math.max(1, Math.floor(canvas.clientWidth));
+			const cssH = Math.max(1, Math.floor(canvas.clientHeight));
+			const w = Math.max(1, Math.round(cssW * params.dpr));
+			const h = Math.max(1, Math.round(cssH * params.dpr));
+			if (canvas.width !== w) canvas.width = w;
+			if (canvas.height !== h) canvas.height = h;
+		}
+
+		function makeGhosts(count) {
+			const ghosts = [];
+			for (let i = 0; i < count; i += 1) {
+				const el = document.createElement("button");
+				el.type = "button";
+				el.tabIndex = -1;
+				el.className = "ghost";
+				el.textContent = `btn ${i}`;
+				el.setAttribute("aria-label", `btn ${i}`);
+				document.body.appendChild(el);
+				ghosts.push(el);
+			}
+			return ghosts;
+		}
+
+		// The same five style writes per element the ingot semantic mirror
+		// performs, then a layout read, every frame.
+		function moveGhosts(ghosts, t) {
+			if (!ghosts.length) return;
+			const rect = canvas.getBoundingClientRect();
+			const cols = 3;
+			const cellW = rect.width / cols;
+			const scroll = (t * 0.12) % (rect.height + 200);
+			for (let i = 0; i < ghosts.length; i += 1) {
+				const el = ghosts[i];
+				const left = rect.left + (i % cols) * cellW;
+				const top = rect.top + Math.floor(i / cols) * 32 - scroll;
+				el.style.position = "fixed";
+				el.style.left = `${left}px`;
+				el.style.top = `${top}px`;
+				el.style.width = `${cellW - 6}px`;
+				el.style.height = "26px";
+			}
+		}
+
+		async function start() {
+			startButton.remove();
+			if (!navigator.gpu) {
+				fail("navigator.gpu is not available");
+				return;
+			}
+			let adapter;
+			try {
+				adapter = await navigator.gpu.requestAdapter();
+			} catch (error) {
+				fail(`requestAdapter threw: ${error && error.message || error}`);
+				return;
+			}
+			if (!adapter) {
+				fail("requestAdapter returned null");
+				return;
+			}
+			const device = await adapter.requestDevice();
+			let lost = false;
+			device.lost.then((info) => {
+				lost = true;
+				fail(`device lost: ${info && info.reason} ${info && info.message}`);
+			});
+			device.addEventListener("uncapturederror", (event) => {
+				fail(`uncaptured: ${event.error && event.error.message}`);
+			});
+
+			const format = navigator.gpu.getPreferredCanvasFormat();
+			const context = canvas.getContext("webgpu");
+			fitCanvas();
+			context.configure({ device, format, alphaMode: "opaque" });
+			window.addEventListener("resize", fitCanvas);
+
+			const slotBytes = params.slotMiB * 1024 * 1024;
+			const vertexCount = Math.floor((params.kib * 1024) / VERTEX_BYTES / 6) * 6;
+			const uploadBytes = vertexCount * VERTEX_BYTES;
+			if (vertexCount === 0 || uploadBytes > slotBytes) {
+				fail(`bad upload size ${uploadBytes} for slot ${slotBytes}`);
+				return;
+			}
+
+			const ring = device.createBuffer({
+				size: slotBytes * params.slots,
+				usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+			});
+			const uniforms = device.createBuffer({
+				size: UNIFORM_BYTES,
+				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+			});
+			const module = device.createShaderModule({ code: SHADER });
+			const pipeline = device.createRenderPipeline({
+				layout: "auto",
+				vertex: {
+					module,
+					entryPoint: "vs",
+					buffers: [{
+						arrayStride: VERTEX_BYTES,
+						attributes: [
+							{ shaderLocation: 0, offset: 0, format: "float32x2" },
+							{ shaderLocation: 1, offset: 8, format: "float32x2" },
+							{ shaderLocation: 2, offset: 16, format: "unorm8x4" },
+							{ shaderLocation: 3, offset: 20, format: "uint32" },
+						],
+					}],
+				},
+				fragment: { module, entryPoint: "fs", targets: [{ format }] },
+				primitive: { topology: "triangle-list" },
+			});
+			const bindGroup = device.createBindGroup({
+				layout: pipeline.getBindGroupLayout(0),
+				entries: [{ binding: 0, resource: { buffer: uniforms } }],
+			});
+
+			// `big` mimics wasm memory: every upload is a view into one large
+			// ArrayBuffer. `own` gives the upload its own right-sized buffer.
+			let sourceBuffer;
+			let sourceOffset;
+			if (params.src === "big") {
+				sourceBuffer = new ArrayBuffer(BIG_SOURCE_BYTES);
+				sourceOffset = BIG_SOURCE_OFFSET;
+			} else {
+				sourceBuffer = new ArrayBuffer(uploadBytes);
+				sourceOffset = 0;
+			}
+			const words = new Float32Array(sourceBuffer, sourceOffset, uploadBytes / 4);
+			const wordsU32 = new Uint32Array(sourceBuffer, sourceOffset, uploadBytes / 4);
+			const uploadView = new Uint8Array(sourceBuffer, sourceOffset, uploadBytes);
+			const uniformData = new Float32Array(UNIFORM_BYTES / 4);
+			const ghosts = makeGhosts(params.dom);
+
+			function fillVertices(t, width, height) {
+				const quads = vertexCount / 6;
+				const cols = Math.max(1, Math.floor(width / (QUAD_PX + 2)));
+				const shift = (t * 0.05) % (QUAD_PX + 2);
+				const corners = [[0, 0], [1, 0], [0, 1], [1, 0], [1, 1], [0, 1]];
+				for (let q = 0; q < quads; q += 1) {
+					const x = (q % cols) * (QUAD_PX + 2) + shift;
+					const y = (Math.floor(q / cols) * (QUAD_PX + 2) + t * 0.1) % height;
+					const colour = (0xff << 24) | ((q * 7) & 0xff) << 16 | ((q * 13) & 0xff) << 8 | ((q * 29) & 0xff);
+					for (let c = 0; c < 6; c += 1) {
+						const base = (q * 6 + c) * 6;
+						const [cx, cy] = corners[c];
+						words[base] = x + cx * QUAD_PX;
+						words[base + 1] = y + cy * QUAD_PX;
+						words[base + 2] = cx;
+						words[base + 3] = cy;
+						wordsU32[base + 4] = colour >>> 0;
+						wordsU32[base + 5] = c & 1;
+					}
+				}
+			}
+
+			const startedAt = performance.now();
+			let frames = 0;
+			let uploaded = 0;
+			let slot = 0;
+			let lastFrameAt = -Infinity;
+			const frameInterval = params.fps > 0 ? 1000 / params.fps : 0;
+			const describe = describeParams(params);
+
+			const record = (alive) => saveRecord({
+				params: describe,
+				ua: navigator.userAgent,
+				elapsedMs: performance.now() - startedAt,
+				frames,
+				uploadedMiB: uploaded / (1024 * 1024),
+				alive,
+			});
+			record(true);
+			setInterval(() => record(true), RECORD_INTERVAL_MS);
+			window.addEventListener("pagehide", () => record(false));
+			setInterval(() => {
+				if (lost) return;
+				const seconds = (performance.now() - startedAt) / 1000;
+				hudStat.textContent =
+					`running ${seconds.toFixed(1)} s  frames ${frames} (${(frames / Math.max(seconds, 0.001)).toFixed(1)}/s)\n` +
+					`uploaded ${(uploaded / (1024 * 1024)).toFixed(1)} MiB  ` +
+					`${(uploadBytes / 1024).toFixed(1)} KiB/frame  ${vertexCount} verts\n` +
+					`canvas ${canvas.width}x${canvas.height}  ${describe}`;
+			}, HUD_INTERVAL_MS);
+
+			function frame(timestamp) {
+				if (lost) return;
+				requestAnimationFrame(frame);
+				if (frameInterval > 0 && timestamp - lastFrameAt < frameInterval - 1) return;
+				lastFrameAt = timestamp;
+				const cssW = canvas.clientWidth || 1;
+				const cssH = canvas.clientHeight || 1;
+				fillVertices(timestamp, cssW, cssH);
+				device.queue.writeBuffer(ring, slot * slotBytes, uploadView, 0, uploadBytes);
+				uniformData[0] = cssW;
+				uniformData[1] = cssH;
+				uniformData[2] = timestamp / 1000;
+				device.queue.writeBuffer(uniforms, 0, uniformData);
+				uploaded += uploadBytes + UNIFORM_BYTES;
+				moveGhosts(ghosts, timestamp);
+
+				const encoder = device.createCommandEncoder();
+				const pass = encoder.beginRenderPass({
+					colorAttachments: [{
+						view: context.getCurrentTexture().createView(),
+						clearValue: { r: 0.08, g: 0.08, b: 0.1, a: 1 },
+						loadOp: "clear",
+						storeOp: "store",
+					}],
+				});
+				if (params.draw) {
+					pass.setPipeline(pipeline);
+					pass.setBindGroup(0, bindGroup);
+					pass.setVertexBuffer(0, ring, slot * slotBytes, uploadBytes);
+					pass.draw(vertexCount);
+				}
+				pass.end();
+				device.queue.submit([encoder.finish()]);
+				slot = (slot + 1) % params.slots;
+				frames += 1;
+			}
+			requestAnimationFrame(frame);
+		}
+
+		startButton.addEventListener("click", () => {
+			start().catch((error) => fail(error && error.message || String(error)));
+		});
+	})();
+	</script>
+</body>
+</html>

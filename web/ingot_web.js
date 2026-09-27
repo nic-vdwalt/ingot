@@ -39,6 +39,9 @@
 let semanticTextInputs = [];
 const IME_TAP_FOCUS_GRACE_MS = 300;
 let semanticTextInputsNext = [];
+	// Gallery section most recently announced through ingot_web_mark
+	// ("section <name>"); the ?ingot_autoscroll driver only runs on Stress.
+	let currentSection = "";
 	// Shared codecs: per-call `new TextDecoder()` allocations at 1000+ calls
 	// per frame create GC pressure that stalls mobile browsers.
 	const textDecoder = new TextDecoder();
@@ -279,7 +282,7 @@ let semanticTextInputsNext = [];
 	const GC_NUDGE_INTERVAL_MS = 1000;
 
 	function parseBisectSwitches(search) {
-		const switches = { dpr: 0, fps: 0, upload: "pooled", gc: false };
+		const switches = { dpr: 0, fps: 0, upload: "pooled", gc: false, a11y: "on", autoscroll: false };
 		if (typeof search !== "string" || typeof URLSearchParams !== "function") return switches;
 		let params;
 		try {
@@ -297,6 +300,9 @@ let semanticTextInputsNext = [];
 		if (Number.isFinite(fps) && fps >= BISECT_FPS_MIN && fps <= BISECT_FPS_MAX) switches.fps = fps;
 		if (params.get("ingot_upload") === "view") switches.upload = "view";
 		if (params.get("ingot_gc") === "1") switches.gc = true;
+		const a11y = params.get("ingot_a11y");
+		if (a11y === "off" || a11y === "static") switches.a11y = a11y;
+		if (params.get("ingot_autoscroll") === "1") switches.autoscroll = true;
 		return switches;
 	}
 
@@ -306,6 +312,8 @@ let semanticTextInputsNext = [];
 		if (switches.fps !== 0) parts.push("fps=" + (switches.fps > 0 ? switches.fps : "off"));
 		if (switches.upload === "view") parts.push("upload=view");
 		if (switches.gc) parts.push("gc=1");
+		if (switches.a11y === "off" || switches.a11y === "static") parts.push("a11y=" + switches.a11y);
+		if (switches.autoscroll) parts.push("autoscroll=1");
 		return parts.length ? parts.join(" ") : "none";
 	}
 
@@ -340,26 +348,68 @@ let semanticTextInputsNext = [];
 		isIosWebKit(typeof navigator !== "undefined" ? navigator : null),
 	);
 
-	// Throttles every rAF callback to at most `fps` deliveries per second by
-	// re-queueing early ticks. odin.js drives step() through window rAF, so
-	// this is the only seam that caps the engine without patching the
-	// vendored runtime. Returns an uninstall function.
+	// Throttles every rAF callback to at most `fps` deliveries per second.
+	// odin.js drives step() through window rAF, so this is the only seam that
+	// caps the engine without patching the vendored runtime. An early request
+	// waits on a timer rather than re-queueing rAF: the re-queue version made
+	// the crash heartbeat's frame count climb every second on iOS, and it
+	// returned the first rAF id, so cancelAnimationFrame cancelled nothing.
+	// Each capped callback owns at most one live rAF or timer, and capped ids
+	// cancel through the wrapped cancelAnimationFrame. Returns an uninstall
+	// function.
+	const FRAME_CAP_TIMER_SLACK_MS = 4;
+
 	function installFrameRateCap(win, fps) {
-		if (!(fps > 0) || !win || typeof win.requestAnimationFrame !== "function") return () => {};
+		if (!(fps > 0) || !win || typeof win.requestAnimationFrame !== "function" ||
+			typeof win.setTimeout !== "function") return () => {};
 		const original = win.requestAnimationFrame;
+		const originalCancel = win.cancelAnimationFrame;
+		const now = () => (win.performance && typeof win.performance.now === "function")
+			? win.performance.now() : Date.now();
 		const interval = 1000 / fps;
 		let last = -Infinity;
+		let nextId = 1;
+		const pending = new Map();
 		const capped = function (callback) {
-			const gate = (timestamp) => {
-				if (timestamp - last < interval - 1) return original.call(win, gate);
-				last = timestamp;
-				return callback(timestamp);
+			const id = nextId++;
+			const entry = { raf: 0, timer: 0 };
+			pending.set(id, entry);
+			const request = () => {
+				entry.timer = 0;
+				entry.raf = original.call(win, run);
 			};
-			return original.call(win, gate);
+			const wait = (at) => {
+				const early = interval - (at - last);
+				if (early <= 1) return false;
+				entry.timer = win.setTimeout(request, Math.max(0, early - FRAME_CAP_TIMER_SLACK_MS));
+				return true;
+			};
+			function run(timestamp) {
+				entry.raf = 0;
+				if (wait(timestamp)) return;
+				pending.delete(id);
+				last = timestamp;
+				callback(timestamp);
+			}
+			if (!wait(now())) request();
+			return id;
+		};
+		const cappedCancel = function (id) {
+			const entry = pending.get(id);
+			if (!entry) {
+				return typeof originalCancel === "function" ? originalCancel.call(win, id) : undefined;
+			}
+			pending.delete(id);
+			if (entry.timer && typeof win.clearTimeout === "function") win.clearTimeout(entry.timer);
+			if (entry.raf && typeof originalCancel === "function") originalCancel.call(win, entry.raf);
+			return undefined;
 		};
 		win.requestAnimationFrame = capped;
+		win.cancelAnimationFrame = cappedCancel;
 		return () => {
+			for (const id of Array.from(pending.keys())) cappedCancel(id);
 			if (win.requestAnimationFrame === capped) win.requestAnimationFrame = original;
+			if (win.cancelAnimationFrame === cappedCancel) win.cancelAnimationFrame = originalCancel;
 		};
 	}
 
@@ -375,6 +425,43 @@ let semanticTextInputsNext = [];
 			sink = null;
 		}, GC_NUDGE_INTERVAL_MS);
 		return () => win.clearInterval(id);
+	}
+
+	// Bisect driver (?ingot_autoscroll=1): scrolls the gallery pane up and
+	// down at a fixed rate while Stress is shown, so device runs compare
+	// like with like instead of depending on how a finger scrolled. Uses the
+	// same wheel export the browser wheel handler feeds; the pointer is parked
+	// at the canvas centre so the pane under it receives the scroll.
+	const AUTOSCROLL_INTERVAL_MS = 33;
+	const AUTOSCROLL_FLIP_MS = 3000;
+	const AUTOSCROLL_NOTCHES = 1;
+	const AUTOSCROLL_SECTION = "Stress";
+
+	function installAutoScroll(win, getExports, getCanvasBox, enabled) {
+		if (!enabled || !win || typeof win.setInterval !== "function") return () => {};
+		let direction = -1;
+		let flipAt = 0;
+		const id = win.setInterval(() => {
+			if (currentSection !== AUTOSCROLL_SECTION) {
+				flipAt = 0;
+				return;
+			}
+			const x = getExports();
+			const box = getCanvasBox();
+			if (!x || !box || typeof x.ingot_web_wheel !== "function" ||
+				typeof x.ingot_web_mouse_move !== "function") return;
+			const t = Date.now();
+			if (flipAt === 0) flipAt = t + AUTOSCROLL_FLIP_MS;
+			if (t >= flipAt) {
+				direction = -direction;
+				flipAt = t + AUTOSCROLL_FLIP_MS;
+			}
+			x.ingot_web_mouse_move(box.width / 2, box.height / 2);
+			x.ingot_web_wheel(0, direction * AUTOSCROLL_NOTCHES);
+		}, AUTOSCROLL_INTERVAL_MS);
+		return () => {
+			if (typeof win.clearInterval === "function") win.clearInterval(id);
+		};
 	}
 
 	function canvasDpr() {
@@ -598,6 +685,9 @@ let semanticTextInputsNext = [];
 	function semanticBounds(state, element, x, y, width, height) {
 		const rect = canvasRect();
 		if (!rect) return;
+		// Bisect (?ingot_a11y=static): place each mirror element once, never
+		// move it, to separate per-frame restyling from element existence.
+		if (bisectSwitches.a11y === "static" && state.bounds) return;
 		const left = rect.left + x;
 		const top = rect.top + y;
 		// Style writes invalidate layout even when values are unchanged on some
@@ -768,6 +858,9 @@ let semanticTextInputsNext = [];
 			}
 			return 0;
 		}
+		// Bisect (?ingot_a11y=off): no DOM mirror for controls. Text-input
+		// rects above stay, the IME keyboard depends on them.
+		if (bisectSwitches.a11y === "off") return 0;
 		let state = semanticControls.get(key);
 		if (state && state.role !== role) {
 			state.el.remove();
@@ -951,10 +1044,17 @@ let semanticTextInputsNext = [];
 			},
 			ingot_web_input_frame_end: endSemanticFrame,
 			ingot_web_mark: (ptr, len) => {
-				if (!window.ingotCrash || typeof window.ingotCrash.mark !== "function") return;
 				if (!ptr || len <= 0) return;
+				let text;
 				try {
-					window.ingotCrash.mark(wasmText(ptr, len));
+					text = wasmText(ptr, len);
+				} catch (_) {
+					return;
+				}
+				if (text.startsWith("section ")) currentSection = text.slice(8);
+				if (!window.ingotCrash || typeof window.ingotCrash.mark !== "function") return;
+				try {
+					window.ingotCrash.mark(text);
 				} catch (_) {}
 			},
 			ingot_web_input_sync: (formPointer, formLength, fieldPointer, fieldLength,
@@ -1489,6 +1589,15 @@ let semanticTextInputsNext = [];
 		}
 		const uninstallFrameRateCap = installFrameRateCap(window, frameLimits.fps);
 		const uninstallGcNudge = installGcNudge(window, bisectSwitches.gc);
+		const uninstallAutoScroll = installAutoScroll(
+			window,
+			() => wmi.exports,
+			() => {
+				const c = document.getElementById(CANVAS_ID);
+				return c ? canvasContentBox(c) : null;
+			},
+			bisectSwitches.autoscroll,
+		);
 		suppressTapHighlight(document.getElementById(CANVAS_ID));
 		const listeners = [];
 		const listen = (target, type, handler) => {
@@ -1591,6 +1700,8 @@ let semanticTextInputsNext = [];
 				resizeFrame = 0;
 				safely(uninstallFrameRateCap);
 				safely(uninstallGcNudge);
+				safely(uninstallAutoScroll);
+				currentSection = "";
 				safely(clearDeviceLost);
 				safely(clearSemanticOverlays);
 				if (wasmMemoryInterface === wmi) wasmMemoryInterface = null;
@@ -1652,6 +1763,8 @@ let semanticTextInputsNext = [];
 			describeFrameLimits,
 			installGcNudge,
 			suppressTapHighlight,
+			installAutoScroll,
+			setCurrentSection: (name) => { currentSection = String(name); },
 		});
 	}
 })();

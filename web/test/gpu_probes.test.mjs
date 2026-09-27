@@ -114,7 +114,7 @@ test("heartbeat probes report null instead of throwing", () => {
 });
 
 test("bisect switches parse valid values and ignore the rest", () => {
-	const off = { dpr: 0, fps: 0, upload: "pooled", gc: false };
+	const off = { dpr: 0, fps: 0, upload: "pooled", gc: false, a11y: "on", autoscroll: false };
 	assert.deepEqual({ ...hook.parseBisectSwitches("") }, off);
 	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_dpr=1&ingot_fps=20") }, { ...off, dpr: 1, fps: 20 });
 	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_dpr=abc&ingot_fps=") }, off);
@@ -129,10 +129,17 @@ test("bisect switches parse valid values and ignore the rest", () => {
 	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_fps=off&ingot_dpr=off") }, { ...off, fps: -1, dpr: -1 });
 	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_gc=1") }, { ...off, gc: true });
 	assert.equal(hook.describeBisectSwitches({ ...off, fps: -1, gc: true }), "fps=off gc=1");
+	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_a11y=off") }, { ...off, a11y: "off" });
+	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_a11y=static") }, { ...off, a11y: "static" });
+	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_a11y=x") }, off);
+	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_autoscroll=1") }, { ...off, autoscroll: true });
+	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_autoscroll=yes") }, off);
+	assert.equal(hook.describeBisectSwitches({ ...off, a11y: "off", autoscroll: true }), "a11y=off autoscroll=1");
+	assert.equal(hook.describeBisectSwitches({ ...off, a11y: "static" }), "a11y=static");
 });
 
 test("no switches in the test URL leaves the dpr cap untouched", () => {
-	assert.deepEqual({ ...hook.bisectSwitches }, { dpr: 0, fps: 0, upload: "pooled", gc: false });
+	assert.deepEqual({ ...hook.bisectSwitches }, { dpr: 0, fps: 0, upload: "pooled", gc: false, a11y: "on", autoscroll: false });
 	const previous = globalThis.devicePixelRatio;
 	globalThis.devicePixelRatio = 2;
 	try {
@@ -183,26 +190,115 @@ test("GC nudge and tap-highlight helpers are inert without their inputs", () => 
 	hook.suppressTapHighlight(null);
 });
 
-test("frame-rate cap delivers at most fps callbacks per second", () => {
-	const queue = [];
-	const win = { requestAnimationFrame: (cb) => { queue.push(cb); return queue.length; } };
+// A fake window with a millisecond clock, a rAF queue flushed on 60 Hz
+// vsyncs, and timers, so the cap can be driven deterministically.
+function makeFakeFrameWindow() {
+	const state = { now: 0, rafs: new Map(), timers: new Map(), nextRaf: 1, nextTimer: 1, maxOutstanding: 0 };
+	const win = {
+		performance: { now: () => state.now },
+		requestAnimationFrame(cb) {
+			const id = state.nextRaf++;
+			state.rafs.set(id, cb);
+			return id;
+		},
+		cancelAnimationFrame(id) {
+			state.rafs.delete(id);
+		},
+		setTimeout(cb, ms) {
+			const id = state.nextTimer++;
+			state.timers.set(id, { cb, at: state.now + ms });
+			return id;
+		},
+		clearTimeout(id) {
+			state.timers.delete(id);
+		},
+	};
+	const run = (fromMs, toMs) => {
+		let nextVsync = Math.ceil(fromMs / (1000 / 60)) * (1000 / 60);
+		for (let ms = fromMs; ms <= toMs; ms += 0.5) {
+			state.now = ms;
+			for (const [id, timer] of Array.from(state.timers)) {
+				if (timer.at > ms) continue;
+				state.timers.delete(id);
+				timer.cb();
+			}
+			if (ms >= nextVsync) {
+				nextVsync += 1000 / 60;
+				const due = Array.from(state.rafs);
+				state.rafs.clear();
+				for (const [, cb] of due) cb(ms);
+			}
+			state.maxOutstanding = Math.max(state.maxOutstanding, state.rafs.size + state.timers.size);
+		}
+	};
+	return { win, state, run };
+}
+
+test("frame-rate cap delivers at most fps callbacks per second without multiplying requests", () => {
+	const { win, state, run } = makeFakeFrameWindow();
 	const original = win.requestAnimationFrame;
+	const originalCancel = win.cancelAnimationFrame;
 	const uninstall = hook.installFrameRateCap(win, 20);
+	assert.notEqual(win.cancelAnimationFrame, originalCancel, "cancel is wrapped");
 	let delivered = 0;
 	const loop = () => {
 		delivered += 1;
 		win.requestAnimationFrame(loop);
 	};
 	win.requestAnimationFrame(loop);
-	for (let t = 0; t < 1000; t += 1000 / 60) queue.shift()(t);
+	run(0, 1000);
 	assert.ok(delivered >= 19 && delivered <= 21, `delivered ${delivered}`);
+	assert.ok(state.maxOutstanding <= 1, `outstanding ${state.maxOutstanding}`);
+
+	let cancelledRan = false;
+	const id = win.requestAnimationFrame(() => { cancelledRan = true; });
+	win.cancelAnimationFrame(id);
+	run(1000.5, 1200);
+	assert.equal(cancelledRan, false, "cancelAnimationFrame stops a capped callback");
+
 	uninstall();
+	assert.equal(state.rafs.size + state.timers.size, 0, "uninstall leaves nothing pending");
 	assert.equal(win.requestAnimationFrame, original, "uninstall restores rAF");
+	assert.equal(win.cancelAnimationFrame, originalCancel, "uninstall restores cancel");
 });
 
 test("frame-rate cap is a no-op without a valid fps", () => {
-	const win = { requestAnimationFrame: () => 1 };
+	const win = { requestAnimationFrame: () => 1, cancelAnimationFrame: () => {}, setTimeout: () => 1 };
 	const original = win.requestAnimationFrame;
+	const originalCancel = win.cancelAnimationFrame;
 	hook.installFrameRateCap(win, 0)();
 	assert.equal(win.requestAnimationFrame, original);
+	assert.equal(win.cancelAnimationFrame, originalCancel);
+});
+
+test("auto-scroll only drives the wheel while Stress is shown", () => {
+	let tick = null;
+	let cleared = 0;
+	const win = {
+		setInterval: (fn) => { tick = fn; return 11; },
+		clearInterval: (id) => { if (id === 11) cleared += 1; },
+	};
+	const calls = [];
+	const exports = {
+		ingot_web_wheel: (dx, dy) => calls.push(["wheel", dx, dy]),
+		ingot_web_mouse_move: (x, y) => calls.push(["move", x, y]),
+	};
+	assert.equal(typeof hook.installAutoScroll(win, () => exports, () => null, false), "function");
+	assert.equal(tick, null, "disabled installs no interval");
+	try {
+		hook.setCurrentSection("Buttons");
+		const uninstall = hook.installAutoScroll(win, () => exports, () => ({ width: 400, height: 800 }), true);
+		tick();
+		assert.equal(calls.length, 0, "no scrolling off Stress");
+		hook.setCurrentSection("Stress");
+		tick();
+		assert.deepEqual(calls, [["move", 200, 400], ["wheel", 0, -1]]);
+		hook.setCurrentSection("Layout");
+		tick();
+		assert.equal(calls.length, 2, "stops when Stress is left");
+		uninstall();
+		assert.equal(cleared, 1);
+	} finally {
+		hook.setCurrentSection("");
+	}
 });
