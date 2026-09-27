@@ -69,6 +69,21 @@ Surface_Rune_Width :: proc(surface: ^Surface, value: rune, size: i32) -> i32 {
 	return ui.rune_width_frame(u.frame, value, size)
 }
 
+// Surface_Reading_Begin opens a reading region: text measured or drawn until
+// the matching Surface_Reading_End uses the theme's reading face. Wrap both
+// the measurement and the drawing of long-form text in a region.
+Surface_Reading_Begin :: proc(surface: ^Surface) {
+	assert(surface != nil, "Fit.Surface_Reading_Begin: nil surface")
+	u := surface_ui(surface)
+	ui.frame_reading_begin(u.frame)
+}
+
+Surface_Reading_End :: proc(surface: ^Surface) {
+	assert(surface != nil, "Fit.Surface_Reading_End: nil surface")
+	u := surface_ui(surface)
+	ui.frame_reading_end(u.frame)
+}
+
 Surface_Codepoint :: proc(surface: ^Surface, value: rune, x, y, size: i32, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_codepoint_frame(u.frame, value, x, y, size, ui.Color(color))

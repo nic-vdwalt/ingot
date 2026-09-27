@@ -9,6 +9,16 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+### Added
+
+- **Reading font face**: `Theme.reading_font_face` selects the face used
+  inside reading regions opened with `ui.frame_reading_begin` /
+  `ui.frame_reading_end` (`fit.Surface_Reading_Begin` / `_End`). Outside a
+  region, text keeps `Theme.font_face`. The Pixel theme reads in `.Mono`, so
+  long-form text stays legible under pixel chrome. Set it with
+  `Theme_Set_Reading_Font_Face` and read it back as
+  `fit.Theme_Tokens.reading_font_face`.
+
 ## [0.3.2] - 2026-09-27
 
 This is a source-only release; no binaries, installers, or web bundles are attached.

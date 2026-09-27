@@ -131,6 +131,76 @@ font_face_change_defers_backend_reset_to_next_frame :: proc(t: ^testing.T) {
 }
 
 @(test)
+reading_region_selects_reading_face :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	ui_runtime_set_theme(&runtime, theme_pixel())
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+	ui_frame_begin(&frame, &runtime)
+	testing.expect_value(t, frame_font_face(&frame), Font_Face.Pixel)
+	frame_reading_begin(&frame)
+	testing.expect_value(t, frame_font_face(&frame), Font_Face.Mono)
+	frame_reading_begin(&frame)
+	testing.expect_value(t, frame_font_face(&frame), Font_Face.Mono)
+	frame_reading_end(&frame)
+	testing.expect_value(t, frame_font_face(&frame), Font_Face.Mono)
+	frame_reading_end(&frame)
+	testing.expect_value(t, frame_font_face(&frame), Font_Face.Pixel)
+	ui_frame_end(&frame)
+}
+
+@(test)
+reading_region_skips_pixel_quantisation :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	ui_runtime_set_theme(&runtime, theme_pixel())
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+	ui_frame_begin(&frame, &runtime)
+	quantised := pixel_text_size(11, runtime.text.font_dpi)
+	testing.expect_value(t, frame_text_size(&frame, 11), quantised)
+	frame_reading_begin(&frame)
+	testing.expect_value(t, frame_text_size(&frame, 11), i32(11))
+	frame_reading_end(&frame)
+	testing.expect_value(t, frame_text_size(&frame, 11), quantised)
+	ui_frame_end(&frame)
+}
+
+@(test)
+reading_face_change_defers_reset :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	state: Scale_Reset_State
+	runtime.text_backend = {
+		data  = &state,
+		reset = scale_reset_count,
+	}
+	pixel := theme_pixel()
+	ui_runtime_apply_theme(&runtime, pixel)
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+	ui_frame_begin(&frame, &runtime)
+	ui_frame_end(&frame)
+	resets := state.count
+	epoch := runtime.font_epoch
+
+	pixel.reading_font_face = .Pixel
+	ui_frame_begin(&frame, &runtime)
+	ui_runtime_apply_theme(&runtime, pixel)
+	testing.expect_value(t, runtime.font_epoch, epoch + 1)
+	testing.expect_value(t, state.count, resets)
+	ui_frame_end(&frame)
+
+	ui_frame_begin(&frame, &runtime)
+	testing.expect_value(t, state.count, resets + 1)
+	ui_frame_end(&frame)
+}
+
+@(test)
 pixel_surfaces_paint_only_rectangles :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

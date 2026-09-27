@@ -100,6 +100,7 @@ Theme_Tokens :: struct {
 	margin_rule:                 bool,
 	square_corners:              bool,
 	font_face:                   Font_Face,
+	reading_font_face:           Font_Face,
 	surface_style:               Surface_Style,
 	bevel_light:                 Color,
 	bevel_shade:                 Color,
@@ -599,6 +600,12 @@ Theme_Set_Font_Face :: proc(theme: ^Theme, face: Font_Face) {
 	ui.Theme_Set_Font_Face(&theme.inner, to_font_face(face))
 	stored := from_font_face(theme.inner.font_face)
 	assert(stored == face, "Fit.Theme_Set_Font_Face: face not stored")
+}
+Theme_Set_Reading_Font_Face :: proc(theme: ^Theme, face: Font_Face) {
+	assert(theme != nil, "Fit.Theme_Set_Reading_Font_Face: nil theme")
+	ui.Theme_Set_Reading_Font_Face(&theme.inner, to_font_face(face))
+	stored := from_font_face(theme.inner.reading_font_face)
+	assert(stored == face, "Fit.Theme_Set_Reading_Font_Face: face not stored")
 }
 Theme_Set_Surface_Style :: proc(theme: ^Theme, style: Surface_Style) {
 	assert(theme != nil, "Fit.Theme_Set_Surface_Style: nil theme")

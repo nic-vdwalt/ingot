@@ -99,7 +99,12 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	for name in reflect.struct_field_names(Theme_Tokens) {
 		matches := 0
 		switch name {
-		case "substrate", "margin_rule", "square_corners", "font_face", "surface_style":
+		case "substrate",
+		     "margin_rule",
+		     "square_corners",
+		     "font_face",
+		     "reading_font_face",
+		     "surface_style":
 			matches += 1
 		}
 		for names in theme_contract_fields {
@@ -110,7 +115,7 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	testing.expect_value(
 		t,
 		reflect.struct_field_count(Theme_Tokens),
-		len(theme_contract_fields) + 5,
+		len(theme_contract_fields) + 6,
 	)
 }
 
@@ -141,4 +146,15 @@ fit_theme_pixel_selects_pixel_face_and_style :: proc(t: ^testing.T) {
 	Theme_Set_Surface_Style(&dark, .Pixel)
 	testing.expect_value(t, dark.inner.font_face, ui.Font_Face.Pixel)
 	testing.expect_value(t, dark.inner.surface_style, ui.Surface_Style.Pixel)
+}
+
+@(test)
+fit_theme_pixel_reads_in_mono :: proc(t: ^testing.T) {
+	pixel := Theme_Pixel()
+	testing.expect_value(t, theme_tokens(pixel.inner).reading_font_face, Font_Face.Mono)
+	dark := Theme_Dark()
+	testing.expect_value(t, theme_tokens(dark.inner).reading_font_face, Font_Face.Mono)
+	Theme_Set_Reading_Font_Face(&pixel, .Pixel)
+	testing.expect_value(t, pixel.inner.reading_font_face, ui.Font_Face.Pixel)
+	testing.expect_value(t, theme_tokens(pixel.inner).reading_font_face, Font_Face.Pixel)
 }

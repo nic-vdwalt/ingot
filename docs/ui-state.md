@@ -125,8 +125,23 @@ The Pixel theme goes further through two more theme fields.
   measure therefore always agree.
 - `ui_gfx` bakes the pixel atlas at an exact multiple of the grid, samples it
   with nearest filtering, and rounds each glyph origin to a device pixel.
-- A theme that changes face resets the backend font table and bumps
-  `font_epoch`, just as a scale change does.
+- A theme that changes face bumps `font_epoch` at once and resets the backend
+  font table when the next frame begins. The reset is deferred because a theme
+  is usually applied mid-frame, after the open paint list has already recorded
+  Font_Ids that must stay valid until that frame is drawn.
+
+`Theme.reading_font_face` is the face long-form text uses inside a reading
+region. The Pixel theme sets it to `.Mono`, so transcripts and code stay
+legible while the chrome stays pixel.
+- An application opens a region with `frame_reading_begin` and closes it with
+  `frame_reading_end` (`fit.Surface_Reading_Begin` / `_End`). Regions nest up
+  to `READING_DEPTH_MAX`, and `ui_frame_finalize` asserts they are balanced.
+- `frame_font_face` returns the reading face inside a region and the chrome
+  face outside. Pixel quantisation applies only while the pixel face is the
+  active face.
+- Wrap both the measurement and the drawing of the same text in a region, or
+  its cached layout will not match what is painted. Every text cache is keyed
+  by Font_Id, so both faces can be in use within one frame.
 
 `Theme.surface_style = .Pixel` routes `draw_surface` and the fill, border and
 shadow helpers in `material.odin` to `material_pixel.odin`.
