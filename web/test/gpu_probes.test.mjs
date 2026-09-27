@@ -114,7 +114,10 @@ test("heartbeat probes report null instead of throwing", () => {
 });
 
 test("bisect switches parse valid values and ignore the rest", () => {
-	const off = { dpr: 0, fps: 0, upload: "pooled", gc: false, a11y: "on", autoscroll: false };
+	const off = {
+		dpr: 0, fps: 0, upload: "pooled", gc: false, a11y: "on", autoscroll: false,
+		skip: { scissor: false, texwrite: false }, inflight: 0, capture: 0,
+	};
 	assert.deepEqual({ ...hook.parseBisectSwitches("") }, off);
 	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_dpr=1&ingot_fps=20") }, { ...off, dpr: 1, fps: 20 });
 	assert.deepEqual({ ...hook.parseBisectSwitches("?ingot_dpr=abc&ingot_fps=") }, off);
@@ -139,7 +142,10 @@ test("bisect switches parse valid values and ignore the rest", () => {
 });
 
 test("no switches in the test URL leaves the dpr cap untouched", () => {
-	assert.deepEqual({ ...hook.bisectSwitches }, { dpr: 0, fps: 0, upload: "pooled", gc: false, a11y: "on", autoscroll: false });
+	assert.deepEqual({ ...hook.bisectSwitches }, {
+		dpr: 0, fps: 0, upload: "pooled", gc: false, a11y: "on", autoscroll: false,
+		skip: { scissor: false, texwrite: false }, inflight: 0, capture: 0,
+	});
 	const previous = globalThis.devicePixelRatio;
 	globalThis.devicePixelRatio = 2;
 	try {

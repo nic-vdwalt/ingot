@@ -66,7 +66,7 @@
 	// One pathological line (a whole shader source, a base64 blob) must not
 	// consume the storage quota by itself. Sized to fit one full heartbeat
 	// line (every probe) without truncation.
-	const BOX_CRUMB_CHARS_MAX = 320;
+	const BOX_CRUMB_CHARS_MAX = 480;
 	// Writing on every crumb would add a synchronous storage hit to the frame
 	// loop and perturb the very frames being measured. Coalesce to at most
 	// one write per interval; a kill loses at most this much history, which

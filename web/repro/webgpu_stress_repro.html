@@ -12,9 +12,23 @@
 	ring of vertex slots, and optionally N invisible position:fixed buttons
 	restyled every frame. If an iPhone tab dies here, the kill is WebKit's.
 
-	URL parameters: kib (KiB uploaded per frame, 400), fps (0 = every rAF),
-	dpr (canvas ratio, min(devicePixelRatio, 2)), slots (3), slotMiB (4),
-	src (big | own), dom (hidden buttons moved per frame, 0), draw (1 | 0).
+	URL parameters: kib (KiB of vertices uploaded per frame, 400), fps (0 =
+	every rAF), dpr (canvas ratio, min(devicePixelRatio, 2)), slots (3),
+	slotMiB (4), src (big | own), dom (hidden buttons moved per frame, 0),
+	draw (1 | 0).
+
+	ingot call-profile parameters:
+	  indexed (0 | 1)  u16 indices (0,1,2,1,3,2 per quad) and drawIndexed.
+	  layout (ring | ingot)  ring: one vertex ring, static index buffer.
+	                   ingot: per slot one VERTEX|INDEX|COPY_DST buffer holding
+	                   vertices then indices, rewritten by one writeBuffer per
+	                   frame, plus one UNIFORM buffer bound at a dynamic offset.
+	  draws (1..512)   split the quads into N consecutive draws.
+	  scissor (0 | 1)  setScissorRect before each draw (full, band, full...).
+	  atlas (0..4)     2048x2048 r8unorm textures sampled via bind group 1.
+	  texkib (0..)     KiB/s of 64x64 writeTexture sub-rects into atlas 0.
+	  preset=ingot     indexed=1 layout=ingot draws=16 scissor=1 atlas=2;
+	                   explicit parameters override it.
 	-->
 	<style>
 		html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
@@ -42,10 +56,24 @@
 		const RECORD_INTERVAL_MS = 500;
 		const HUD_INTERVAL_MS = 250;
 		const VERTEX_BYTES = 24;
+		const INDEX_BYTES = 2;
+		const INDICES_PER_QUAD = 6;
 		const BIG_SOURCE_BYTES = 64 * 1024 * 1024;
 		const BIG_SOURCE_OFFSET = 32 * 1024 * 1024;
 		const UNIFORM_BYTES = 256;
+		const UNIFORM_STRUCT_BYTES = 16;
 		const QUAD_PX = 8;
+		const DRAWS_MAX = 512;
+		const ATLAS_MAX = 4;
+		const ATLAS_DIM = 2048;
+		const TEX_RECT = 64;
+		const TEX_RECT_BYTES = TEX_RECT * TEX_RECT;
+		const TEX_RECTS_PER_ROW = ATLAS_DIM / TEX_RECT;
+		const TEX_RECTS_PER_FRAME_MAX = 64;
+		const U16_VERTICES_MAX = 65535;
+		const PRESETS = {
+			ingot: { indexed: 1, layout: "ingot", draws: 16, scissor: 1, atlas: 2, texkib: 0 },
+		};
 
 		const hudPrev = document.getElementById("prev");
 		const hudStat = document.getElementById("stat");
@@ -60,10 +88,21 @@
 			return Math.min(hi, Math.max(lo, value));
 		}
 
+		function flagParam(params, name, fallback) {
+			const text = params.get(name);
+			if (text === "1") return 1;
+			if (text === "0") return 0;
+			return fallback;
+		}
+
 		function readParams() {
 			const params = new URLSearchParams(location.search);
+			const presetName = params.get("preset");
+			const preset = Object.prototype.hasOwnProperty.call(PRESETS, presetName) ? PRESETS[presetName] : null;
+			const base = preset || { indexed: 0, layout: "ring", draws: 1, scissor: 0, atlas: 0, texkib: 0 };
 			const deviceDpr = Number(window.devicePixelRatio) > 0 ? Number(window.devicePixelRatio) : 1;
 			const slotMiB = Math.floor(numberParam(params, "slotMiB", 4, 1, 64));
+			const layoutText = params.get("layout");
 			return {
 				kib: Math.floor(numberParam(params, "kib", 400, 1, slotMiB * 1024)),
 				fps: numberParam(params, "fps", 0, 0, 120),
@@ -73,12 +112,21 @@
 				src: params.get("src") === "own" ? "own" : "big",
 				dom: Math.floor(numberParam(params, "dom", 0, 0, 1000)),
 				draw: params.get("draw") === "0" ? 0 : 1,
+				indexed: flagParam(params, "indexed", base.indexed),
+				layout: layoutText === "ingot" || layoutText === "ring" ? layoutText : base.layout,
+				draws: Math.floor(numberParam(params, "draws", base.draws, 1, DRAWS_MAX)),
+				scissor: flagParam(params, "scissor", base.scissor),
+				atlas: Math.floor(numberParam(params, "atlas", base.atlas, 0, ATLAS_MAX)),
+				texkib: Math.floor(numberParam(params, "texkib", base.texkib, 0, 1024 * 1024)),
+				preset: preset ? presetName : "none",
 			};
 		}
 
 		function describeParams(p) {
 			return `kib=${p.kib} fps=${p.fps || "raf"} dpr=${p.dpr} slots=${p.slots} ` +
-				`slotMiB=${p.slotMiB} src=${p.src} dom=${p.dom} draw=${p.draw}`;
+				`slotMiB=${p.slotMiB} src=${p.src} dom=${p.dom} draw=${p.draw} ` +
+				`indexed=${p.indexed} layout=${p.layout} draws=${p.draws} scissor=${p.scissor} ` +
+				`atlas=${p.atlas} texkib=${p.texkib} preset=${p.preset}`;
 		}
 
 		function loadRecord() {
@@ -138,6 +186,14 @@ struct VO {
 	return vec4f(i.col.rgb * (0.75 + 0.25 * i.uv.x), i.col.a);
 }`;
 
+		const SHADER_ATLAS = SHADER + `
+@group(1) @binding(0) var atlasTex: texture_2d<f32>;
+@group(1) @binding(1) var atlasSmp: sampler;
+@fragment fn fsAtlas(i: VO) -> @location(0) vec4f {
+	let s = textureSample(atlasTex, atlasSmp, i.uv).r;
+	return vec4f(i.col.rgb * (0.75 + 0.25 * i.uv.x) + vec3f(s * 0.25), i.col.a * (0.5 + 0.5 * s));
+}`;
+
 		function fitCanvas() {
 			const cssW = Math.max(1, Math.floor(canvas.clientWidth));
 			const cssH = Math.max(1, Math.floor(canvas.clientHeight));
@@ -182,6 +238,20 @@ struct VO {
 			}
 		}
 
+		const align4 = (n) => Math.ceil(n / 4) * 4;
+
+		// Splits `quads` into `draws` consecutive chunks, as ingot's batcher
+		// flushes a run of quads per pipeline/bind/scissor change.
+		function planChunks(quads, draws) {
+			const chunks = [];
+			for (let i = 0; i < draws; i += 1) {
+				const first = Math.floor((i * quads) / draws);
+				const next = Math.floor(((i + 1) * quads) / draws);
+				if (next > first) chunks.push({ first, quads: next - first });
+			}
+			return chunks;
+		}
+
 		async function start() {
 			startButton.remove();
 			if (!navigator.gpu) {
@@ -215,74 +285,230 @@ struct VO {
 			context.configure({ device, format, alphaMode: "opaque" });
 			window.addEventListener("resize", fitCanvas);
 
+			// Geometry sizing. Indexed quads use 4 vertices, non-indexed 6;
+			// `kib` fixes the vertex bytes either way so uploads stay comparable.
+			const ingotLayout = params.layout === "ingot";
+			const indexed = params.indexed === 1;
+			const verticesPerQuad = indexed ? 4 : 6;
 			const slotBytes = params.slotMiB * 1024 * 1024;
-			const vertexCount = Math.floor((params.kib * 1024) / VERTEX_BYTES / 6) * 6;
-			const uploadBytes = vertexCount * VERTEX_BYTES;
-			if (vertexCount === 0 || uploadBytes > slotBytes) {
-				fail(`bad upload size ${uploadBytes} for slot ${slotBytes}`);
+			const quads = Math.floor((params.kib * 1024) / (VERTEX_BYTES * verticesPerQuad));
+			const vertexCount = quads * verticesPerQuad;
+			const vertexBytes = vertexCount * VERTEX_BYTES;
+			const indexCount = indexed ? quads * INDICES_PER_QUAD : 0;
+			const indexBytes = indexCount * INDEX_BYTES;
+			const indexOffset = align4(vertexBytes);
+			const geometryBytes = ingotLayout && indexed ? indexOffset + indexBytes : vertexBytes;
+			const chunks = planChunks(quads, params.draws);
+			const drawCount = chunks.length;
+			const uniformStride = Math.max(UNIFORM_BYTES, device.limits.minUniformBufferOffsetAlignment || 0);
+			const uniformFrameBytes = ingotLayout ? drawCount * uniformStride : UNIFORM_BYTES;
+
+			if (quads === 0 || vertexBytes > slotBytes) {
+				fail(`bad upload size ${vertexBytes} for slot ${slotBytes}`);
+				return;
+			}
+			if (ingotLayout && geometryBytes > slotBytes) {
+				fail(`vertices+indices ${geometryBytes} exceed slot ${slotBytes}`);
+				return;
+			}
+			if (ingotLayout && uniformFrameBytes > slotBytes) {
+				fail(`draws*${uniformStride} = ${uniformFrameBytes} exceeds uniform buffer ${slotBytes}`);
+				return;
+			}
+			if (indexed) {
+				const largest = chunks.reduce((m, c) => Math.max(m, c.quads * verticesPerQuad), 0);
+				if (largest > U16_VERTICES_MAX) {
+					fail(`a draw needs ${largest} vertices, over the u16 limit ${U16_VERTICES_MAX}; raise draws`);
+					return;
+				}
+			}
+			if (params.texkib > 0 && params.atlas === 0) {
+				fail("texkib needs atlas >= 1");
 				return;
 			}
 
-			const ring = device.createBuffer({
-				size: slotBytes * params.slots,
-				usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-			});
-			const uniforms = device.createBuffer({
-				size: UNIFORM_BYTES,
-				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-			});
-			const module = device.createShaderModule({ code: SHADER });
-			const pipeline = device.createRenderPipeline({
-				layout: "auto",
-				vertex: {
-					module,
-					entryPoint: "vs",
-					buffers: [{
-						arrayStride: VERTEX_BYTES,
-						attributes: [
-							{ shaderLocation: 0, offset: 0, format: "float32x2" },
-							{ shaderLocation: 1, offset: 8, format: "float32x2" },
-							{ shaderLocation: 2, offset: 16, format: "unorm8x4" },
-							{ shaderLocation: 3, offset: 20, format: "uint32" },
-						],
-					}],
-				},
-				fragment: { module, entryPoint: "fs", targets: [{ format }] },
-				primitive: { topology: "triangle-list" },
-			});
-			const bindGroup = device.createBindGroup({
-				layout: pipeline.getBindGroupLayout(0),
-				entries: [{ binding: 0, resource: { buffer: uniforms } }],
-			});
-
 			// `big` mimics wasm memory: every upload is a view into one large
 			// ArrayBuffer. `own` gives the upload its own right-sized buffer.
+			const texSourceOffset = align4(geometryBytes);
+			const sourceNeeded = texSourceOffset + (params.texkib > 0 ? TEX_RECT_BYTES : 0);
 			let sourceBuffer;
 			let sourceOffset;
 			if (params.src === "big") {
 				sourceBuffer = new ArrayBuffer(BIG_SOURCE_BYTES);
 				sourceOffset = BIG_SOURCE_OFFSET;
 			} else {
-				sourceBuffer = new ArrayBuffer(uploadBytes);
+				sourceBuffer = new ArrayBuffer(sourceNeeded);
 				sourceOffset = 0;
 			}
-			const words = new Float32Array(sourceBuffer, sourceOffset, uploadBytes / 4);
-			const wordsU32 = new Uint32Array(sourceBuffer, sourceOffset, uploadBytes / 4);
-			const uploadView = new Uint8Array(sourceBuffer, sourceOffset, uploadBytes);
-			const uniformData = new Float32Array(UNIFORM_BYTES / 4);
+			if (sourceOffset + sourceNeeded > sourceBuffer.byteLength) {
+				fail(`upload ${sourceNeeded} does not fit the ${params.src} source buffer`);
+				return;
+			}
+			const words = new Float32Array(sourceBuffer, sourceOffset, vertexBytes / 4);
+			const wordsU32 = new Uint32Array(sourceBuffer, sourceOffset, vertexBytes / 4);
+			const geometryView = new Uint8Array(sourceBuffer, sourceOffset, geometryBytes);
+			const texView = params.texkib > 0
+				? new Uint8Array(sourceBuffer, sourceOffset + texSourceOffset, TEX_RECT_BYTES)
+				: null;
+			if (texView) {
+				for (let i = 0; i < TEX_RECT_BYTES; i += 1) texView[i] = ((i >> 6) ^ i) & 0xff;
+			}
+
+			// Indices use chunk-local numbering because each draw binds its
+			// vertex buffer at the chunk's first vertex, as ingot does.
+			let indexData = null;
+			if (indexed) {
+				indexData = ingotLayout
+					? new Uint16Array(sourceBuffer, sourceOffset + indexOffset, indexCount)
+					: new Uint16Array(indexCount);
+				const pattern = [0, 1, 2, 1, 3, 2];
+				for (const chunk of chunks) {
+					for (let q = 0; q < chunk.quads; q += 1) {
+						const base = (chunk.first + q) * INDICES_PER_QUAD;
+						for (let k = 0; k < INDICES_PER_QUAD; k += 1) indexData[base + k] = q * 4 + pattern[k];
+					}
+				}
+			}
+
+			// Buffers.
+			let ring = null;
+			let ringIndex = null;
+			let uniforms = null;
+			const geometryBuffers = [];
+			const uniformBuffers = [];
+			if (ingotLayout) {
+				const geometryUsage = GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST |
+					(indexed ? GPUBufferUsage.INDEX : 0);
+				for (let s = 0; s < params.slots; s += 1) {
+					geometryBuffers.push(device.createBuffer({ size: slotBytes, usage: geometryUsage }));
+					uniformBuffers.push(device.createBuffer({
+						size: slotBytes,
+						usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					}));
+				}
+			} else {
+				ring = device.createBuffer({
+					size: slotBytes * params.slots,
+					usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+				});
+				uniforms = device.createBuffer({
+					size: UNIFORM_BYTES,
+					usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+				});
+				if (indexed) {
+					ringIndex = device.createBuffer({
+						size: indexBytes,
+						usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+					});
+					device.queue.writeBuffer(ringIndex, 0, indexData.buffer, 0, indexBytes);
+				}
+			}
+
+			// Pipelines and bind groups.
+			const vertexBuffers = [{
+				arrayStride: VERTEX_BYTES,
+				attributes: [
+					{ shaderLocation: 0, offset: 0, format: "float32x2" },
+					{ shaderLocation: 1, offset: 8, format: "float32x2" },
+					{ shaderLocation: 2, offset: 16, format: "unorm8x4" },
+					{ shaderLocation: 3, offset: 20, format: "uint32" },
+				],
+			}];
+			const module = device.createShaderModule({ code: SHADER });
+			const explicit = ingotLayout || params.atlas > 0;
+			let pipeline;
+			let atlasPipeline = null;
+			const uniformGroups = [];
+			const atlasGroups = [];
+			const atlases = [];
+			if (!explicit) {
+				pipeline = device.createRenderPipeline({
+					layout: "auto",
+					vertex: { module, entryPoint: "vs", buffers: vertexBuffers },
+					fragment: { module, entryPoint: "fs", targets: [{ format }] },
+					primitive: { topology: "triangle-list" },
+				});
+				uniformGroups.push(device.createBindGroup({
+					layout: pipeline.getBindGroupLayout(0),
+					entries: [{ binding: 0, resource: { buffer: uniforms } }],
+				}));
+			} else {
+				const group0Layout = device.createBindGroupLayout({
+					entries: [{
+						binding: 0,
+						visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+						buffer: { type: "uniform", hasDynamicOffset: ingotLayout, minBindingSize: UNIFORM_STRUCT_BYTES },
+					}],
+				});
+				pipeline = device.createRenderPipeline({
+					layout: device.createPipelineLayout({ bindGroupLayouts: [group0Layout] }),
+					vertex: { module, entryPoint: "vs", buffers: vertexBuffers },
+					fragment: { module, entryPoint: "fs", targets: [{ format }] },
+					primitive: { topology: "triangle-list" },
+				});
+				if (ingotLayout) {
+					for (const buffer of uniformBuffers) {
+						uniformGroups.push(device.createBindGroup({
+							layout: group0Layout,
+							entries: [{ binding: 0, resource: { buffer, offset: 0, size: UNIFORM_STRUCT_BYTES } }],
+						}));
+					}
+				} else {
+					uniformGroups.push(device.createBindGroup({
+						layout: group0Layout,
+						entries: [{ binding: 0, resource: { buffer: uniforms } }],
+					}));
+				}
+				if (params.atlas > 0) {
+					const group1Layout = device.createBindGroupLayout({
+						entries: [
+							{ binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float" } },
+							{ binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: { type: "filtering" } },
+						],
+					});
+					const atlasModule = device.createShaderModule({ code: SHADER_ATLAS });
+					atlasPipeline = device.createRenderPipeline({
+						layout: device.createPipelineLayout({ bindGroupLayouts: [group0Layout, group1Layout] }),
+						vertex: { module: atlasModule, entryPoint: "vs", buffers: vertexBuffers },
+						fragment: { module: atlasModule, entryPoint: "fsAtlas", targets: [{ format }] },
+						primitive: { topology: "triangle-list" },
+					});
+					const sampler = device.createSampler({ magFilter: "linear", minFilter: "linear" });
+					for (let a = 0; a < params.atlas; a += 1) {
+						const texture = device.createTexture({
+							size: [ATLAS_DIM, ATLAS_DIM, 1],
+							format: "r8unorm",
+							usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+						});
+						atlases.push(texture);
+						atlasGroups.push(device.createBindGroup({
+							layout: group1Layout,
+							entries: [
+								{ binding: 0, resource: texture.createView() },
+								{ binding: 1, resource: sampler },
+							],
+						}));
+					}
+				}
+			}
+
+			const uniformShadow = new ArrayBuffer(ingotLayout ? drawCount * uniformStride : UNIFORM_BYTES);
+			const uniformFloats = new Float32Array(uniformShadow);
+			const uniformBytesView = new Uint8Array(uniformShadow);
 			const ghosts = makeGhosts(params.dom);
+			const corners = indexed
+				? [[0, 0], [1, 0], [0, 1], [1, 1]]
+				: [[0, 0], [1, 0], [0, 1], [1, 0], [1, 1], [0, 1]];
 
 			function fillVertices(t, width, height) {
-				const quads = vertexCount / 6;
 				const cols = Math.max(1, Math.floor(width / (QUAD_PX + 2)));
 				const shift = (t * 0.05) % (QUAD_PX + 2);
-				const corners = [[0, 0], [1, 0], [0, 1], [1, 0], [1, 1], [0, 1]];
 				for (let q = 0; q < quads; q += 1) {
 					const x = (q % cols) * (QUAD_PX + 2) + shift;
 					const y = (Math.floor(q / cols) * (QUAD_PX + 2) + t * 0.1) % height;
 					const colour = (0xff << 24) | ((q * 7) & 0xff) << 16 | ((q * 13) & 0xff) << 8 | ((q * 29) & 0xff);
-					for (let c = 0; c < 6; c += 1) {
-						const base = (q * 6 + c) * 6;
+					for (let c = 0; c < verticesPerQuad; c += 1) {
+						const base = (q * verticesPerQuad + c) * 6;
 						const [cx, cy] = corners[c];
 						words[base] = x + cx * QUAD_PX;
 						words[base + 1] = y + cy * QUAD_PX;
@@ -297,8 +523,14 @@ struct VO {
 			const startedAt = performance.now();
 			let frames = 0;
 			let uploaded = 0;
+			let textureBytes = 0;
+			let textureOwed = 0;
+			let textureRect = 0;
 			let slot = 0;
 			let lastFrameAt = -Infinity;
+			let lastDraws = 0;
+			let lastIndices = 0;
+			let lastWriteBytes = 0;
 			const frameInterval = params.fps > 0 ? 1000 / params.fps : 0;
 			const describe = describeParams(params);
 
@@ -316,46 +548,135 @@ struct VO {
 			setInterval(() => {
 				if (lost) return;
 				const seconds = (performance.now() - startedAt) / 1000;
+				const safeSeconds = Math.max(seconds, 0.001);
 				hudStat.textContent =
-					`running ${seconds.toFixed(1)} s  frames ${frames} (${(frames / Math.max(seconds, 0.001)).toFixed(1)}/s)\n` +
+					`running ${seconds.toFixed(1)} s  frames ${frames} (${(frames / safeSeconds).toFixed(1)}/s)\n` +
 					`uploaded ${(uploaded / (1024 * 1024)).toFixed(1)} MiB  ` +
-					`${(uploadBytes / 1024).toFixed(1)} KiB/frame  ${vertexCount} verts\n` +
+					`${(vertexBytes / 1024).toFixed(1)} KiB verts/frame  ${vertexCount} verts\n` +
+					`draws/frame ${lastDraws}  idx/frame ${lastIndices}  ` +
+					`writeBuffer ${(lastWriteBytes / 1024).toFixed(1)} KiB/frame  ` +
+					`writeTexture ${(textureBytes / 1024 / safeSeconds).toFixed(1)} KiB/s\n` +
 					`canvas ${canvas.width}x${canvas.height}  ${describe}`;
 			}, HUD_INTERVAL_MS);
+
+			function writeTextures(dt) {
+				if (!texView) return 0;
+				textureOwed += (params.texkib * 1024 * dt) / 1000;
+				let written = 0;
+				let rects = 0;
+				while (textureOwed >= TEX_RECT_BYTES && rects < TEX_RECTS_PER_FRAME_MAX) {
+					const cell = textureRect % (TEX_RECTS_PER_ROW * TEX_RECTS_PER_ROW);
+					device.queue.writeTexture(
+						{
+							texture: atlases[0],
+							origin: { x: (cell % TEX_RECTS_PER_ROW) * TEX_RECT, y: Math.floor(cell / TEX_RECTS_PER_ROW) * TEX_RECT },
+						},
+						texView,
+						{ offset: 0, bytesPerRow: TEX_RECT, rowsPerImage: TEX_RECT },
+						{ width: TEX_RECT, height: TEX_RECT },
+					);
+					textureRect += 1;
+					textureOwed -= TEX_RECT_BYTES;
+					written += TEX_RECT_BYTES;
+					rects += 1;
+				}
+				if (rects === TEX_RECTS_PER_FRAME_MAX) textureOwed = Math.min(textureOwed, TEX_RECT_BYTES);
+				return written;
+			}
 
 			function frame(timestamp) {
 				if (lost) return;
 				requestAnimationFrame(frame);
 				if (frameInterval > 0 && timestamp - lastFrameAt < frameInterval - 1) return;
+				const dt = lastFrameAt === -Infinity ? 0 : Math.min(timestamp - lastFrameAt, 1000);
 				lastFrameAt = timestamp;
 				const cssW = canvas.clientWidth || 1;
 				const cssH = canvas.clientHeight || 1;
 				fillVertices(timestamp, cssW, cssH);
-				device.queue.writeBuffer(ring, slot * slotBytes, uploadView, 0, uploadBytes);
-				uniformData[0] = cssW;
-				uniformData[1] = cssH;
-				uniformData[2] = timestamp / 1000;
-				device.queue.writeBuffer(uniforms, 0, uniformData);
-				uploaded += uploadBytes + UNIFORM_BYTES;
+
+				let writeBytes = 0;
+				if (ingotLayout) {
+					device.queue.writeBuffer(geometryBuffers[slot], 0, geometryView, 0, geometryBytes);
+					writeBytes += geometryBytes;
+					const strideFloats = uniformStride / 4;
+					for (let i = 0; i < drawCount; i += 1) {
+						uniformFloats[i * strideFloats] = cssW;
+						uniformFloats[i * strideFloats + 1] = cssH;
+						uniformFloats[i * strideFloats + 2] = timestamp / 1000;
+					}
+					device.queue.writeBuffer(uniformBuffers[slot], 0, uniformBytesView, 0, uniformFrameBytes);
+					writeBytes += uniformFrameBytes;
+				} else {
+					device.queue.writeBuffer(ring, slot * slotBytes, geometryView, 0, vertexBytes);
+					uniformFloats[0] = cssW;
+					uniformFloats[1] = cssH;
+					uniformFloats[2] = timestamp / 1000;
+					device.queue.writeBuffer(uniforms, 0, uniformFloats);
+					writeBytes += vertexBytes + UNIFORM_BYTES;
+				}
+				const texWritten = writeTextures(dt);
+				textureBytes += texWritten;
+				uploaded += writeBytes + texWritten;
+				lastWriteBytes = writeBytes;
 				moveGhosts(ghosts, timestamp);
 
 				const encoder = device.createCommandEncoder();
+				const target = context.getCurrentTexture();
 				const pass = encoder.beginRenderPass({
 					colorAttachments: [{
-						view: context.getCurrentTexture().createView(),
+						view: target.createView(),
 						clearValue: { r: 0.08, g: 0.08, b: 0.1, a: 1 },
 						loadOp: "clear",
 						storeOp: "store",
 					}],
 				});
+				let draws = 0;
+				let indices = 0;
 				if (params.draw) {
-					pass.setPipeline(pipeline);
-					pass.setBindGroup(0, bindGroup);
-					pass.setVertexBuffer(0, ring, slot * slotBytes, uploadBytes);
-					pass.draw(vertexCount);
+					const vertexBuffer = ingotLayout ? geometryBuffers[slot] : ring;
+					const vertexBase = ingotLayout ? 0 : slot * slotBytes;
+					const indexBuffer = ingotLayout ? geometryBuffers[slot] : ringIndex;
+					const indexBase = ingotLayout ? indexOffset : 0;
+					const bandTop = Math.floor(target.height / 4);
+					const bandHeight = Math.max(1, target.height - 2 * bandTop);
+					for (let i = 0; i < drawCount; i += 1) {
+						const chunk = chunks[i];
+						const useAtlas = atlasPipeline !== null;
+						pass.setPipeline(useAtlas ? atlasPipeline : pipeline);
+						if (ingotLayout) pass.setBindGroup(0, uniformGroups[slot], [i * uniformStride]);
+						else pass.setBindGroup(0, uniformGroups[0]);
+						if (useAtlas) pass.setBindGroup(1, atlasGroups[i % atlasGroups.length]);
+						if (params.scissor) {
+							if (i % 2 === 0) pass.setScissorRect(0, 0, target.width, target.height);
+							else pass.setScissorRect(0, bandTop, target.width, bandHeight);
+						}
+						const chunkVertices = chunk.quads * verticesPerQuad;
+						pass.setVertexBuffer(
+							0,
+							vertexBuffer,
+							vertexBase + chunk.first * verticesPerQuad * VERTEX_BYTES,
+							chunkVertices * VERTEX_BYTES,
+						);
+						if (indexed) {
+							const chunkIndices = chunk.quads * INDICES_PER_QUAD;
+							pass.setIndexBuffer(
+								indexBuffer,
+								"uint16",
+								indexBase + chunk.first * INDICES_PER_QUAD * INDEX_BYTES,
+								chunkIndices * INDEX_BYTES,
+							);
+							pass.drawIndexed(chunkIndices);
+							indices += chunkIndices;
+						} else {
+							pass.draw(chunkVertices);
+						}
+						draws += 1;
+					}
 				}
 				pass.end();
 				device.queue.submit([encoder.finish()]);
+				lastDraws = draws;
+				lastIndices = indices;
 				slot = (slot + 1) % params.slots;
 				frames += 1;
 			}

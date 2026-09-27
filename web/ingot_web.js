@@ -280,9 +280,14 @@ let semanticTextInputsNext = [];
 	const BISECT_OFF = -1;
 	const GC_NUDGE_BYTES = 8 * 1024 * 1024;
 	const GC_NUDGE_INTERVAL_MS = 1000;
+	const BISECT_INFLIGHT_MAX = 8;
+	const BISECT_CAPTURE_MAX = 8;
 
 	function parseBisectSwitches(search) {
-		const switches = { dpr: 0, fps: 0, upload: "pooled", gc: false, a11y: "on", autoscroll: false };
+		const switches = {
+			dpr: 0, fps: 0, upload: "pooled", gc: false, a11y: "on", autoscroll: false,
+			skip: { scissor: false, texwrite: false }, inflight: 0, capture: 0,
+		};
 		if (typeof search !== "string" || typeof URLSearchParams !== "function") return switches;
 		let params;
 		try {
@@ -303,6 +308,20 @@ let semanticTextInputsNext = [];
 		const a11y = params.get("ingot_a11y");
 		if (a11y === "off" || a11y === "static") switches.a11y = a11y;
 		if (params.get("ingot_autoscroll") === "1") switches.autoscroll = true;
+		const skip = params.get("ingot_skip");
+		if (skip) {
+			for (const token of skip.split(",")) {
+				const name = token.trim();
+				if (name === "scissor" || name === "texwrite") switches.skip[name] = true;
+			}
+		}
+		const smallInt = (text, max) => {
+			if (text === null || !/^\d+$/.test(text)) return 0;
+			const n = Number(text);
+			return n >= 1 && n <= max ? n : 0;
+		};
+		switches.inflight = smallInt(params.get("ingot_gpu_inflight"), BISECT_INFLIGHT_MAX);
+		switches.capture = smallInt(params.get("ingot_capture"), BISECT_CAPTURE_MAX);
 		return switches;
 	}
 
@@ -314,6 +333,12 @@ let semanticTextInputsNext = [];
 		if (switches.gc) parts.push("gc=1");
 		if (switches.a11y === "off" || switches.a11y === "static") parts.push("a11y=" + switches.a11y);
 		if (switches.autoscroll) parts.push("autoscroll=1");
+		const skipped = switches.skip
+			? ["scissor", "texwrite"].filter((name) => switches.skip[name])
+			: [];
+		if (skipped.length) parts.push("skip=" + skipped.join(","));
+		if (switches.inflight > 0) parts.push("inflight=" + switches.inflight);
+		if (switches.capture > 0) parts.push("capture=" + switches.capture);
 		return parts.length ? parts.join(" ") : "none";
 	}
 
@@ -413,6 +438,63 @@ let semanticTextInputsNext = [];
 		};
 	}
 
+	// Bisect (?ingot_gpu_inflight=N): holds each rAF callback while N or more
+	// submits are still executing on the GPU. odin.js re-requests rAF from
+	// inside step(), so a held callback pauses the app loop until the GPU
+	// catches up instead of letting WebKit queue frames. Installed outermost,
+	// after the frame cap. `onDefer` counts each held frame. Returns an
+	// uninstall function.
+	function installGpuBackpressure(win, limit, getInFlight, onDefer) {
+		if (!(limit > 0) || typeof getInFlight !== "function" || !win ||
+			typeof win.requestAnimationFrame !== "function") return () => {};
+		const previous = win.requestAnimationFrame;
+		const previousCancel = win.cancelAnimationFrame;
+		let nextId = 1;
+		const pending = new Map();
+		const busy = () => {
+			try {
+				return getInFlight() >= limit;
+			} catch (_) {
+				return false;
+			}
+		};
+		const gated = function (callback) {
+			const id = nextId++;
+			const entry = { callback, innerId: 0 };
+			const gate = (timestamp) => {
+				if (!pending.has(id)) return;
+				if (busy()) {
+					if (typeof onDefer === "function") {
+						try { onDefer(); } catch (_) {}
+					}
+					entry.innerId = previous.call(win, gate);
+					return;
+				}
+				pending.delete(id);
+				callback(timestamp);
+			};
+			pending.set(id, entry);
+			entry.innerId = previous.call(win, gate);
+			return id;
+		};
+		const gatedCancel = function (id) {
+			const entry = pending.get(id);
+			if (!entry) {
+				return typeof previousCancel === "function" ? previousCancel.call(win, id) : undefined;
+			}
+			pending.delete(id);
+			if (entry.innerId && typeof previousCancel === "function") previousCancel.call(win, entry.innerId);
+			return undefined;
+		};
+		win.requestAnimationFrame = gated;
+		win.cancelAnimationFrame = gatedCancel;
+		return () => {
+			for (const id of Array.from(pending.keys())) gatedCancel(id);
+			if (win.requestAnimationFrame === gated) win.requestAnimationFrame = previous;
+			if (win.cancelAnimationFrame === gatedCancel) win.cancelAnimationFrame = previousCancel;
+		};
+	}
+
 	// Bisect experiment (?ingot_gc=1): JavaScriptCore schedules a collection
 	// sooner as external ArrayBuffer memory grows. If WebKit only frees the
 	// GPU-process memory behind released WebGPU wrappers on collection, this
@@ -462,6 +544,755 @@ let semanticTextInputsNext = [];
 		return () => {
 			if (typeof win.clearInterval === "function") win.clearInterval(id);
 		};
+	}
+
+	// Per-submit WebGPU call profile for the crash heartbeat. The standalone
+	// repro page survives the same upload volume that kills the gallery, so
+	// the difference must be in which calls the engine makes per frame; this
+	// measures them so the repro can be matched exactly.
+	const GPU_CALL_KEYS = [
+		"sub", "dI", "idx", "d", "sc", "bg", "pl", "vb", "ib", "wB", "wBKiB", "wT", "wTKiB", "cfg", "gct",
+	];
+	const GPU_CALL_WRAPS = [
+		["GPUQueue", "writeBuffer", "wB"],
+		["GPUQueue", "writeTexture", "wT"],
+		["GPUQueue", "submit", "sub"],
+		["GPURenderPassEncoder", "draw", "d"],
+		["GPURenderPassEncoder", "drawIndexed", "dI"],
+		["GPURenderPassEncoder", "setScissorRect", "sc"],
+		["GPURenderPassEncoder", "setBindGroup", "bg"],
+		["GPURenderPassEncoder", "setPipeline", "pl"],
+		["GPURenderPassEncoder", "setVertexBuffer", "vb"],
+		["GPURenderPassEncoder", "setIndexBuffer", "ib"],
+		// Each surface configure reallocates drawables; the acquire count
+		// shows whether frames present more than once per submit.
+		["GPUCanvasContext", "configure", "cfg"],
+		["GPUCanvasContext", "getCurrentTexture", "gct"],
+	];
+
+	function gpuWriteBufferBytes(args) {
+		const data = args[2];
+		if (!data) return 0;
+		const unit = typeof data.BYTES_PER_ELEMENT === "number" ? data.BYTES_PER_ELEMENT : 1;
+		if (typeof args[4] === "number") return args[4] * unit;
+		const length = typeof data.length === "number" ? data.length : data.byteLength;
+		const offset = typeof args[3] === "number" ? args[3] : 0;
+		return Math.max(0, (length - offset) * unit);
+	}
+
+	function wrapPrototypeMethod(win, owner, method, makeWrapper, restores) {
+		const ctor = win && win[owner];
+		const proto = ctor && ctor.prototype;
+		if (!proto || typeof proto[method] !== "function") return false;
+		const original = proto[method];
+		const wrapped = makeWrapper(original);
+		proto[method] = wrapped;
+		restores.push(() => {
+			if (proto[method] === wrapped) proto[method] = original;
+		});
+		return true;
+	}
+
+	function installGpuCallCounters(win) {
+		const counts = {};
+		const reset = () => {
+			for (const key of GPU_CALL_KEYS) counts[key] = 0;
+		};
+		reset();
+		const restores = [];
+		for (const [owner, method, key] of GPU_CALL_WRAPS) {
+			wrapPrototypeMethod(win, owner, method, (original) => function (...args) {
+				try {
+					counts[key] += 1;
+					if (key === "wB") counts.wBKiB += gpuWriteBufferBytes(args) / 1024;
+					else if (key === "wT") counts.wTKiB += (args[1] && args[1].byteLength || 0) / 1024;
+					else if (key === "dI") counts.idx += Number(args[0]) || 0;
+				} catch (_) {}
+				return original.apply(this, args);
+			}, restores);
+		}
+		if (!restores.length) return { probe: () => null, uninstall: () => {} };
+		const probe = () => {
+			const submits = counts.sub;
+			if (submits === 0) {
+				reset();
+				return null;
+			}
+			const parts = [`sub=${submits}`];
+			for (const key of GPU_CALL_KEYS) {
+				if (key === "sub" || counts[key] === 0) continue;
+				const avg = counts[key] / submits;
+				parts.push(`${key}=${key === "idx" || key.endsWith("KiB") ? Math.round(avg) : avg.toFixed(1)}`);
+			}
+			reset();
+			return parts.join(" ");
+		};
+		return {
+			probe,
+			uninstall: () => {
+				for (const restore of restores.splice(0).reverse()) restore();
+			},
+		};
+	}
+
+	// GPU backlog for the crash heartbeat: submits whose work the GPU has not
+	// finished yet, and how long completion takes. A GPU slower than the
+	// frame rate makes WebKit queue frames and drawables no JS counter sees,
+	// which would show here as a steadily climbing in-flight count.
+	function installGpuBacklogProbe(win) {
+		const queueCtor = win && win.GPUQueue;
+		const proto = queueCtor && queueCtor.prototype;
+		const none = { probe: () => null, inFlight: () => 0, noteDeferred: () => {}, uninstall: () => {} };
+		if (!proto || typeof proto.submit !== "function") return none;
+		const perf = win.performance;
+		const now = () => (perf && typeof perf.now === "function") ? perf.now() : Date.now();
+		const pendingStarts = [];
+		let maxInFlight = 0;
+		let latSum = 0;
+		let latMax = 0;
+		let completed = 0;
+		let submitted = 0;
+		let deferred = 0;
+		let installed = true;
+		const original = proto.submit;
+		const wrapped = function (...args) {
+			const result = original.apply(this, args);
+			try {
+				if (installed && typeof this.onSubmittedWorkDone === "function") {
+					const t0 = now();
+					pendingStarts.push(t0);
+					submitted += 1;
+					if (pendingStarts.length > maxInFlight) maxInFlight = pendingStarts.length;
+					const done = () => {
+						if (!installed) return;
+						pendingStarts.shift();
+						const latency = now() - t0;
+						latSum += latency;
+						if (latency > latMax) latMax = latency;
+						completed += 1;
+					};
+					this.onSubmittedWorkDone().then(done, done);
+				}
+			} catch (_) {}
+			return result;
+		};
+		proto.submit = wrapped;
+		const probe = () => {
+			if (submitted === 0 && pendingStarts.length === 0 && deferred === 0) return null;
+			const oldest = pendingStarts.length ? Math.round(now() - pendingStarts[0]) : 0;
+			const avg = completed ? Math.round(latSum / completed) : 0;
+			let text = `inflight=${pendingStarts.length} max=${maxInFlight} oldestMs=${oldest}` +
+				` latMs=${avg}/${Math.round(latMax)} done=${completed}`;
+			if (deferred) text += ` defer=${deferred}`;
+			maxInFlight = pendingStarts.length;
+			latSum = 0;
+			latMax = 0;
+			completed = 0;
+			submitted = 0;
+			deferred = 0;
+			return text;
+		};
+		return {
+			probe,
+			inFlight: () => pendingStarts.length,
+			noteDeferred: () => { deferred += 1; },
+			uninstall: () => {
+				installed = false;
+				pendingStarts.length = 0;
+				if (proto.submit === wrapped) proto.submit = original;
+			},
+		};
+	}
+
+	// Bisect (?ingot_skip=scissor,texwrite): drops scissor rects and/or
+	// texture writes while Stress is shown, to test whether either is what
+	// the bare repro page lacks. Installed after the counters so skipped calls
+	// still count. Returns an uninstall function.
+	const GPU_SKIP_SECTION = "Stress";
+
+	function installGpuSkips(win, skip, getSection) {
+		if (!skip || (!skip.scissor && !skip.texwrite) || typeof getSection !== "function") return () => {};
+		const restores = [];
+		const skipping = () => {
+			try {
+				return getSection() === GPU_SKIP_SECTION;
+			} catch (_) {
+				return false;
+			}
+		};
+		const makeSkip = (original) => function (...args) {
+			if (skipping()) return undefined;
+			return original.apply(this, args);
+		};
+		if (skip.scissor) wrapPrototypeMethod(win, "GPURenderPassEncoder", "setScissorRect", makeSkip, restores);
+		if (skip.texwrite) wrapPrototypeMethod(win, "GPUQueue", "writeTexture", makeSkip, restores);
+		return () => {
+			for (const restore of restores.splice(0).reverse()) restore();
+		};
+	}
+
+	// Desktop capture (?ingot_capture=N): records every WebGPU object the
+	// engine creates and, once Stress has been shown for a moment, N frames
+	// of calls with their upload data. The JSON replays in the standalone
+	// repro page without ingot, wasm or wgpu.js, which separates WebKit's
+	// handling of ingot's real GPU work from the binding layer. Installed
+	// before the wasm starts so no creation is missed; buffer and texture
+	// contents are shadowed from boot so the capture can start from the
+	// state the first captured frame saw.
+	const CAPTURE_SECTION = "Stress";
+	const CAPTURE_SETTLE_MS = 1500;
+	const CAPTURE_BUFFER_MAP_WRITE = 0x0002;
+	const CAPTURE_BUFFER_COPY_DST = 0x0008;
+	const CAPTURE_MAP_MODE_WRITE = 0x0002;
+	const CAPTURE_TEXTURE_COPY_DST = 0x02;
+	const CAPTURE_TEXEL_BYTES = {
+		r8unorm: 1, rgba8unorm: 4, "rgba8unorm-srgb": 4, bgra8unorm: 4, "bgra8unorm-srgb": 4,
+	};
+	const CAPTURE_B64_CHUNK = 0x8000;
+	const CAPTURE_CREATE_KINDS = [
+		["createBuffer", "buffer"],
+		["createTexture", "texture"],
+		["createSampler", "sampler"],
+		["createShaderModule", "shaderModule"],
+		["createBindGroupLayout", "bindGroupLayout"],
+		["createPipelineLayout", "pipelineLayout"],
+		["createRenderPipeline", "renderPipeline"],
+		["createComputePipeline", "computePipeline"],
+		["createBindGroup", "bindGroup"],
+	];
+	const CAPTURE_PASS_METHODS = [
+		"setPipeline", "setBindGroup", "setVertexBuffer", "setIndexBuffer", "draw", "drawIndexed",
+		"drawIndirect", "drawIndexedIndirect", "setScissorRect", "setViewport", "setBlendConstant",
+		"setStencilReference", "pushDebugGroup", "popDebugGroup", "insertDebugMarker",
+		"beginOcclusionQuery", "endOcclusionQuery", "executeBundles", "end",
+	];
+	const CAPTURE_ENCODER_CALLS = ["copyBufferToBuffer", "copyBufferToTexture", "copyTextureToTexture", "clearBuffer"];
+
+	function captureBase64(bytes) {
+		let text = "";
+		for (let i = 0; i < bytes.length; i += CAPTURE_B64_CHUNK) {
+			text += String.fromCharCode.apply(null, bytes.subarray(i, i + CAPTURE_B64_CHUNK));
+		}
+		return btoa(text);
+	}
+
+	function captureBytes(data) {
+		if (!data) return null;
+		if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+		if (data instanceof ArrayBuffer ||
+			(typeof SharedArrayBuffer !== "undefined" && data instanceof SharedArrayBuffer)) {
+			return new Uint8Array(data);
+		}
+		return null;
+	}
+
+	function captureExtent(size) {
+		if (!size) return { width: 1, height: 1, depth: 1 };
+		if (typeof size.width === "number") {
+			return { width: size.width, height: size.height || 1, depth: size.depthOrArrayLayers || 1 };
+		}
+		const list = Array.from(size);
+		return { width: list[0] || 1, height: list[1] || 1, depth: list[2] || 1 };
+	}
+
+	function captureOrigin(origin) {
+		if (!origin) return { x: 0, y: 0, z: 0 };
+		if (typeof origin.x === "number" || typeof origin.y === "number" || typeof origin.z === "number") {
+			return { x: origin.x || 0, y: origin.y || 0, z: origin.z || 0 };
+		}
+		const list = Array.from(origin);
+		return { x: list[0] || 0, y: list[1] || 0, z: list[2] || 0 };
+	}
+
+	function installGpuCapture(win, frames, getSection) {
+		const off = { state: "off", json: () => "", uninstall: () => {} };
+		if (!(frames > 0) || !win || !win.GPUDevice || typeof getSection !== "function") return off;
+		const restores = [];
+		const perf = win.performance;
+		const now = () => (perf && typeof perf.now === "function") ? perf.now() : Date.now();
+		const makeRef = (obj) => typeof win.WeakRef === "function" ? new win.WeakRef(obj) : { deref: () => obj };
+		const ids = new WeakMap();
+		const surfaceObjs = new WeakSet();
+		const records = new Map();
+		const shadows = new WeakMap();
+		let shadowList = [];
+		const mapModes = new WeakMap();
+		const mappedRanges = new WeakMap();
+		const warnings = [];
+		const warned = new Set();
+		const warn = (text) => {
+			if (warned.has(text)) return;
+			warned.add(text);
+			warnings.push(text);
+		};
+		const mark = (text) => {
+			try {
+				if (win.ingotCrash && typeof win.ingotCrash.mark === "function") win.ingotCrash.mark(text);
+			} catch (_) {}
+		};
+		let nextId = 1;
+		let locals = new WeakMap();
+		let nextLocal = 1;
+		let surface = null;
+		let stressSince = 0;
+		let frameOps = null;
+		let initial = null;
+		let cachedJson = "";
+		const capturedFrames = [];
+		const api = {
+			state: "idle",
+			frames,
+			json: () => cachedJson,
+			uninstall: () => {
+				frameOps = null;
+				for (const restore of restores.splice(0).reverse()) restore();
+				if (win.__ingotCapture === api) delete win.__ingotCapture;
+			},
+		};
+
+		const serialize = (value, deps) => {
+			if (value === null || value === undefined) return null;
+			const type = typeof value;
+			if (type === "bigint") return Number(value);
+			if (type === "function" || type === "symbol") return undefined;
+			if (type !== "object") return value;
+			if (surfaceObjs.has(value)) return "surface";
+			const id = ids.get(value);
+			if (id !== undefined) {
+				if (deps) deps.push(id);
+				return { ref: id };
+			}
+			const local = locals.get(value);
+			if (local !== undefined) return { local };
+			if (Array.isArray(value)) {
+				return value.map((item) => {
+					const out = serialize(item, deps);
+					return out === undefined ? null : out;
+				});
+			}
+			if (ArrayBuffer.isView(value)) return { typed: value.constructor.name, values: Array.from(value) };
+			const proto = Object.getPrototypeOf(value);
+			if (proto !== Object.prototype && proto !== null) {
+				const name = (value.constructor && value.constructor.name) || "object";
+				warn("unrecorded object " + name);
+				return { unknown: name };
+			}
+			const out = {};
+			for (const key of Object.keys(value)) {
+				if (value[key] === undefined) continue;
+				const item = serialize(value[key], deps);
+				if (item !== undefined) out[key] = item;
+			}
+			return out;
+		};
+
+		const register = (obj, kind, extra) => {
+			if (!obj || typeof obj !== "object" || ids.has(obj)) return;
+			const id = nextId++;
+			ids.set(obj, id);
+			records.set(id, Object.assign({ id, kind }, extra));
+		};
+
+		const trackBuffer = (buffer, desc) => {
+			const usage = Number(desc.usage) || 0;
+			const mapped = desc.mappedAtCreation === true;
+			if (!(usage & (CAPTURE_BUFFER_COPY_DST | CAPTURE_BUFFER_MAP_WRITE)) && !mapped) return;
+			const id = ids.get(buffer);
+			shadows.set(buffer, { id, kind: "buffer", size: Number(desc.size) || 0, bytes: null, hi: 0 });
+			shadowList.push({ id, ref: makeRef(buffer) });
+			if (mapped) mapModes.set(buffer, CAPTURE_MAP_MODE_WRITE);
+		};
+
+		const trackTexture = (texture, desc) => {
+			const usage = Number(desc.usage) || 0;
+			if (!(usage & CAPTURE_TEXTURE_COPY_DST)) return;
+			const extent = captureExtent(desc.size);
+			const bpp = CAPTURE_TEXEL_BYTES[desc.format];
+			const dimension = desc.dimension || "2d";
+			if (!bpp || dimension !== "2d") {
+				warn(`texture ${desc.format} ${dimension} contents not captured`);
+				return;
+			}
+			if (extent.depth > 1) warn("texture layers beyond 0 not captured");
+			const id = ids.get(texture);
+			shadows.set(texture, {
+				id, kind: "texture", format: desc.format, width: extent.width, height: extent.height, bpp,
+				size: extent.width * extent.height * bpp, bytes: null,
+			});
+			shadowList.push({ id, ref: makeRef(texture) });
+		};
+
+		const shadowBufferWrite = (shadow, offset, src) => {
+			if (!shadow || !src) return;
+			const end = Math.min(shadow.size, offset + src.length);
+			if (end <= offset) return;
+			if (!shadow.bytes) shadow.bytes = new Uint8Array(shadow.size);
+			shadow.bytes.set(src.subarray(0, end - offset), offset);
+			if (end > shadow.hi) shadow.hi = end;
+		};
+
+		const shadowTextureWrite = (shadow, destination, bytes, layout, size) => {
+			if ((Number(destination.mipLevel) || 0) !== 0) return;
+			const origin = captureOrigin(destination.origin);
+			if (origin.z !== 0) return;
+			const extent = captureExtent(size);
+			const width = Math.min(extent.width, shadow.width - origin.x);
+			const height = Math.min(extent.height, shadow.height - origin.y);
+			if (width <= 0 || height <= 0) return;
+			const rowBytes = width * shadow.bpp;
+			const bytesPerRow = layout && layout.bytesPerRow ? Number(layout.bytesPerRow) : extent.width * shadow.bpp;
+			const base = layout && layout.offset ? Number(layout.offset) : 0;
+			if (!shadow.bytes) shadow.bytes = new Uint8Array(shadow.size);
+			for (let row = 0; row < height; row += 1) {
+				const src = base + row * bytesPerRow;
+				if (src + rowBytes > bytes.length) break;
+				const dst = ((origin.y + row) * shadow.width + origin.x) * shadow.bpp;
+				shadow.bytes.set(bytes.subarray(src, src + rowBytes), dst);
+			}
+		};
+
+		const snapshot = () => {
+			const buffers = new Map();
+			const textures = new Map();
+			const alive = [];
+			for (const entry of shadowList) {
+				const obj = entry.ref.deref();
+				if (!obj) continue;
+				alive.push(entry);
+				const shadow = shadows.get(obj);
+				if (!shadow || !shadow.bytes) continue;
+				if (shadow.kind === "buffer") {
+					if (shadow.hi <= 0) continue;
+					const hi = Math.min(shadow.size, (shadow.hi + 3) & ~3);
+					buffers.set(shadow.id, shadow.bytes.slice(0, hi));
+				} else {
+					textures.set(shadow.id, {
+						format: shadow.format, width: shadow.width, height: shadow.height, bpp: shadow.bpp,
+						bytes: shadow.bytes.slice(),
+					});
+				}
+			}
+			shadowList = alive;
+			return { buffers, textures };
+		};
+
+		const buildJson = () => {
+			const roots = new Set();
+			const walk = (value) => {
+				if (!value || typeof value !== "object") return;
+				if (Array.isArray(value)) {
+					for (const item of value) walk(item);
+					return;
+				}
+				if (typeof value.ref === "number") {
+					roots.add(value.ref);
+					return;
+				}
+				for (const key of Object.keys(value)) walk(value[key]);
+			};
+			for (const frame of capturedFrames) walk(frame.ops);
+			const reachable = new Set();
+			const stack = Array.from(roots);
+			while (stack.length) {
+				const id = stack.pop();
+				if (reachable.has(id)) continue;
+				const record = records.get(id);
+				if (!record) {
+					warn("missing object " + id);
+					continue;
+				}
+				reachable.add(id);
+				for (const dep of record.deps || []) stack.push(dep);
+			}
+			const objects = Array.from(reachable).sort((a, b) => a - b).map((id) => {
+				const { deps, ...rest } = records.get(id);
+				return rest;
+			});
+			const buffers = [];
+			const textures = [];
+			if (initial) {
+				for (const [id, bytes] of initial.buffers) {
+					if (reachable.has(id)) buffers.push({ id, b64: captureBase64(bytes) });
+				}
+				for (const [id, tex] of initial.textures) {
+					if (!reachable.has(id)) continue;
+					buffers.length;
+					textures.push({
+						id, format: tex.format, width: tex.width, height: tex.height, bpp: tex.bpp,
+						b64: captureBase64(tex.bytes),
+					});
+				}
+			}
+			return JSON.stringify({
+				version: 1,
+				userAgent: win.navigator ? String(win.navigator.userAgent) : "",
+				section: CAPTURE_SECTION,
+				surface,
+				objects,
+				initial: { buffers, textures },
+				frames: capturedFrames,
+				warnings,
+			});
+		};
+
+		const beginFrame = () => {
+			frameOps = [];
+			locals = new WeakMap();
+			nextLocal = 1;
+		};
+
+		const afterSubmit = () => {
+			if (api.state === "capturing") {
+				capturedFrames.push({ ops: frameOps });
+				if (capturedFrames.length < frames) {
+					beginFrame();
+					return;
+				}
+				frameOps = null;
+				cachedJson = buildJson();
+				api.state = "done";
+				mark(`capture done frames=${capturedFrames.length} bytes=${cachedJson.length}`);
+				return;
+			}
+			if (api.state !== "idle") return;
+			let section = "";
+			try {
+				section = getSection();
+			} catch (_) {}
+			if (section !== CAPTURE_SECTION) {
+				stressSince = 0;
+				return;
+			}
+			const t = now();
+			if (!stressSince) {
+				stressSince = t;
+				return;
+			}
+			if (t - stressSince < CAPTURE_SETTLE_MS) return;
+			initial = snapshot();
+			beginFrame();
+			api.state = "capturing";
+			mark(`capture start frames=${frames}`);
+		};
+
+		const guarded = (label, fn) => {
+			try {
+				fn();
+			} catch (error) {
+				warn(label + ": " + (error && error.message ? error.message : String(error)));
+			}
+		};
+
+		for (const [method, kind] of CAPTURE_CREATE_KINDS) {
+			wrapPrototypeMethod(win, "GPUDevice", method, (original) => function (...args) {
+				const obj = original.apply(this, args);
+				guarded(method, () => {
+					const deps = [];
+					const desc = serialize(args[0], deps) || {};
+					register(obj, kind, { desc, deps });
+					if (kind === "buffer") trackBuffer(obj, args[0] || {});
+					else if (kind === "texture") trackTexture(obj, args[0] || {});
+				});
+				return obj;
+			}, restores);
+		}
+		wrapPrototypeMethod(win, "GPUDevice", "createRenderPipelineAsync", (original) => function (...args) {
+			const deps = [];
+			let desc = {};
+			guarded("createRenderPipelineAsync", () => { desc = serialize(args[0], deps) || {}; });
+			return original.apply(this, args).then((pipeline) => {
+				guarded("createRenderPipelineAsync", () => register(pipeline, "renderPipeline", { desc, deps }));
+				return pipeline;
+			});
+		}, restores);
+		wrapPrototypeMethod(win, "GPUDevice", "createCommandEncoder", (original) => function (...args) {
+			const encoder = original.apply(this, args);
+			if (frameOps) {
+				guarded("createCommandEncoder", () => {
+					const local = nextLocal++;
+					frameOps.push({ op: "encoder", local, desc: serialize(args[0]) });
+					locals.set(encoder, local);
+				});
+			}
+			return encoder;
+		}, restores);
+		wrapPrototypeMethod(win, "GPURenderPipeline", "getBindGroupLayout", (original) => function (...args) {
+			const layout = original.apply(this, args);
+			guarded("getBindGroupLayout", () => {
+				const pipelineId = ids.get(this);
+				if (pipelineId === undefined) {
+					warn("bind group layout of unrecorded pipeline");
+					return;
+				}
+				register(layout, "autoLayout", { pipeline: { ref: pipelineId }, index: Number(args[0]) || 0, deps: [pipelineId] });
+			});
+			return layout;
+		}, restores);
+		wrapPrototypeMethod(win, "GPUTexture", "createView", (original) => function (...args) {
+			const view = original.apply(this, args);
+			guarded("createView", () => {
+				if (surfaceObjs.has(this)) {
+					surfaceObjs.add(view);
+					return;
+				}
+				const deps = [];
+				const textureId = ids.get(this);
+				if (textureId === undefined) warn("view of unrecorded texture");
+				else deps.push(textureId);
+				register(view, "view", {
+					texture: textureId === undefined ? null : { ref: textureId },
+					desc: serialize(args[0], deps) || {},
+					deps,
+				});
+			});
+			return view;
+		}, restores);
+		wrapPrototypeMethod(win, "GPUCanvasContext", "configure", (original) => function (...args) {
+			const result = original.apply(this, args);
+			guarded("configure", () => {
+				const config = args[0] || {};
+				const canvas = this.canvas;
+				surface = {
+					format: config.format,
+					alphaMode: config.alphaMode || "opaque",
+					usage: config.usage,
+					width: canvas ? canvas.width : 0,
+					height: canvas ? canvas.height : 0,
+				};
+			});
+			return result;
+		}, restores);
+		wrapPrototypeMethod(win, "GPUCanvasContext", "getCurrentTexture", (original) => function (...args) {
+			const texture = original.apply(this, args);
+			guarded("getCurrentTexture", () => {
+				surfaceObjs.add(texture);
+				if (!surface) surface = { format: texture.format, alphaMode: "opaque" };
+				surface.width = texture.width;
+				surface.height = texture.height;
+			});
+			return texture;
+		}, restores);
+		wrapPrototypeMethod(win, "GPUBuffer", "mapAsync", (original) => function (...args) {
+			guarded("mapAsync", () => mapModes.set(this, Number(args[0]) || 0));
+			return original.apply(this, args);
+		}, restores);
+		wrapPrototypeMethod(win, "GPUBuffer", "getMappedRange", (original) => function (...args) {
+			const range = original.apply(this, args);
+			guarded("getMappedRange", () => {
+				if (!((mapModes.get(this) || 0) & CAPTURE_MAP_MODE_WRITE) || !shadows.has(this)) return;
+				let list = mappedRanges.get(this);
+				if (!list) {
+					list = [];
+					mappedRanges.set(this, list);
+				}
+				list.push({ offset: Number(args[0]) || 0, range });
+			});
+			return range;
+		}, restores);
+		wrapPrototypeMethod(win, "GPUBuffer", "unmap", (original) => function (...args) {
+			guarded("unmap", () => {
+				const list = mappedRanges.get(this);
+				mapModes.delete(this);
+				if (!list) return;
+				mappedRanges.delete(this);
+				const shadow = shadows.get(this);
+				for (const { offset, range } of list) shadowBufferWrite(shadow, offset, new Uint8Array(range));
+				if (frameOps) warn("mapped buffer write during capture is not replayed");
+			});
+			return original.apply(this, args);
+		}, restores);
+		wrapPrototypeMethod(win, "GPUQueue", "writeBuffer", (original) => function (...args) {
+			guarded("writeBuffer", () => {
+				const [buffer, bufferOffset, data, dataOffset, size] = args;
+				const all = captureBytes(data);
+				if (!all) return;
+				const unit = typeof data.BYTES_PER_ELEMENT === "number" ? data.BYTES_PER_ELEMENT : 1;
+				const start = (Number(dataOffset) || 0) * unit;
+				const length = size === undefined ? all.length - start : Number(size) * unit;
+				const bytes = all.subarray(start, start + length);
+				shadowBufferWrite(shadows.get(buffer), Number(bufferOffset) || 0, bytes);
+				if (frameOps) {
+					frameOps.push({
+						op: "writeBuffer", buffer: serialize(buffer), offset: Number(bufferOffset) || 0,
+						b64: captureBase64(bytes),
+					});
+				}
+			});
+			return original.apply(this, args);
+		}, restores);
+		wrapPrototypeMethod(win, "GPUQueue", "writeTexture", (original) => function (...args) {
+			guarded("writeTexture", () => {
+				const [destination, data, layout, size] = args;
+				const bytes = captureBytes(data);
+				if (!bytes || !destination) return;
+				const shadow = shadows.get(destination.texture);
+				if (shadow) shadowTextureWrite(shadow, destination, bytes, layout, size);
+				if (frameOps) {
+					frameOps.push({
+						op: "writeTexture", destination: serialize(destination), layout: serialize(layout),
+						size: serialize(size), b64: captureBase64(bytes),
+					});
+				}
+			});
+			return original.apply(this, args);
+		}, restores);
+		wrapPrototypeMethod(win, "GPUQueue", "submit", (original) => function (...args) {
+			if (frameOps) {
+				guarded("submit", () => frameOps.push({ op: "submit", buffers: serialize(Array.from(args[0] || [])) }));
+			}
+			const result = original.apply(this, args);
+			guarded("afterSubmit", afterSubmit);
+			return result;
+		}, restores);
+		wrapPrototypeMethod(win, "GPUCommandEncoder", "beginRenderPass", (original) => function (...args) {
+			const pass = original.apply(this, args);
+			if (frameOps) {
+				guarded("beginRenderPass", () => {
+					const local = nextLocal++;
+					frameOps.push({ op: "beginRenderPass", encoder: serialize(this), local, desc: serialize(args[0]) });
+					locals.set(pass, local);
+				});
+			}
+			return pass;
+		}, restores);
+		wrapPrototypeMethod(win, "GPUCommandEncoder", "finish", (original) => function (...args) {
+			const commandBuffer = original.apply(this, args);
+			if (frameOps) {
+				guarded("finish", () => {
+					const local = nextLocal++;
+					frameOps.push({ op: "finish", encoder: serialize(this), local, desc: serialize(args[0]) });
+					locals.set(commandBuffer, local);
+				});
+			}
+			return commandBuffer;
+		}, restores);
+		wrapPrototypeMethod(win, "GPUCommandEncoder", "beginComputePass", (original) => function (...args) {
+			if (frameOps) warn("compute pass during capture is not replayed");
+			return original.apply(this, args);
+		}, restores);
+		for (const method of CAPTURE_ENCODER_CALLS) {
+			wrapPrototypeMethod(win, "GPUCommandEncoder", method, (original) => function (...args) {
+				if (frameOps) {
+					guarded(method, () => frameOps.push({
+						op: "encoderCall", encoder: serialize(this), method, args: serialize(args),
+					}));
+				}
+				return original.apply(this, args);
+			}, restores);
+		}
+		for (const method of CAPTURE_PASS_METHODS) {
+			wrapPrototypeMethod(win, "GPURenderPassEncoder", method, (original) => function (...args) {
+				if (frameOps) {
+					guarded(method, () => frameOps.push({
+						op: "pass", pass: serialize(this), method, args: serialize(args),
+					}));
+				}
+				return original.apply(this, args);
+			}, restores);
+		}
+		win.__ingotCapture = api;
+		mark(`capture armed frames=${frames}`);
+		return api;
 	}
 
 	function canvasDpr() {
@@ -1541,7 +2372,13 @@ let semanticTextInputsNext = [];
 		// capture showed it flat at 43 MiB while the tab died anyway, so the
 		// memory must be outside it. These probes narrow that down.
 		// Optional: the demos load the recorder, embedders may not.
+		let gpuCallCounters = null;
+		let gpuBacklog = null;
 		if (window.ingotCrash && window.ingotCrash.watch) {
+			gpuCallCounters = installGpuCallCounters(window);
+			window.ingotCrash.watch("gpuCalls", gpuCallCounters.probe);
+			gpuBacklog = installGpuBacklogProbe(window);
+			window.ingotCrash.watch("gpuQ", gpuBacklog.probe);
 			window.ingotCrash.watch("wasmMiB", () => {
 				const memory = wmi.memory;
 				if (!memory || !memory.buffer) return null;
@@ -1588,7 +2425,14 @@ let semanticTextInputsNext = [];
 			} catch (_) {}
 		}
 		const uninstallFrameRateCap = installFrameRateCap(window, frameLimits.fps);
+		const uninstallGpuBackpressure = installGpuBackpressure(
+			window,
+			bisectSwitches.inflight,
+			gpuBacklog ? gpuBacklog.inFlight : null,
+			gpuBacklog ? gpuBacklog.noteDeferred : null,
+		);
 		const uninstallGcNudge = installGcNudge(window, bisectSwitches.gc);
+		const uninstallGpuSkips = installGpuSkips(window, bisectSwitches.skip, () => currentSection);
 		const uninstallAutoScroll = installAutoScroll(
 			window,
 			() => wmi.exports,
@@ -1698,9 +2542,13 @@ let semanticTextInputsNext = [];
 					safely(() => window.cancelAnimationFrame(resizeFrame));
 				}
 				resizeFrame = 0;
+				safely(uninstallGpuBackpressure);
 				safely(uninstallFrameRateCap);
 				safely(uninstallGcNudge);
 				safely(uninstallAutoScroll);
+				safely(uninstallGpuSkips);
+				if (gpuBacklog) safely(gpuBacklog.uninstall);
+				if (gpuCallCounters) safely(gpuCallCounters.uninstall);
 				currentSection = "";
 				safely(clearDeviceLost);
 				safely(clearSemanticOverlays);
@@ -1757,6 +2605,7 @@ let semanticTextInputsNext = [];
 			parseBisectSwitches,
 			describeBisectSwitches,
 			installFrameRateCap,
+			installGpuBackpressure,
 			bisectSwitches,
 			isIosWebKit,
 			resolveFrameLimits,
@@ -1764,6 +2613,9 @@ let semanticTextInputsNext = [];
 			installGcNudge,
 			suppressTapHighlight,
 			installAutoScroll,
+			installGpuCallCounters,
+			installGpuBacklogProbe,
+			installGpuSkips,
 			setCurrentSection: (name) => { currentSection = String(name); },
 		});
 	}
