@@ -286,7 +286,7 @@ test_driver_geometry_count :: proc(list: ^ui.Paint_List) -> int {
 }
 
 @(private = "file")
-test_driver_font :: proc(data: rawptr, size: i32) -> ui.Font_Id {
+test_driver_font :: proc(data: rawptr, face: ui.Font_Face, size: i32) -> ui.Font_Id {
 	assert(data != nil && size > 0, "Fit test driver: invalid font")
 	return ui.Font_Id(size)
 }

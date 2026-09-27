@@ -997,7 +997,10 @@ button_at :: proc(
 		}
 
 		label_s, text_w := btn_label_fit(frame, label, w, fs)
-		draw_text_string_frame(frame, label_s, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+		nudge := button_label_nudge(frame, enabled && style != .Ghost, press)
+		label_x := x + (w - text_w) / 2 + nudge
+		label_y := y + (h - frame_text_size(frame, fs)) / 2 + nudge
+		draw_text_string_frame(frame, label_s, label_x, label_y, fs, fg)
 	}
 
 	sem: Sem_State
@@ -1016,12 +1019,51 @@ button_surface_paint :: proc(
 ) {
 	assert(frame != nil && frame.open, "button surface: invalid frame")
 	assert(press >= 0 && press <= 1, "button surface: invalid press")
+	if surface_is_pixel(frame) {
+		button_surface_paint_pixel(frame, rect, style, enabled, background, border, press)
+		return
+	}
 	if enabled && (style == .Primary || style == .Secondary) {
 		draw_control_shadow(frame, rect, .MD, press)
 	}
 	draw_surface_colors(frame, rect, {bg = background}, border = .None)
 	if style == .Primary && enabled do btn_gloss(frame, ui_frame_theme(frame), rect)
 	draw_surface_colors(frame, rect, {border = border})
+}
+
+// button_surface_paint_pixel paints a button as a pixel sprite: hard shadow
+// while up, notched face, a bevel that inverts when held, then the notched
+// outline. It has no gloss; a gradient has no place in a fixed palette.
+@(private = "file")
+button_surface_paint_pixel :: proc(
+	frame: ^Ui_Frame,
+	rect: Rectangle,
+	style: Btn_Style,
+	enabled: bool,
+	background, border: Color,
+	press: f32,
+) {
+	assert(frame != nil && frame.open, "button surface pixel: invalid frame")
+	assert(press >= 0 && press <= 1, "button surface pixel: invalid press")
+	if rect.width <= 0 || rect.height <= 0 do return
+	solid := enabled && style != .Ghost
+	// A pixel press has two frames, up and down; the eased press value only
+	// picks which one is showing.
+	down := press >= 0.5
+	if solid && !down do draw_pixel_shadow(frame, rect, pixel_shadow_offset(frame, .Lifted))
+	draw_pixel_fill(frame, rect, background)
+	if solid do draw_pixel_bevel(frame, rect, down)
+	draw_pixel_border(frame, rect, border)
+}
+
+// button_label_nudge is how far a held pixel button's label moves down and
+// right: one art pixel, so the face appears to sink into the shadow it was
+// casting. Smooth buttons express the press through the shadow ease instead.
+button_label_nudge :: proc(frame: ^Ui_Frame, enabled: bool, press: f32) -> i32 {
+	assert(frame != nil, "button_label_nudge: nil frame")
+	assert(press >= 0 && press <= 1, "button_label_nudge: invalid press")
+	if !enabled || press < 0.5 || !surface_is_pixel(frame) do return 0
+	return i32(art_pixel(frame))
 }
 
 button_with_options_at :: proc(
@@ -1112,7 +1154,10 @@ button_at_state :: proc(
 		button_surface_paint(frame, rrect, style, enabled, bg, border, press)
 		if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
 		label_s, text_w := btn_label_fit(frame, label, w, fs)
-		draw_text_string_frame(frame, label_s, x + (w - text_w) / 2, y + (h - fs) / 2, fs, fg)
+		nudge := button_label_nudge(frame, enabled && style != .Ghost, press)
+		label_x := x + (w - text_w) / 2 + nudge
+		label_y := y + (h - frame_text_size(frame, fs)) / 2 + nudge
+		draw_text_string_frame(frame, label_s, label_x, label_y, fs, fg)
 	}
 	if semantic_will_emit(frame) {
 		sem: Sem_State

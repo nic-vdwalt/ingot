@@ -23,6 +23,14 @@ Substrate_Kind :: enum u8 {
 	Dots,
 	Tooth,
 }
+Font_Face :: enum u8 {
+	Mono,
+	Pixel,
+}
+Surface_Style :: enum u8 {
+	Smooth,
+	Pixel,
+}
 Surface_Colors :: struct {
 	background: Color,
 	foreground: Color,
@@ -91,6 +99,10 @@ Theme_Tokens :: struct {
 	substrate:                   Substrate_Kind,
 	margin_rule:                 bool,
 	square_corners:              bool,
+	font_face:                   Font_Face,
+	surface_style:               Surface_Style,
+	bevel_light:                 Color,
+	bevel_shade:                 Color,
 }
 
 Input_Box :: struct {
@@ -581,6 +593,18 @@ Theme_Set_Tactile_Controls :: proc(theme: ^Theme, enabled: bool) {
 Theme_Set_Square_Corners :: proc(theme: ^Theme, enabled: bool) {
 	assert(theme != nil, "Fit.Theme_Set_Square_Corners: nil theme")
 	ui.Theme_Set_Square_Corners(&theme.inner, enabled)
+}
+Theme_Set_Font_Face :: proc(theme: ^Theme, face: Font_Face) {
+	assert(theme != nil, "Fit.Theme_Set_Font_Face: nil theme")
+	ui.Theme_Set_Font_Face(&theme.inner, to_font_face(face))
+	stored := from_font_face(theme.inner.font_face)
+	assert(stored == face, "Fit.Theme_Set_Font_Face: face not stored")
+}
+Theme_Set_Surface_Style :: proc(theme: ^Theme, style: Surface_Style) {
+	assert(theme != nil, "Fit.Theme_Set_Surface_Style: nil theme")
+	ui.Theme_Set_Surface_Style(&theme.inner, to_surface_style(style))
+	stored := from_surface_style(theme.inner.surface_style)
+	assert(stored == style, "Fit.Theme_Set_Surface_Style: style not stored")
 }
 Theme_Background :: proc(theme: Theme) -> Color {return Color(theme.inner.bg_app)}
 Color_Tinted :: proc(color: Color, tint: Tint) -> Color {

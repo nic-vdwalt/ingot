@@ -37,7 +37,8 @@ surface_is_pixel :: proc(frame: ^Ui_Frame) -> bool {
 art_pixel :: proc(frame: ^Ui_Frame) -> f32 {
 	assert(frame != nil, "art_pixel: nil frame")
 	result := max(1, math.floor(border_pixels(frame, .Emphasis)))
-	assert(result >= 1 && result == math.floor(result), "art_pixel: not a whole unit")
+	whole := math.floor(result)
+	assert(result >= 1 && result == whole, "art_pixel: not a whole unit")
 	return result
 }
 

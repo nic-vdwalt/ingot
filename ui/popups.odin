@@ -190,7 +190,14 @@ modal_begin :: proc(
 
 	// Dimmed inside the modal's z scope so it paints at the modal tier and
 	// covers every lower tier, including content submitted after modal_end.
-	draw_rectangle(frame, config.screen.x, config.screen.y, screen_w, screen_h, style.modal_dim)
+	// The pixel style dithers the dim: a translucent wash is the one effect a
+	// fixed palette cannot show, and a half-tone of solid ink is how sprite
+	// screens darken what sits behind a dialog.
+	if surface_is_pixel(frame) {
+		draw_dither_rect(frame, claim, style.modal_dim)
+	} else {
+		draw_rectangle_rec(frame, claim, style.modal_dim)
+	}
 	draw_surface(
 		frame,
 		{f32(mx), f32(my), f32(mw), f32(mh)},

@@ -291,3 +291,47 @@ to_semantic_state :: proc(value: Semantic_State) -> ui.Sem_State {
 	if .Multiline in value do result += {.Multiline}
 	return result
 }
+
+@(private = "package")
+to_font_face :: proc(value: Font_Face) -> ui.Font_Face {
+	switch value {
+	case .Mono:
+		return .Mono
+	case .Pixel:
+		return .Pixel
+	}
+	unreachable()
+}
+
+@(private = "package")
+from_font_face :: proc(value: ui.Font_Face) -> Font_Face {
+	switch value {
+	case .Mono:
+		return .Mono
+	case .Pixel:
+		return .Pixel
+	}
+	unreachable()
+}
+
+@(private = "package")
+to_surface_style :: proc(value: Surface_Style) -> ui.Surface_Style {
+	switch value {
+	case .Smooth:
+		return .Smooth
+	case .Pixel:
+		return .Pixel
+	}
+	unreachable()
+}
+
+@(private = "package")
+from_surface_style :: proc(value: ui.Surface_Style) -> Surface_Style {
+	switch value {
+	case .Smooth:
+		return .Smooth
+	case .Pixel:
+		return .Pixel
+	}
+	unreachable()
+}

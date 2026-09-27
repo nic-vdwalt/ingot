@@ -45,6 +45,27 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   / `fit.Theme_Set_Square_Corners`, and read it back as
   `fit.Theme_Tokens.square_corners`. Under the flag, `fit.Metrics.card_radius`
   reports `0`.
+- **Pixel font face**: Pixel Operator (CC0, `assets/fonts/PixelOperator.ttf`)
+  is bundled as a second typeface, selected by the new `Theme.font_face`
+  (`Font_Face.Mono` by default, `.Pixel` in the Pixel theme). Under the pixel
+  face, text sizes are quantised to whole multiples of its 16 px design grid in
+  device pixels (`ui.frame_text_size` / `ui.pixel_text_size`). The atlas is
+  sampled with nearest filtering, and glyph origins are snapped to device
+  pixels, so glyph edges stay hard. Switching face through a theme resets the
+  font table and bumps the font epoch.
+  `ui.Text_Font_Proc` now takes the face:
+  `proc(data: rawptr, face: Font_Face, size: i32) -> Font_Id`.
+  Custom text backends must add the parameter.
+- **Pixel surface style**: `Theme.surface_style` (`Smooth` by default) and the
+  `bevel_light` / `bevel_shade` roles. Under `.Pixel`, `draw_surface`,
+  `draw_rounded_fill`/`_border`, and the shadows draw notched corners, borders
+  one art pixel thick, a raised or sunken two-tone bevel, and hard
+  whole-pixel shadow offsets, all from plain rectangles.
+  - Pixel buttons invert their bevel and nudge their label while held.
+  - The focus ring is notched.
+  - Modal backdrops are dithered.
+  - Setters: `ui.Theme_Set_Font_Face`, `ui.Theme_Set_Surface_Style`, and their
+    `fit` counterparts. The values are also exposed on `fit.Theme_Tokens`.
 
 ### Changed
 

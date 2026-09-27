@@ -117,6 +117,27 @@ same rule: `Theme.square_corners` makes `radius_pixels` answer zero for every
 `Radius` token, which is how the Pixel theme squares every corner without a
 branch in any widget.
 
+The Pixel theme goes further through two more theme fields.
+
+`Theme.font_face = .Pixel` switches text to the bundled Pixel Operator face.
+- That face only renders cleanly at whole multiples of its 16 px grid, so
+  `frame_text_size` quantises every draw and measure to such a size. Draw and
+  measure therefore always agree.
+- `ui_gfx` bakes the pixel atlas at an exact multiple of the grid, samples it
+  with nearest filtering, and rounds each glyph origin to a device pixel.
+- A theme that changes face resets the backend font table and bumps
+  `font_epoch`, just as a scale change does.
+
+`Theme.surface_style = .Pixel` routes `draw_surface` and the fill, border and
+shadow helpers in `material.odin` to `material_pixel.odin`.
+- It draws notched fills and borders one art pixel thick (the Emphasis weight),
+  with hard shadows offset by whole art pixels.
+- Raised or inset objects get a two-tone bevel from the `bevel_light` and
+  `bevel_shade` roles, swapped when pressed.
+- Every pixel surface is a fixed handful of rectangle commands, 14 at most.
+- The modal dim is a row dither bounded by `DITHER_ROWS_MAX`. The renderer has
+  no texture fill, so a true checkerboard would cost one command per cell.
+
 ## Custom themes
 
 The ordinary application path is `fit.Theme_From_Palette`. Its named palette

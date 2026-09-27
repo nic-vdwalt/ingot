@@ -167,6 +167,10 @@ theme_tokens :: proc(theme: ui.Theme) -> Theme_Tokens {
 		substrate = from_substrate(theme.substrate.kind),
 		margin_rule = theme.substrate.margin_rule,
 		square_corners = theme.square_corners,
+		font_face = from_font_face(theme.font_face),
+		surface_style = from_surface_style(theme.surface_style),
+		bevel_light = Color(theme.bevel_light),
+		bevel_shade = Color(theme.bevel_shade),
 	}
 }
 

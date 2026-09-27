@@ -127,6 +127,12 @@ draw_focus_ring :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
 	if style.focus_ring.a == 0 do return
 	inset := ui_frame_sc(frame, 2)
 	r := Rectangle{f32(x - inset), f32(y - inset), f32(w + inset * 2), f32(h + inset * 2)}
+	// The pixel style steps the ring's corners like every other pixel outline,
+	// so the ring reads as part of the sprite rather than a vector overlay.
+	if style.surface_style == .Pixel {
+		draw_pixel_border(frame, r, style.focus_ring)
+		return
+	}
 	// Round the ring with the same Radius.MD token the button fills use, offset
 	// by the inset so the ring stays concentric with the control's corners
 	// rather than following the old fixed BTN_ROUNDNESS ratio.

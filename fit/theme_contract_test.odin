@@ -66,6 +66,8 @@ theme_contract_fields :: [][2]string {
 	{"chalk", "chalk"},
 	{"highlighter", "highlighter"},
 	{"tape", "tape_color"},
+	{"bevel_light", "bevel_light"},
+	{"bevel_shade", "bevel_shade"},
 }
 
 @(test)
@@ -96,7 +98,8 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	}
 	for name in reflect.struct_field_names(Theme_Tokens) {
 		matches := 0
-		if name == "substrate" || name == "margin_rule" || name == "square_corners" {
+		switch name {
+		case "substrate", "margin_rule", "square_corners", "font_face", "surface_style":
 			matches += 1
 		}
 		for names in theme_contract_fields {
@@ -107,7 +110,7 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	testing.expect_value(
 		t,
 		reflect.struct_field_count(Theme_Tokens),
-		len(theme_contract_fields) + 3,
+		len(theme_contract_fields) + 5,
 	)
 }
 
@@ -122,4 +125,20 @@ fit_theme_pixel_is_square_and_settable :: proc(t: ^testing.T) {
 	testing.expect(t, !dark.inner.square_corners)
 	Theme_Set_Square_Corners(&dark, true)
 	testing.expect(t, theme_tokens(dark.inner).square_corners)
+}
+
+@(test)
+fit_theme_pixel_selects_pixel_face_and_style :: proc(t: ^testing.T) {
+	theme := Theme_Pixel()
+	tokens := theme_tokens(theme.inner)
+	testing.expect_value(t, tokens.font_face, Font_Face.Pixel)
+	testing.expect_value(t, tokens.surface_style, Surface_Style.Pixel)
+	testing.expect(t, tokens.bevel_light.a == 255 && tokens.bevel_shade.a == 255)
+	dark := Theme_Dark()
+	testing.expect_value(t, theme_tokens(dark.inner).font_face, Font_Face.Mono)
+	testing.expect_value(t, theme_tokens(dark.inner).surface_style, Surface_Style.Smooth)
+	Theme_Set_Font_Face(&dark, .Pixel)
+	Theme_Set_Surface_Style(&dark, .Pixel)
+	testing.expect_value(t, dark.inner.font_face, ui.Font_Face.Pixel)
+	testing.expect_value(t, dark.inner.surface_style, ui.Surface_Style.Pixel)
 }
