@@ -108,7 +108,10 @@ retro_ingot_dark_theme_uses_steel_grays_and_distinct_control_states :: proc(t: ^
 terra_theme_preserves_crt_channels_and_control_states :: proc(t: ^testing.T) {
 	style := theme_terra()
 	testing.expect_value(t, style.bg_color, Color{6, 10, 8, 255})
-	testing.expect_value(t, style.fg_primary, Color{176, 255, 206, 255})
+	testing.expect_value(t, style.fg_primary, Color{150, 230, 182, 255})
+	testing.expect(t, style.fg_accent != style.fg_success)
+	testing.expect(t, style.fg_code_inline != style.fg_tool)
+	testing.expect(t, style.paper_rule.a > 0)
 	testing.expect_value(t, style.fg_tool, Color{255, 190, 90, 255})
 	testing.expect_value(t, style.fg_error, Color{255, 106, 84, 255})
 	testing.expect(t, style.button_bg != style.button_hover)

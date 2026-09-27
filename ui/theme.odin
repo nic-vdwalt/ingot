@@ -996,11 +996,15 @@ theme_retro_ingot_dark :: proc() -> Theme {
 
 theme_terra :: proc() -> Theme {
 	result := THEME_DARK
-	phosphor := Color{176, 255, 206, 255}
+	phosphor := Color{150, 230, 182, 255}
+	phosphor_bloom := Color{214, 255, 228, 255}
 	phosphor_bright := Color{120, 255, 170, 255}
 	phosphor_dim := Color{112, 190, 146, 255}
-	phosphor_faint := Color{88, 150, 116, 255}
+	phosphor_faint := Color{92, 158, 122, 255}
+	cyan := Color{100, 232, 224, 255}
+	cyan_light := Color{170, 245, 238, 255}
 	amber := Color{255, 190, 90, 255}
+	amber_pale := Color{255, 214, 150, 255}
 	danger := Color{255, 106, 84, 255}
 	glass := Color{6, 10, 8, 255}
 	panel := Color{9, 15, 12, 236}
@@ -1034,23 +1038,23 @@ theme_terra :: proc() -> Theme {
 	result.bg_diff_add = Color{10, 32, 20, 255}
 	result.bg_diff_remove = Color{42, 16, 12, 255}
 	result.fg_primary = phosphor
-	result.fg_heading = Color{214, 255, 228, 255}
+	result.fg_heading = phosphor_bloom
 	result.fg_secondary = phosphor_dim
-	result.fg_accent = phosphor_bright
-	result.fg_accent_light = Color{164, 255, 200, 255}
-	result.fg_label = phosphor_faint
+	result.fg_accent = cyan
+	result.fg_accent_light = cyan_light
+	result.fg_label = phosphor_dim
 	result.fg_muted_dim = phosphor_faint
-	result.fg_disabled = Color{52, 88, 70, 255}
+	result.fg_disabled = Color{64, 106, 84, 255}
 	result.fg_user = phosphor
 	result.fg_assistant = phosphor_dim
-	result.fg_bold = Color{214, 255, 228, 255}
+	result.fg_bold = phosphor_bloom
 	result.fg_bullet = phosphor_bright
-	result.fg_code_inline = amber
+	result.fg_code_inline = amber_pale
 	result.fg_tool = amber
 	result.fg_plan = amber
 	result.fg_planning = amber
 	result.fg_debug_changed = amber
-	result.fg_debug = Color{164, 255, 200, 255}
+	result.fg_debug = cyan_light
 	result.fg_debug_annotation = phosphor_dim
 	result.fg_error = danger
 	result.fg_success = phosphor_bright
@@ -1074,7 +1078,7 @@ theme_terra :: proc() -> Theme {
 	result.button_danger_fg = Color{255, 158, 140, 255}
 	result.surface_pressed = Color{30, 74, 54, 255}
 	result.fg_on_accent = Color{4, 12, 8, 255}
-	result.focus_ring = Color{120, 255, 170, 230}
+	result.focus_ring = Color{100, 232, 224, 230}
 	result.modal_dim = Color{2, 6, 4, 220}
 	result.shadow_color = Color{0, 0, 0, 150}
 	result.button_primary_grad_top = Color{176, 255, 206, 26}
@@ -1087,6 +1091,7 @@ theme_terra :: proc() -> Theme {
 	result.drop_zone_border = phosphor_bright
 	result.wave_color_a = Color{26, 78, 54, 255}
 	result.wave_color_b = phosphor_bright
+	result.paper_rule = Color{20, 44, 32, 255}
 	result.substrate = {
 		kind        = .Grid,
 		margin_rule = false,
