@@ -273,6 +273,55 @@ let semanticTextInputsNext = [];
 		return canvasDpr() * canvasCapScale;
 	}
 
+	// Crash-heartbeat probes for memory WebKit keeps outside the page: live
+	// WebGPU objects by type, bytes uploaded per heartbeat, and frames that
+	// actually reached the GPU. Takes its inputs as parameters so nothing
+	// here depends on session-scoped names. A probe that throws reports null.
+	const GPU_TOP_TYPES = 4;
+
+	function safeProbe(probe) {
+		return () => {
+			try {
+				return probe();
+			} catch (_) {
+				return null;
+			}
+		};
+	}
+
+	function gpuHeartbeatProbes(wmi, webgpu) {
+		const counts = () => {
+			if (!webgpu || typeof webgpu.liveObjectCounts !== "function") return null;
+			return webgpu.liveObjectCounts();
+		};
+		return [
+			["gpuObjs", safeProbe(() => {
+				const c = counts();
+				return c ? c.total : null;
+			})],
+			["gpuTop", safeProbe(() => {
+				const c = counts();
+				if (!c) return null;
+				return Object.entries(c.byName)
+					.filter(([, n]) => n > 0)
+					.sort((a, b) => b[1] - a[1])
+					.slice(0, GPU_TOP_TYPES)
+					.map(([name, n]) => `${name}:${n}`)
+					.join(",");
+			})],
+			["uploadKiB", safeProbe(() => {
+				if (!webgpu || typeof webgpu.takeUploadBytes !== "function") return null;
+				return (webgpu.takeUploadBytes() / 1024).toFixed(1);
+			})],
+			["appFrames", safeProbe(() => {
+				const x = wmi && wmi.exports;
+				if (!x || typeof x.ingot_web_app_frame_count !== "function") return null;
+				const count = x.ingot_web_app_frame_count();
+				return count < 0 ? null : count;
+			})],
+		];
+	}
+
 	function canvasPixelsMax() {
 		if (typeof window.matchMedia === "function") {
 			const coarse = window.matchMedia("(pointer: coarse)");
@@ -1279,6 +1328,9 @@ let semanticTextInputsNext = [];
 				const count = x.ingot_web_atlas_count();
 				return count < 0 ? null : count;
 			});
+			for (const [name, probe] of gpuHeartbeatProbes(wmi, webgpu)) {
+				window.ingotCrash.watch(name, probe);
+			}
 		}
 		const listeners = [];
 		const listen = (target, type, handler) => {

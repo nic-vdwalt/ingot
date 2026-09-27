@@ -234,6 +234,9 @@ Context :: struct {
 	// Set by _maybe_reconfigure when the logical size changed at the start of
 	// this frame, so IsWindowResized answers for the frame the caller is in.
 	resized_this_frame:          bool,
+	// Frames that acquired and presented a surface texture. Read by the web
+	// crash heartbeat to tell rendered frames apart from idle rAF ticks.
+	presented_frames:            u32,
 
 	// requested window size, stashed at InitWindow for _gpu_finish (needed
 	// because on web the GPU device resolves asynchronously, after InitWindow
@@ -1124,6 +1127,7 @@ context_end_drawing :: proc(ctx: ^Context) {
 		cleanup_started := platform_now()
 		wg.TextureViewRelease(ctx.frame.view)
 		_release_surface_texture(ctx)
+		ctx.presented_frames += 1
 		ctx.frame.has_frame = false
 		_flush_retired(ctx)
 		_renderer_report_overflow(&ctx.rend)

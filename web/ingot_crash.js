@@ -64,8 +64,9 @@
 	// is what identifies the phase that died.
 	const BOX_CRUMBS_MAX = 20;
 	// One pathological line (a whole shader source, a base64 blob) must not
-	// consume the storage quota by itself.
-	const BOX_CRUMB_CHARS_MAX = 200;
+	// consume the storage quota by itself. Sized to fit one full heartbeat
+	// line (every probe) without truncation.
+	const BOX_CRUMB_CHARS_MAX = 320;
 	// Writing on every crumb would add a synchronous storage hit to the frame
 	// loop and perturb the very frames being measured. Coalesce to at most
 	// one write per interval; a kill loses at most this much history, which
@@ -85,7 +86,7 @@
 	// Heartbeats share the crumb ring, so this bounds how much history a
 	// steady heartbeat can evict. 20 crumbs at 1s is ~20s of history, which
 	// covers "open the page, tap the section, watch it die".
-	const HEARTBEAT_PROBES_MAX = 8;
+	const HEARTBEAT_PROBES_MAX = 12;
 
 	const ring = [];
 	const cascade = [];

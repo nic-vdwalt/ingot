@@ -220,3 +220,12 @@ ingot_web_atlas_count :: proc "contextless" () -> i32 {
 	if ctx == nil do return -1
 	return i32(ctx.resources.atlases.count)
 }
+
+// ingot_web_app_frame_count reports frames that actually reached the GPU, so
+// the heartbeat can compare them against rAF ticks while event-driven idling.
+@(export)
+ingot_web_app_frame_count :: proc "contextless" () -> i32 {
+	ctx := _web_owner_context()
+	if ctx == nil do return -1
+	return i32(ctx.presented_frames & 0x7fff_ffff)
+}
