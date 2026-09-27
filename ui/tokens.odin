@@ -245,9 +245,14 @@ surface_pressed_bg :: proc(style: ^Theme, surface: Surface) -> Color {
 // separate from radius_ratio because a caller drawing its own geometry (a tape
 // strip, a dog ear) needs the pixel value, not the rect-relative ratio the
 // rounded-rect primitive wants.
+//
+// A theme with square_corners set answers zero for every token, Pill
+// included: this is the single place corners are resolved, so honouring the
+// flag here squares every surface without a branch at any call site.
 radius_pixels :: proc(frame: ^Ui_Frame, radius: Radius, min_dimension: f32) -> f32 {
 	assert(frame != nil, "radius_pixels: nil frame")
 	assert(min_dimension >= 0, "radius_pixels: negative dimension")
+	if ui_frame_theme(frame).square_corners do return 0
 	base := ui_frame_metrics(frame).CARD_RADIUS_PX
 	assert(base > 0, "radius_pixels: metrics carry a non-positive card radius")
 	switch radius {

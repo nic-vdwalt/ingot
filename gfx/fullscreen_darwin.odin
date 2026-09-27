@@ -35,4 +35,14 @@ when !INGOT_GFX_SDL3 {
 		return style_mask & NS_WINDOW_STYLE_MASK_FULLSCREEN != 0
 	}
 
+	// _platform_native_fullscreen_toggle enters or leaves the native Space,
+	// the same transition as the green traffic-light button.
+	@(private)
+	_platform_native_fullscreen_toggle :: proc(ctx: ^Context) {
+		if ctx == nil || ctx.win == nil do return
+		window := (^FS_NS_Window)(rawptr(glfw.GetCocoaWindow(glfw.WindowHandle(ctx.win))))
+		if window == nil do return
+		intrinsics.objc_send(nil, window, "toggleFullScreen:", rawptr(nil))
+	}
+
 }

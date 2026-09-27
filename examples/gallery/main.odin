@@ -123,6 +123,7 @@ Palette :: enum {
 	Ingot,
 	Ingot_Dark,
 	Terra,
+	Pixel,
 	Dark,
 	Light,
 	Retro_Orange,
@@ -135,6 +136,7 @@ PALETTE_NAMES := [Palette]string {
 	.Ingot             = "Ingot",
 	.Ingot_Dark        = "Ingot dark",
 	.Terra             = "Terra",
+	.Pixel             = "Pixel",
 	.Dark              = "Dark",
 	.Light             = "Light",
 	.Retro_Orange      = "Retro orange",
@@ -193,6 +195,8 @@ palette_theme :: proc(value: Palette) -> fit.Theme {
 		return fit.Theme_Retro_Ingot_Dark()
 	case .Terra:
 		return fit.Theme_Terra()
+	case .Pixel:
+		return fit.Theme_Pixel()
 	case .Dark:
 		return fit.Theme_Dark()
 	case .Light:

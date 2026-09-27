@@ -90,6 +90,7 @@ Theme_Tokens :: struct {
 	tape:                        Color,
 	substrate:                   Substrate_Kind,
 	margin_rule:                 bool,
+	square_corners:              bool,
 }
 
 Input_Box :: struct {
@@ -534,6 +535,10 @@ Theme_Terra :: proc() -> Theme {
 	return {inner = ui.theme_terra()}
 }
 
+Theme_Pixel :: proc() -> Theme {
+	return {inner = ui.theme_pixel()}
+}
+
 Theme_High_Contrast :: proc() -> Theme {
 	return {inner = ui.theme_high_contrast()}
 }
@@ -572,6 +577,10 @@ Theme_Set_Reduced_Motion :: proc(theme: ^Theme, enabled: bool) {
 Theme_Set_Tactile_Controls :: proc(theme: ^Theme, enabled: bool) {
 	assert(theme != nil, "Fit.Theme_Set_Tactile_Controls: nil theme")
 	theme.inner.tactile_controls = enabled
+}
+Theme_Set_Square_Corners :: proc(theme: ^Theme, enabled: bool) {
+	assert(theme != nil, "Fit.Theme_Set_Square_Corners: nil theme")
+	ui.Theme_Set_Square_Corners(&theme.inner, enabled)
 }
 Theme_Background :: proc(theme: Theme) -> Color {return Color(theme.inner.bg_app)}
 Color_Tinted :: proc(color: Color, tint: Tint) -> Color {

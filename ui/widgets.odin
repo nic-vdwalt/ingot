@@ -145,11 +145,11 @@ mouse_moved :: proc(frame: ^Ui_Frame) -> bool {
 
 // get_wheel_move returns this frame's mouse-wheel delta scaled by a
 // platform multiplier so scroll speed feels consistent across OSes.
-// Windows mouse wheels produce 1.0 per notch while macOS trackpads
-// deliver larger inertia-driven values; the multiplier compensates.
+// Windows and Linux (GLFW) mouse wheels produce 1.0 per notch while macOS
+// trackpads deliver larger inertia-driven values; the multiplier compensates.
 get_wheel_move :: proc(frame: ^Ui_Frame) -> f32 {
 	wheel := get_mouse_wheel_move(frame)
-	when ODIN_OS == .Windows {
+	when ODIN_OS == .Windows || ODIN_OS == .Linux {
 		return wheel * 5.0
 	} else {
 		return wheel
@@ -1870,13 +1870,16 @@ pane_reset :: proc(p: ^Pane) {
 // scissor, and returns the y cursor the caller should start drawing at. When
 // `keyboard` is true and the mouse hovers the pane, PageUp/PageDown/Home/End
 // and Up/Down arrows scroll it - leave it off for panes that host text inputs
-// (their caret owns those keys).
+// (their caret owns those keys). `keyboard_unhovered` lets a modal pane that
+// owns the keyboard scroll without the pointer over it. Hit testing for
+// widgets inside the pane is clipped to the pane rect until pane_end.
 pane_begin :: proc(
 	frame: ^Ui_Frame,
 	p: ^Pane,
 	rect: Rect_I32,
 	pad: i32 = 10,
 	keyboard: bool = false,
+	keyboard_unhovered: bool = false,
 ) -> (
 	cursor_y: i32,
 ) {
@@ -1889,16 +1892,18 @@ pane_begin :: proc(
 	assert(w >= 0 && h >= 0, "pane_begin: negative pane size")
 	p.open = true
 	mouse := get_mouse_position(frame)
+	local := frame_to_local(frame, mouse)
 	hovered :=
-		point_in_rect(mouse, {f32(x), f32(y), f32(w), f32(h)}) && !route_occluded(frame, mouse)
+		point_in_rect(local, {f32(x), f32(y), f32(w), f32(h)}) && !route_occluded(frame, mouse)
 	if hovered {
 		p.scroll -= get_wheel_move(frame) * f32(ui_frame_sc(frame, 24))
 	}
-	if keyboard && hovered {
+	if keyboard && (hovered || keyboard_unhovered) {
 		pane_keyboard_scroll(frame, p, h)
 	}
 	p.scroll = clamp(p.scroll, 0, f32(max(p.content_h - h, 0)))
 	begin_pane_scissor(frame, x, y, w, h)
+	interact_clip_push(frame, {f32(x), f32(y), f32(w), f32(h)})
 	// Narrow the cull band to the pane's visible rows so leaf painters can
 	// skip geometry the scissor would discard at raster time. The band must
 	// match the scissor exactly or widgets vanish at the pane edges; both use
@@ -1944,6 +1949,7 @@ pane_end :: proc(frame: ^Ui_Frame, p: ^Pane, rect: Rect_I32, end_y: i32, pad: i3
 	assert(h >= 0, "pane_end: negative pane height")
 	p.open = false
 	end_scissor_mode(frame)
+	interact_clip_pop(frame)
 	// Restore the enclosing band before the scrollbar draws: the scrollbar
 	// sits inside the pane rect but outside the scissor, and a nested pane's
 	// parent must get its own band back unchanged.

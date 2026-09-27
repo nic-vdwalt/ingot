@@ -86,6 +86,7 @@ tactile_surfaces_preserve_palette_and_bound_paint :: proc(t: ^testing.T) {
 			theme_retro_ingot(),
 			theme_retro_ingot_dark(),
 			theme_terra(),
+			theme_pixel(),
 		}) {
 		ui_runtime_set_theme(&runtime, theme)
 		ui_frame_begin(&frame, &runtime, &input)

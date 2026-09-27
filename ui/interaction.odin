@@ -93,6 +93,8 @@ interact_step :: proc(ev: Interact_Event, latch: ^bool) -> Interaction {
 	return it
 }
 
+HIT_CLIP_CAP :: 8
+
 Interaction_State :: struct {
 	active_latch:     ^bool,
 	latch_gen:        u64,
@@ -105,6 +107,8 @@ Interaction_State :: struct {
 	primary_released: bool,
 	primary_down:     bool,
 	route_empty:      bool,
+	hit_clips:        [HIT_CLIP_CAP]Rectangle,
+	hit_clip_count:   int,
 }
 
 // interact_frame_begin snapshots the primary press origin for this frame.
@@ -126,6 +130,7 @@ interact_frame_begin :: proc(frame: ^Ui_Frame) {
 		state.latch_gen = 0
 	}
 	state.pointer_pos = get_mouse_position(frame)
+	state.hit_clip_count = 0
 	input := frame_input(frame)
 	state.primary_pressed = input_mouse_pressed(input, .LEFT)
 	state.primary_released = input_mouse_released(input, .LEFT)
@@ -158,6 +163,49 @@ interact_frame_begin :: proc(frame: ^Ui_Frame) {
 		!state.press_seen || down || released || state.primary_pressed,
 		"interact_frame_begin: press origin outlived its gesture",
 	)
+}
+
+// interact_clip_push narrows pointer hit testing to `rect` (drawing space,
+// pane-local when inside a translated pane) intersected with the enclosing
+// clip. Widgets scrolled outside a scissored pane stay drawn-clipped but
+// must not keep receiving the pointer. Clips are stored in screen space,
+// matching pointer_pos and press_pos. Latched drags are unaffected.
+interact_clip_push :: proc(frame: ^Ui_Frame, rect: Rectangle) {
+	assert(frame != nil && frame.open, "interact_clip_push: invalid frame")
+	state := &frame.interaction
+	assert(state.hit_clip_count < HIT_CLIP_CAP, "interact_clip_push: clip stack full")
+	origin := frame_pane_origin(frame)
+	clip := Rectangle{rect.x + origin.x, rect.y + origin.y, max(rect.width, 0), max(rect.height, 0)}
+	if state.hit_clip_count > 0 {
+		parent := state.hit_clips[state.hit_clip_count - 1]
+		x0 := max(parent.x, clip.x)
+		y0 := max(parent.y, clip.y)
+		x1 := min(parent.x + parent.width, clip.x + clip.width)
+		y1 := min(parent.y + parent.height, clip.y + clip.height)
+		clip = {x0, y0, max(x1 - x0, 0), max(y1 - y0, 0)}
+	}
+	state.hit_clips[state.hit_clip_count] = clip
+	state.hit_clip_count += 1
+}
+
+interact_clip_pop :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "interact_clip_pop: invalid frame")
+	assert(frame.interaction.hit_clip_count > 0, "interact_clip_pop: clip stack empty")
+	frame.interaction.hit_clip_count -= 1
+}
+
+// interact_clip_contains reports whether a screen-space point lies inside the
+// active hit clip. Widgets that hit-test the pointer without interact() must
+// apply it so scrolled-out pane content stays inert.
+interact_clip_contains :: proc(frame: ^Ui_Frame, point: Vector2) -> bool {
+	assert(frame != nil, "interact_clip_contains: nil frame")
+	return _interact_clip_allows(&frame.interaction, point)
+}
+
+@(private = "file")
+_interact_clip_allows :: proc(state: ^Interaction_State, point: Vector2) -> bool {
+	if state.hit_clip_count == 0 do return true
+	return point_in_rect(point, state.hit_clips[state.hit_clip_count - 1])
 }
 
 // interact_reset clears the drag arbitration slot and the recorded press
@@ -223,7 +271,10 @@ interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Inter
 	mouse := state.pointer_pos
 	local := frame_to_local(frame, mouse)
 	pointer_block_z := route_block_z(frame, mouse)
-	over := point_in_rect(local, rect) && pointer_block_z <= frame_z(frame)
+	over :=
+		point_in_rect(local, rect) &&
+		pointer_block_z <= frame_z(frame) &&
+		_interact_clip_allows(state, mouse)
 	pressed := state.primary_pressed
 	released := state.primary_released
 	down := state.primary_down
@@ -242,7 +293,10 @@ interact :: proc(frame: ^Ui_Frame, rect: Rectangle, latch: ^bool = nil) -> Inter
 		// answer, so occlusion resolves here against this surface's own z.
 		press_block_z := max(state.press_block_z, route_block_z(frame, state.press_pos))
 		press_unblocked := press_block_z <= frame_z(frame)
-		press_over = press_unblocked && point_in_rect(local_press, rect)
+		press_over =
+			press_unblocked &&
+			point_in_rect(local_press, rect) &&
+			_interact_clip_allows(state, state.press_pos)
 	}
 	ev := Interact_Event {
 		over       = over,

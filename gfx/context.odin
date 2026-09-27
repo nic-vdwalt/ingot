@@ -226,6 +226,8 @@ Context :: struct {
 	fb_width, fb_height:        i32,
 	dpi:                        f32,
 	force_reconfigure:          bool,
+	// Whether the surface offered .Immediate at setup; gates context_set_vsync.
+	present_immediate_supported: bool,
 	// Set once the browser revoked the WebGPU device. Terminal: frames stop
 	// and the host page offers a reload (platform_web.odin).
 	device_lost:                bool,
@@ -742,6 +744,10 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 	}
 	ctx.composite_alpha = alpha
 	_stats_set_alpha_mode(ctx, alpha)
+	ctx.present_immediate_supported = false
+	for mode in caps.presentModes[:caps.presentModeCount] {
+		if mode == .Immediate do ctx.present_immediate_supported = true
+	}
 	present_mode := _surface_present_mode(
 		ctx.config_flags,
 		caps.presentModes[:caps.presentModeCount],
@@ -1262,6 +1268,30 @@ GetRenderWidth :: proc() -> i32 {return context_render_width(default_context())}
 GetRenderHeight :: proc() -> i32 {return context_render_height(default_context())}
 
 SetTargetFPS :: proc(fps: i32) {context_set_target_fps(default_context(), fps)}
+
+// context_set_vsync switches the surface present mode at runtime (Fifo when
+// enabled, Immediate when disabled). The next _maybe_reconfigure applies it.
+// Returns false when VSync-off is unavailable (no .Immediate on the surface).
+context_set_vsync :: proc(ctx: ^Context, enabled: bool) -> bool {
+	if ctx == nil || !context_ready(ctx) do return false
+	when ODIN_OS == .JS {
+		return enabled
+	} else {
+		if !enabled && !ctx.present_immediate_supported do return false
+		mode := wg.PresentMode.Fifo if enabled else wg.PresentMode.Immediate
+		if ctx.config.presentMode == mode do return true
+		ctx.config.presentMode = mode
+		if enabled {
+			ctx.config_flags -= {.PRESENT_IMMEDIATE}
+		} else {
+			ctx.config_flags += {.PRESENT_IMMEDIATE}
+		}
+		ctx.force_reconfigure = true
+		return true
+	}
+}
+
+SetVSync :: proc(enabled: bool) -> bool {return context_set_vsync(default_context(), enabled)}
 GetFrameTime :: proc() -> f32 {return context_frame_time(default_context())}
 GetTime :: proc() -> f64 {return context_time(default_context())}
 GetFPS :: proc() -> i32 {return context_fps(default_context())}

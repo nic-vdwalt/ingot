@@ -781,6 +781,9 @@ context_toggle_fullscreen_impl :: proc(ctx: ^Context) {
 	if ctx != nil && _web_context_is_owner(ctx) do _js_toggle_fullscreen()
 }
 ToggleFullscreen :: proc() {context_toggle_fullscreen_impl(default_context())}
+context_set_fullscreen_impl :: proc(ctx: ^Context, fullscreen: bool) {
+	if context_is_window_fullscreen(ctx) != fullscreen do context_toggle_fullscreen_impl(ctx)
+}
 context_restore_window :: proc(ctx: ^Context) {}
 RestoreWindow :: proc() {context_restore_window(default_context())}
 context_focus_window :: proc(ctx: ^Context) {

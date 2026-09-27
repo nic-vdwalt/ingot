@@ -557,7 +557,8 @@ slider_at :: proc(
 	dragging :=
 		is_mouse_button_down(frame, .LEFT) &&
 		frame.interaction.press_seen &&
-		point_in_rect(press, rect_f32(hit))
+		point_in_rect(press, rect_f32(hit)) &&
+		interact_clip_contains(frame, frame.interaction.press_pos)
 	it := interact(frame, rect_f32(hit))
 	hovered := it.hovered
 	focus_opt_click(frame, focus, hit.x, hit.y, hit.w, hit.h)

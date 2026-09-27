@@ -81,6 +81,7 @@ when CAPTURE {
 		{"gallery-inputs-light.png", .Inputs, .Light},
 		{"gallery-stress-dark.png", .Stress, .Dark},
 		{"gallery-theme-terra.png", .Theme, .Terra},
+		{"gallery-theme-pixel.png", .Theme, .Pixel},
 	}
 
 	// The GIF script: every section in order using the default Ingot theme,

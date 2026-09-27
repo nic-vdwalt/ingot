@@ -61,6 +61,10 @@ Surface_Cull_Bounds :: proc(surface: ^Surface) -> (top, bottom: i32) {
 Surface_Metrics :: proc(surface: ^Surface) -> Metrics {
 	u := surface_ui(surface)
 	metrics := ui.ui_frame_metrics(u.frame)
+	// Callers drawing their own geometry read card_radius directly, so it
+	// must agree with radius_pixels under a square-cornered theme.
+	card_radius := metrics.CARD_RADIUS_PX
+	if ui.ui_frame_theme(u.frame).square_corners do card_radius = 0
 	return {
 		font_title = metrics.FONT_SIZE_TITLE,
 		font_body = metrics.FONT_SIZE_BODY,
@@ -73,7 +77,7 @@ Surface_Metrics :: proc(surface: ^Surface) -> Metrics {
 		row_small = metrics.ROW_H_SM,
 		row_medium = metrics.ROW_H_MD,
 		panel_header_h = metrics.PANEL_HEADER_H,
-		card_radius = metrics.CARD_RADIUS_PX,
+		card_radius = card_radius,
 		control_box = metrics.CONTROL_BOX,
 		control_gap = metrics.CONTROL_GAP,
 		slider_track_h = metrics.SLIDER_TRACK_H,
@@ -162,6 +166,7 @@ theme_tokens :: proc(theme: ui.Theme) -> Theme_Tokens {
 		tape = Color(theme.tape_color),
 		substrate = from_substrate(theme.substrate.kind),
 		margin_rule = theme.substrate.margin_rule,
+		square_corners = theme.square_corners,
 	}
 }
 
@@ -493,10 +498,18 @@ Surface_Pane_Begin :: proc(
 	rect: Rect,
 	padding: i32 = 8,
 	keyboard: bool = true,
+	keyboard_unhovered: bool = false,
 ) -> i32 {
 	u := surface_ui(surface)
 	assert(state != nil, "Fit.Surface_Pane_Begin: nil state")
-	return ui.pane_begin(u.frame, &state.inner, to_rect(rect), pad = padding, keyboard = keyboard)
+	return ui.pane_begin(
+		u.frame,
+		&state.inner,
+		to_rect(rect),
+		pad = padding,
+		keyboard = keyboard,
+		keyboard_unhovered = keyboard_unhovered,
+	)
 }
 
 Surface_Pane_End :: proc(

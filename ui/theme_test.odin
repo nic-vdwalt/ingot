@@ -39,7 +39,7 @@ theme_runtime_glass_fullscreen_toggle :: proc(t: ^testing.T) {
 
 @(test)
 theme_palettes_are_readable :: proc(t: ^testing.T) {
-	palettes := [7]Theme {
+	palettes := [8]Theme {
 		theme_dark(),
 		theme_light(),
 		theme_retro_orange(),
@@ -47,6 +47,7 @@ theme_palettes_are_readable :: proc(t: ^testing.T) {
 		theme_retro_ingot(),
 		theme_retro_ingot_dark(),
 		theme_terra(),
+		theme_pixel(),
 	}
 	for pal in palettes {
 		testing.expect_value(t, pal.fg_primary.a, u8(255))
@@ -116,6 +117,29 @@ terra_theme_preserves_crt_channels_and_control_states :: proc(t: ^testing.T) {
 	testing.expect(t, style.bg_hover != style.surface_pressed)
 	testing.expect(t, style.substrate.kind == .Grid)
 	testing.expect(t, contrast_ratio(style.button_text, style.button_bg) >= MIN_TEXT_CONTRAST)
+}
+
+// The pixel palette is defined by what it leaves out as much as by its
+// colours: no rounding, no gloss, no glass. Each absence is asserted so a later
+// tweak that reintroduces one is caught rather than quietly softening the look.
+@(test)
+pixel_theme_is_square_flat_and_distinct :: proc(t: ^testing.T) {
+	style := theme_pixel()
+	testing.expect(t, style.square_corners)
+	testing.expect(t, style.substrate.kind == .Grid)
+	testing.expect_value(t, style.button_primary_grad_top.a, u8(0))
+	testing.expect_value(t, style.bg_app_windowed.a, u8(255))
+	testing.expect_value(t, style.bg_panel_windowed.a, u8(255))
+	testing.expect(t, style.button_bg != style.button_hover)
+	testing.expect(t, style.button_hover != style.button_pressed)
+	testing.expect(t, style.caption_hover != style.caption_pressed)
+	testing.expect(t, style.bg_hover != style.surface_pressed)
+	testing.expect(t, contrast_ratio(style.button_text, style.button_bg) >= MIN_TEXT_CONTRAST)
+	testing.expect_value(t, Theme_Validate(style).code, Theme_Validation_Code.Valid)
+	testing.expect(t, theme_reading_matrix_min_ratio(&style) >= MIN_TEXT_CONTRAST)
+	// Every other built-in palette keeps its rounded corners.
+	testing.expect(t, !theme_dark().square_corners)
+	testing.expect(t, !theme_terra().square_corners)
 }
 
 @(test)

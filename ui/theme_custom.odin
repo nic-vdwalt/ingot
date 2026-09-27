@@ -268,6 +268,12 @@ Theme_Set_Substrate :: proc(theme: ^Theme, substrate: Substrate) {
 	theme.substrate = substrate
 }
 
+Theme_Set_Square_Corners :: proc(theme: ^Theme, enabled: bool) {
+	assert(theme != nil, "Theme_Set_Square_Corners: nil theme")
+	theme.square_corners = enabled
+	assert(theme.square_corners == enabled, "Theme_Set_Square_Corners: flag not stored")
+}
+
 // tigerstyle: pure
 @(private = "file")
 theme_palette_colors_present :: proc(palette: Theme_Palette) -> bool {

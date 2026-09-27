@@ -80,9 +80,11 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	for kind in Substrate_Kind {
 		for margin in ([2]bool{false, true}) {
 			theme.substrate = {to_substrate(kind), margin}
+			theme.square_corners = margin
 			tokens := theme_tokens(theme)
 			testing.expect_value(t, tokens.substrate, kind)
 			testing.expect_value(t, tokens.margin_rule, margin)
+			testing.expect_value(t, tokens.square_corners, margin)
 			for names, index in theme_contract_fields {
 				field := reflect.struct_field_value_by_name(tokens, names[0])
 				testing.expect_value(t, field.id, typeid_of(Color))
@@ -94,7 +96,9 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	}
 	for name in reflect.struct_field_names(Theme_Tokens) {
 		matches := 0
-		if name == "substrate" || name == "margin_rule" do matches += 1
+		if name == "substrate" || name == "margin_rule" || name == "square_corners" {
+			matches += 1
+		}
 		for names in theme_contract_fields {
 			if names[0] == name do matches += 1
 		}
@@ -103,6 +107,19 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	testing.expect_value(
 		t,
 		reflect.struct_field_count(Theme_Tokens),
-		len(theme_contract_fields) + 2,
+		len(theme_contract_fields) + 3,
 	)
+}
+
+@(test)
+fit_theme_pixel_is_square_and_settable :: proc(t: ^testing.T) {
+	theme := Theme_Pixel()
+	testing.expect(t, theme.inner.square_corners)
+	testing.expect_value(t, Theme_Validate(theme).code, Theme_Validation_Code.Valid)
+	Theme_Set_Square_Corners(&theme, false)
+	testing.expect(t, !theme.inner.square_corners)
+	dark := Theme_Dark()
+	testing.expect(t, !dark.inner.square_corners)
+	Theme_Set_Square_Corners(&dark, true)
+	testing.expect(t, theme_tokens(dark.inner).square_corners)
 }

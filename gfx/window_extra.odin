@@ -69,6 +69,48 @@ when !INGOT_GFX_SDL3 {
 	ToggleFullscreen :: proc() {
 		context_toggle_fullscreen_impl(default_context())
 	}
+	context_set_fullscreen_impl :: proc(ctx: ^Context, fullscreen: bool) {
+		if ctx == nil || ctx.win == nil do return
+		window := glfw.WindowHandle(ctx.win)
+		when ODIN_OS == .Darwin {
+			if glfw.GetWindowMonitor(window) == nil {
+				_platform_native_fullscreen_toggle(ctx)
+				return
+			}
+		}
+		if fullscreen {
+			ctx.drop.windowed_x, ctx.drop.windowed_y = glfw.GetWindowPos(window)
+			ctx.drop.windowed_w, ctx.drop.windowed_h = glfw.GetWindowSize(window)
+			monitor := _window_current_monitor(window)
+			if monitor == nil do return
+			mode := glfw.GetVideoMode(monitor)
+			if mode == nil do return
+			glfw.SetWindowMonitor(window, monitor, 0, 0, mode.width, mode.height, mode.refresh_rate)
+		} else {
+			glfw.SetWindowMonitor(
+				window,
+				nil,
+				ctx.drop.windowed_x,
+				ctx.drop.windowed_y,
+				max(ctx.drop.windowed_w, 1),
+				max(ctx.drop.windowed_h, 1),
+				0,
+			)
+		}
+	}
+	@(private = "file")
+	_window_current_monitor :: proc(window: glfw.WindowHandle) -> glfw.MonitorHandle {
+		x, y := glfw.GetWindowPos(window)
+		w, h := glfw.GetWindowSize(window)
+		cx, cy := x + w / 2, y + h / 2
+		for monitor in glfw.GetMonitors() {
+			mx, my := glfw.GetMonitorPos(monitor)
+			mode := glfw.GetVideoMode(monitor)
+			if mode == nil do continue
+			if cx >= mx && cx < mx + mode.width && cy >= my && cy < my + mode.height do return monitor
+		}
+		return glfw.GetPrimaryMonitor()
+	}
 	context_restore_window :: proc(ctx: ^Context) {
 		if ctx != nil && ctx.win != nil do glfw.RestoreWindow(glfw.WindowHandle(ctx.win))
 	}

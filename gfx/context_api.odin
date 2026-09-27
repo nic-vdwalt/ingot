@@ -274,6 +274,20 @@ context_toggle_fullscreen :: proc(ctx: ^Context) {
 	context_toggle_fullscreen_impl(ctx)
 }
 
+// context_set_window_fullscreen sets fullscreen explicitly (no-op when the
+// window already matches). Native GLFW uses the monitor holding the window at
+// its current video mode (borderless, no mode switch); macOS windowed windows
+// enter a native Space like the green button.
+context_set_window_fullscreen :: proc(ctx: ^Context, fullscreen: bool) {
+	if ctx == nil do return
+	if context_is_window_fullscreen(ctx) == fullscreen do return
+	context_set_fullscreen_impl(ctx, fullscreen)
+}
+
+SetWindowFullscreen :: proc(fullscreen: bool) {
+	context_set_window_fullscreen(default_context(), fullscreen)
+}
+
 context_load_font_from_memory :: proc(
 	ctx: ^Context,
 	file_type: cstring,

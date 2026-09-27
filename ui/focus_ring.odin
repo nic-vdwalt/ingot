@@ -130,8 +130,11 @@ draw_focus_ring :: proc(frame: ^Ui_Frame, x, y, w, h: i32) {
 	// Round the ring with the same Radius.MD token the button fills use, offset
 	// by the inset so the ring stays concentric with the control's corners
 	// rather than following the old fixed BTN_ROUNDNESS ratio.
+	// Under square corners the inset alone would still round the ring, so it
+	// is dropped too: a square control needs a square ring to stay concentric.
 	min_dim := min(r.width, r.height)
-	radius_px := radius_pixels(frame, .MD, min_dim) + f32(inset)
+	radius_px := f32(0)
+	if !style.square_corners do radius_px = radius_pixels(frame, .MD, min_dim) + f32(inset)
 	roundness := clamp((radius_px * 2) / min_dim, 0, 1) if min_dim > 0 else 0
 	draw_rectangle_rounded_lines_ex(
 		frame,

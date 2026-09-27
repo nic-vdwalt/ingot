@@ -154,6 +154,13 @@ Theme :: struct {
 	// Substrate selects the page texture drawn behind panels and cards.
 	substrate:                  Substrate,
 
+	// square_corners resolves every Radius token to zero. Pixel art has no
+	// sub-pixel curves, and a rounded corner on a hard-edged palette reads as
+	// an anti-aliased smear. It lives on the theme rather than on each widget
+	// so the one radius choke point in tokens.odin switches every corner at
+	// once; the zero value keeps every existing palette rounded.
+	square_corners:             bool,
+
 	// Accessibility. reduced_motion snaps animations (hover ease, caret
 	// blink) to their final state for vestibular/motion-sensitive users.
 	reduced_motion:             bool,
@@ -1047,6 +1054,147 @@ theme_terra :: proc() -> Theme {
 		margin_rule = false,
 	}
 	return result
+}
+
+// theme_pixel is a limited-palette pixel-art theme drawn from the PICO-8
+// sixteen colours.
+//
+// Everything is opaque and flat: glass would blur the hard edges the look
+// depends on, and a gloss gradient is a sub-pixel effect a sprite cannot have.
+// Corners are squared through square_corners rather than per widget. Pure
+// PICO-8 red fails text contrast on navy, so the Danger ink uses the palette's
+// pink and the saturated red is kept for paint, where no text sits on it.
+theme_pixel :: proc() -> Theme {
+	result := THEME_DARK
+	night := Color{20, 16, 36, 255}
+	navy := Color{29, 43, 83, 255}
+	card := Color{24, 28, 56, 255}
+	code := Color{14, 12, 26, 255}
+	hover := Color{48, 62, 112, 255}
+	active := Color{60, 50, 110, 255}
+	pressed := Color{95, 87, 79, 255}
+	white := Color{255, 241, 232, 255}
+	grey := Color{194, 195, 199, 255}
+	lavender := Color{131, 118, 156, 255}
+	blue := Color{41, 173, 255, 255}
+	pink := Color{255, 119, 168, 255}
+	green := Color{0, 228, 54, 255}
+	orange := Color{255, 163, 0, 255}
+	yellow := Color{255, 236, 39, 255}
+	black := Color{0, 0, 0, 255}
+	result.bg_app_windowed = night
+	result.bg_chat_windowed = night
+	result.bg_panel_windowed = navy
+	result.bg_app_fullscreen = night
+	result.bg_chat_fullscreen = night
+	result.bg_panel_fullscreen = navy
+	result.bg_app = night
+	result.bg_chat = night
+	result.bg_panel = navy
+	result.bg_color = night
+	result.bg_secondary = navy
+	result.bg_active = active
+	result.bg_hover = hover
+	result.bg_input = code
+	result.bg_code = code
+	result.bg_popup = card
+	result.bg_selection = Color{126, 37, 83, 255}
+	result.bg_table_header = navy
+	result.bg_tool_card = card
+	result.bg_tool_card_hover = Color{36, 44, 86, 255}
+	result.bg_chip = Color{40, 48, 92, 255}
+	result.bg_chip_hover = Color{56, 70, 124, 255}
+	result.bg_user_card = navy
+	result.bg_band_error = Color{70, 16, 40, 255}
+	result.bg_plan_bar = Color{60, 50, 20, 255}
+	result.bg_plan_title = Color{44, 36, 20, 255}
+	result.bg_debug_title = active
+	result.bg_diff_add = Color{0, 60, 30, 255}
+	result.bg_diff_remove = Color{70, 16, 40, 255}
+	result.fg_primary = white
+	result.fg_heading = Color{255, 255, 255, 255}
+	result.fg_bold = Color{255, 255, 255, 255}
+	result.fg_secondary = grey
+	result.fg_label = grey
+	result.fg_muted_dim = lavender
+	result.fg_disabled = pressed
+	result.fg_accent = blue
+	result.fg_accent_light = Color{130, 200, 255, 255}
+	result.fg_bullet = blue
+	result.fg_user = Color{255, 204, 170, 255}
+	result.fg_assistant = Color{160, 230, 160, 255}
+	result.fg_tool = orange
+	result.fg_code_inline = orange
+	result.fg_plan = yellow
+	result.fg_planning = blue
+	result.fg_debug = Color{200, 160, 255, 255}
+	result.fg_debug_changed = orange
+	result.fg_debug_annotation = grey
+	result.fg_error = pink
+	result.fg_success = green
+	result.fg_diff_add = green
+	result.fg_diff_remove = pink
+	result.fg_diff_gutter = lavender
+	result.ink_faded = lavender
+	result.spell_error = pink
+	result.border_color = grey
+	result.border_subtle = lavender
+	result.border_user_card = lavender
+	result.badge_color = pink
+	result.merge_link_color = blue
+	result.button_bg = blue
+	result.button_hover = Color{120, 205, 255, 255}
+	result.button_pressed = Color{29, 120, 200, 255}
+	result.button_text = black
+	result.fg_on_accent = black
+	result.button_disabled_bg = Color{36, 32, 52, 255}
+	result.button_danger_bg = Color{126, 37, 83, 255}
+	result.button_danger_hover = Color{160, 40, 100, 255}
+	result.button_danger_fg = pink
+	result.surface_pressed = pressed
+	result.focus_ring = yellow
+	theme_pixel_materials(&result, navy, blue, green, orange)
+	return result
+}
+
+// theme_pixel_materials fills the flat, hard-edged effects and the paint
+// table. Split from theme_pixel only to keep that procedure inside the
+// 100-line limit; the two are one palette.
+@(private = "file")
+theme_pixel_materials :: proc(result: ^Theme, navy, blue, green, orange: Color) {
+	assert(result != nil, "theme_pixel_materials: nil theme")
+	assert(navy.a == 255 && blue.a == 255, "theme_pixel_materials: translucent base colour")
+	result.modal_dim = Color{0, 0, 0, 190}
+	// A near-opaque black offset reads as a hard pixel drop shadow rather
+	// than as the soft ambient shadow the screen palettes imitate.
+	result.shadow_color = Color{0, 0, 0, 220}
+	result.button_primary_grad_top = Color{0, 0, 0, 0}
+	result.button_primary_grad_bottom = Color{0, 0, 0, 0}
+	result.caption_hover = Color{48, 62, 112, 255}
+	result.caption_pressed = Color{95, 87, 79, 255}
+	result.caption_close_hover = Color{255, 0, 77, 255}
+	result.caption_close_pressed = Color{126, 37, 83, 255}
+	result.drop_zone_bg = Color{29, 43, 83, 235}
+	result.drop_zone_border = Color{255, 236, 39, 255}
+	result.wave_color_a = navy
+	result.wave_color_b = blue
+	result.paper_rule = Color{40, 36, 70, 255}
+	// One literal over the whole enum rather than per-pigment stores, so a
+	// pigment added later without a value here is visibly missing from it.
+	result.pigments = {
+		.Accent  = blue,
+		.Danger  = Color{255, 0, 77, 255},
+		.Success = green,
+		.Tool    = orange,
+		.Earth   = Color{171, 82, 54, 255},
+		.Leaf    = Color{0, 135, 81, 255},
+	}
+	result.substrate = {
+		kind        = .Grid,
+		margin_rule = false,
+	}
+	result.square_corners = true
+	assert(result.substrate.kind == .Grid, "theme_pixel_materials: substrate not stored")
 }
 
 // theme_high_contrast returns the built-in high-contrast palette.

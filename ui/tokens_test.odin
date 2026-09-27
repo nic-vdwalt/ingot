@@ -30,10 +30,10 @@ all_surfaces :: proc() -> [13]Surface {
 }
 
 // Every palette the library ships. The token guarantees are palette-independent
-// by design, so they are checked against all eight rather than a representative
+// by design, so they are checked against all nine rather than a representative
 // one; every defect these tests replace was itself palette-specific.
-token_themes :: proc() -> [8]Theme {
-	return [8]Theme {
+token_themes :: proc() -> [9]Theme {
+	return [9]Theme {
 		THEME_DARK,
 		THEME_LIGHT,
 		THEME_HIGH_CONTRAST,
@@ -42,6 +42,7 @@ token_themes :: proc() -> [8]Theme {
 		theme_retro_ingot(),
 		theme_retro_ingot_dark(),
 		theme_terra(),
+		theme_pixel(),
 	}
 }
 
@@ -229,6 +230,28 @@ radius_segments_stay_bounded :: proc(t: ^testing.T) {
 	}
 	// Monotonic: a larger radius may never tessellate more coarsely.
 	testing.expect(t, radius_segments(20) >= radius_segments(4))
+}
+
+// A square-cornered theme must zero every radius token, Pill included, and the
+// flag must not outlive its theme: switching back to a rounded palette in the
+// same runtime has to restore the curve.
+@(test)
+square_corners_zero_every_radius :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	ui_runtime_set_theme(&runtime, theme_pixel())
+	frame: Ui_Frame
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	rect := Rectangle{0, 0, 80, 40}
+	for radius in Radius {
+		testing.expect_value(t, radius_pixels(&frame, radius, 40), f32(0))
+		testing.expect_value(t, radius_ratio(&frame, radius, rect), f32(0))
+	}
+	ui_runtime_set_theme(&runtime, theme_dark())
+	testing.expect(t, radius_pixels(&frame, .MD, 40) > 0)
+	testing.expect(t, radius_pixels(&frame, .Pill, 40) > 0)
 }
 
 // Tint levels must be ordered and distinct, since they are consumed as a

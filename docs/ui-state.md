@@ -108,11 +108,14 @@ Two rules follow from this, and both are enforced rather than advisory:
   role instead, as `surface_pressed` does.
 
 Palettes are values, not code: the built-in dark, light, high-contrast, Terra,
-Retro Orange, and Ingot constructors include explicit branded light and dark
-variants. They return plain `Theme` structs swapped at runtime by
+Pixel, Retro Orange, and Ingot constructors include explicit branded light and
+dark variants. They return plain `Theme` structs swapped at runtime by
 `ui_runtime_set_theme`. A palette disables an effect by zeroing its alpha rather
 than by a branch at the draw site, which is how the high-contrast theme opts out
-of shadows and the screen themes opt out of paper materials.
+of shadows and the screen themes opt out of paper materials. Shape follows the
+same rule: `Theme.square_corners` makes `radius_pixels` answer zero for every
+`Radius` token, which is how the Pixel theme squares every corner without a
+branch in any widget.
 
 ## Custom themes
 

@@ -57,6 +57,11 @@ when INGOT_GFX_SDL3 {
 
 	ToggleFullscreen :: proc() {context_toggle_fullscreen_impl(default_context())}
 
+	context_set_fullscreen_impl :: proc(ctx: ^Context, fullscreen: bool) {
+		if ctx == nil || ctx.win == nil do return
+		_ = sdl.SetWindowFullscreen(_sdl_window(ctx), fullscreen)
+	}
+
 	context_restore_window :: proc(ctx: ^Context) {
 		if ctx != nil && ctx.win != nil do _ = sdl.RestoreWindow(_sdl_window(ctx))
 	}

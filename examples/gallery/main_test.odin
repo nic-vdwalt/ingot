@@ -254,7 +254,7 @@ nav_strip_never_pushes_content_below_zero :: proc(t: ^testing.T) {
 @(test)
 gallery_contract_keeps_sections_geometry_and_stress_scale :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(Section), 9)
-	testing.expect_value(t, len(Palette), 9)
+	testing.expect_value(t, len(Palette), 10)
 	testing.expect_value(t, palette, Palette.Ingot)
 	testing.expect_value(t, len(SECTION_NAMES), len(Section))
 	testing.expect_value(t, len(SECTION_LAYERS), len(Section))

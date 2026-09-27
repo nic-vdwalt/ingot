@@ -33,6 +33,18 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - `fit.Builder_Text_Input_Options.focus_request` (`ui.Prepared_Text_Input.focus_request`):
   a one-shot `^bool` that focuses the input on its next visible frame and is
   then cleared, so an app can move the caret into a composer after navigation.
+- **Pixel theme**: `ui.theme_pixel` / `fit.Theme_Pixel`, a limited-palette
+  pixel-art theme built on the PICO-8 colours. It is opaque and flat (no glass,
+  no button gloss), casts hard offset shadows, draws a faint Grid substrate,
+  and squares every corner. The gallery adds it to the palette cycle and the
+  capture set (`gallery-theme-pixel.png`).
+- `Theme.square_corners`: when set, `radius_pixels` resolves every `Radius`
+  token (including `Pill`) to zero and the focus ring is drawn square, so a
+  theme can drop rounding without changes at call sites. Defaults to `false`,
+  so existing palettes are unchanged. Set it with `ui.Theme_Set_Square_Corners`
+  / `fit.Theme_Set_Square_Corners`, and read it back as
+  `fit.Theme_Tokens.square_corners`. Under the flag, `fit.Metrics.card_radius`
+  reports `0`.
 
 ### Changed
 
