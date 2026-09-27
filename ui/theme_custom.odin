@@ -280,6 +280,15 @@ Theme_Set_Font_Face :: proc(theme: ^Theme, face: Font_Face) {
 	theme.font_face = face
 }
 
+Theme_Set_Reading_Font_Face :: proc(theme: ^Theme, face: Font_Face) {
+	assert(theme != nil, "Theme_Set_Reading_Font_Face: nil theme")
+	assert(
+		face >= min(Font_Face) && face <= max(Font_Face),
+		"Theme_Set_Reading_Font_Face: invalid face",
+	)
+	theme.reading_font_face = face
+}
+
 Theme_Set_Surface_Style :: proc(theme: ^Theme, style: Surface_Style) {
 	assert(theme != nil, "Theme_Set_Surface_Style: nil theme")
 	assert(

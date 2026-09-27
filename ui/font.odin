@@ -239,7 +239,7 @@ frame_font_for_size :: proc(frame: ^Ui_Frame, size: i32) -> Font_Id {
 	assert(size > 0, "frame_font_for_size: invalid size")
 	assert(frame.runtime != nil, "frame_font_for_size: nil runtime")
 	epoch := frame.runtime.font_epoch
-	face := frame.runtime.style.font_face
+	face := frame_font_face(frame)
 	if size == frame.font_memo_size &&
 	   epoch == frame.font_memo_epoch &&
 	   face == frame.font_memo_face {
@@ -272,7 +272,8 @@ PIXEL_FONT_GRID_PX :: 16
 frame_text_size :: proc(frame: ^Ui_Frame, size: i32) -> i32 {
 	assert(frame != nil && frame.runtime != nil, "frame_text_size: invalid frame")
 	assert(size > 0, "frame_text_size: invalid size")
-	if frame.runtime.style.font_face != .Pixel do return size
+	face := frame_font_face(frame)
+	if face != .Pixel do return size
 	result := pixel_text_size(size, frame.runtime.text.font_dpi)
 	assert(result > 0, "frame_text_size: quantised size is not positive")
 	return result

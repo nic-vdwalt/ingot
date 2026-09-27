@@ -166,6 +166,11 @@ Theme :: struct {
 	// pixel art, so the face belongs to the theme with the colours. The zero
 	// value keeps every existing palette on the monospace face.
 	font_face:                  Font_Face,
+	// reading_font_face is the face long-form text draws with inside a reading
+	// region (frame_reading_begin). A pixel face suits short chrome labels but
+	// tires the eye over paragraphs and breaks code alignment, so a pixel theme
+	// can keep its chrome pixel while transcripts stay on the monospace face.
+	reading_font_face:          Font_Face,
 	// surface_style selects how material.odin paints surfaces. The Pixel style
 	// swaps rounded fills and soft shadows for notched corners, bevels and
 	// hard integer-offset shadows at that one choke point, so no widget has to
@@ -1246,6 +1251,7 @@ theme_pixel_materials :: proc(result: ^Theme, navy, blue, green, orange: Color) 
 	}
 	result.square_corners = true
 	result.font_face = .Pixel
+	result.reading_font_face = .Mono
 	result.surface_style = .Pixel
 	// PICO-8 light grey and black: the two inks a PICO-8 sprite uses for a
 	// raised edge, so the bevel stays inside the sixteen-colour set.
@@ -1331,7 +1337,9 @@ theme_reading_matrix_min_ratio :: proc(style: ^Theme) -> f64 {
 ui_runtime_apply_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
 	assert(runtime != nil, "apply_theme: nil runtime")
 	assert(runtime.initialized, "apply_theme: runtime not initialized")
-	face_changed := runtime.style.font_face != value.font_face
+	face_changed :=
+		runtime.style.font_face != value.font_face ||
+		runtime.style.reading_font_face != value.reading_font_face
 	runtime.style = value
 	// A theme is usually applied mid-frame (a settings click) after the open
 	// paint list already recorded Font_Ids, so the backend table must survive

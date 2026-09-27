@@ -50,6 +50,9 @@ MAX_PANE_SCOPES :: 16
 // one application tier between two of them without an unbounded stack.
 MAX_Z_SCOPES :: 8
 MAX_MODAL_STACK :: 8
+// Reading regions nest (a height pass that prepares a layout that draws), but
+// never deeply; the cap turns a leaked begin in a loop into an assertion.
+READING_DEPTH_MAX :: 8
 
 Ui_Frame_Phase :: enum u8 {
 	Closed,
@@ -86,6 +89,9 @@ Ui_Frame :: struct {
 	font_memo_id:                   Font_Id,
 	font_memo_epoch:                u64,
 	font_memo_face:                 Font_Face,
+	// reading_depth counts open reading regions. While positive, text draws
+	// and measures in the theme's reading face instead of its chrome face.
+	reading_depth:                  i32,
 	text_cull_top:                  i32,
 	text_cull_bottom:               i32,
 	open_roots:                     int,
@@ -278,6 +284,32 @@ ui_runtime_set_scale_hooks :: proc(
 	runtime.scale_invalidate_hook = invalidate_hook
 }
 
+// frame_reading_begin opens a reading region: text drawn or measured until
+// the matching frame_reading_end uses the theme's reading face. Measurement
+// and drawing of the same text must both happen inside a region, or its
+// wrapped layout will not match what is painted.
+frame_reading_begin :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "frame_reading_begin: invalid frame")
+	assert(frame.reading_depth >= 0, "frame_reading_begin: negative depth")
+	assert(frame.reading_depth < READING_DEPTH_MAX, "frame_reading_begin: too deep")
+	frame.reading_depth += 1
+}
+
+frame_reading_end :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "frame_reading_end: invalid frame")
+	assert(frame.reading_depth > 0, "frame_reading_end: no open reading region")
+	frame.reading_depth -= 1
+}
+
+// frame_font_face is the face text drawn at this point of the frame uses.
+frame_font_face :: proc(frame: ^Ui_Frame) -> Font_Face {
+	assert(frame != nil && frame.runtime != nil, "frame_font_face: invalid frame")
+	assert(frame.reading_depth >= 0, "frame_font_face: negative depth")
+	style := &frame.runtime.style
+	if frame.reading_depth > 0 do return style.reading_font_face
+	return style.font_face
+}
+
 @(private = "file")
 ui_runtime_flush_font_reset :: proc(runtime: ^Ui_Runtime) {
 	assert(runtime != nil && runtime.initialized, "flush_font_reset: invalid runtime")
@@ -312,6 +344,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame.font_memo_size = 0
 	frame.font_memo_id = 0
 	frame.font_memo_epoch = runtime.font_epoch
+	frame.reading_depth = 0
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
 	frame.open_roots = 0
@@ -358,6 +391,7 @@ ui_frame_finalize :: proc(frame: ^Ui_Frame) {
 	assert(frame.open_roots == 0 && frame.pane_count == 0 && !frame.overlay.open)
 	frame.phase = .Finalize
 	assert(frame.z_count == 0, "ui_frame_finalize: unbalanced z scope")
+	assert(frame.reading_depth == 0, "ui_frame_finalize: unbalanced reading region")
 	if frame.output != nil {
 		// Report the leaking begin_scissor_mode call site: the depth alone
 		// says nothing about which view forgot to pop.
