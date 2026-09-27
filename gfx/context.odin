@@ -199,86 +199,86 @@ Context_Lifecycle :: enum u8 {
 }
 
 Context :: struct {
-	id:                         u32,
-	epoch:                      u64,
-	lifecycle:                  Context_Lifecycle,
-	win:                        Window_Handle,
-	instance:                   wg.Instance,
-	surface:                    wg.Surface,
-	adapter:                    wg.Adapter,
-	device:                     wg.Device,
-	queue:                      wg.Queue,
-	format:                     wg.TextureFormat,
-	config:                     wg.SurfaceConfiguration,
-	config_flags:               ConfigFlags,
-	activation_retries_pending: u8,
-	application_was_active:     bool,
-	activation_next_at:         f64,
-	activation_view:            rawptr,
+	id:                          u32,
+	epoch:                       u64,
+	lifecycle:                   Context_Lifecycle,
+	win:                         Window_Handle,
+	instance:                    wg.Instance,
+	surface:                     wg.Surface,
+	adapter:                     wg.Adapter,
+	device:                      wg.Device,
+	queue:                       wg.Queue,
+	format:                      wg.TextureFormat,
+	config:                      wg.SurfaceConfiguration,
+	config_flags:                ConfigFlags,
+	activation_retries_pending:  u8,
+	application_was_active:      bool,
+	activation_next_at:          f64,
+	activation_view:             rawptr,
 	// Pool sizes negotiated against the adapter's reported limits before the
 	// device was requested (limits.odin). The renderer and font atlas size
 	// themselves from this rather than from desktop constants.
-	budget:                     Gpu_Budget,
+	budget:                      Gpu_Budget,
 
 	// logical (point) size - what GetScreenWidth/Height and the ortho
 	// projection use; physical framebuffer may be larger under HiDPI.
-	width, height:              i32,
-	fb_width, fb_height:        i32,
-	dpi:                        f32,
-	force_reconfigure:          bool,
+	width, height:               i32,
+	fb_width, fb_height:         i32,
+	dpi:                         f32,
+	force_reconfigure:           bool,
 	// Whether the surface offered .Immediate at setup; gates context_set_vsync.
 	present_immediate_supported: bool,
 	// Set once the browser revoked the WebGPU device. Terminal: frames stop
 	// and the host page offers a reload (platform_web.odin).
-	device_lost:                bool,
+	device_lost:                 bool,
 	// Set by _maybe_reconfigure when the logical size changed at the start of
 	// this frame, so IsWindowResized answers for the frame the caller is in.
-	resized_this_frame:         bool,
+	resized_this_frame:          bool,
 
 	// requested window size, stashed at InitWindow for _gpu_finish (needed
 	// because on web the GPU device resolves asynchronously, after InitWindow
 	// has returned).
-	pending_w, pending_h:       i32,
-	frame:                      Frame_State,
+	pending_w, pending_h:        i32,
+	frame:                       Frame_State,
 
 	// timing
-	start_time_s:               f64,
-	last_time:                  f64,
-	frame_time:                 f32, // clamped to MAX_FRAME_TIME (what GetFrameTime returns)
-	real_frame_time:            f32, // unclamped, for GetFPS accuracy
-	target_fps:                 i32,
+	start_time_s:                f64,
+	last_time:                   f64,
+	frame_time:                  f32, // clamped to MAX_FRAME_TIME (what GetFrameTime returns)
+	real_frame_time:             f32, // unclamped, for GetFPS accuracy
+	target_fps:                  i32,
 
 	// event-driven frame scheduling (idle.odin)
-	idle:                       Idle_State,
+	idle:                        Idle_State,
 
 	// renderer (batch.odin)
-	rend:                       Renderer,
-	cam2d:                      Camera2D,
-	cam2d_saved:                Affine,
-	cam2d_active:               bool,
-	cam3d_active:               bool,
-	cam3d_vp:                   Matrix,
-	cam3d_proj:                 Matrix,
-	cam3d_view:                 Matrix,
-	cam3d:                      Camera3D,
-	cam3d_right:                Vector3,
-	cam3d_up:                   Vector3,
-	cam3d_fwd:                  Vector3,
-	cam3d_projection_available: bool,
-	resources:                  Graphics_Resources,
-	stats_current:              Renderer_Stats,
-	stats_latest:               Renderer_Stats,
-	gpu_timing:                 Gpu_Timing_State,
-	screenshot:                 Screenshot_Map,
-	delivery:                   Frame_Delivery_State,
+	rend:                        Renderer,
+	cam2d:                       Camera2D,
+	cam2d_saved:                 Affine,
+	cam2d_active:                bool,
+	cam3d_active:                bool,
+	cam3d_vp:                    Matrix,
+	cam3d_proj:                  Matrix,
+	cam3d_view:                  Matrix,
+	cam3d:                       Camera3D,
+	cam3d_right:                 Vector3,
+	cam3d_up:                    Vector3,
+	cam3d_fwd:                   Vector3,
+	cam3d_projection_available:  bool,
+	resources:                   Graphics_Resources,
+	stats_current:               Renderer_Stats,
+	stats_latest:                Renderer_Stats,
+	gpu_timing:                  Gpu_Timing_State,
+	screenshot:                  Screenshot_Map,
+	delivery:                    Frame_Delivery_State,
 
 	// input (input.odin)
-	inp:                        Input,
-	drop:                       Drop_State,
-	a11y:                       A11y_State,
-	submissions:                Submission_Tracker,
-	initialized:                bool,
-	composite_alpha:            wg.CompositeAlphaMode,
+	inp:                         Input,
+	drop:                        Drop_State,
+	a11y:                        A11y_State,
+	submissions:                 Submission_Tracker,
+	initialized:                 bool,
+	composite_alpha:             wg.CompositeAlphaMode,
 }
 
 // Retired_Texture is one texture's GPU handles awaiting end-of-frame
@@ -690,6 +690,22 @@ _surface_present_mode :: proc(flags: ConfigFlags, supported: []wg.PresentMode) -
 }
 
 @(private)
+_surface_alpha_mode :: proc(
+	flags: ConfigFlags,
+	supported: []wg.CompositeAlphaMode,
+) -> wg.CompositeAlphaMode {
+	if .WINDOW_TRANSPARENT not_in flags do return .Opaque
+	// pick a surface-supported non-opaque mode for the transparent backdrop
+	want := [?]wg.CompositeAlphaMode{.Premultiplied, .Unpremultiplied, .Inherit, .Auto}
+	for wanted in want {
+		for mode in supported {
+			if mode == wanted do return wanted
+		}
+	}
+	return .Opaque
+}
+
+@(private)
 _gpu_finish :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_gpu_finish: nil context")
 	if ctx.surface == nil || ctx.adapter == nil || ctx.device == nil || ctx.queue == nil {
@@ -729,19 +745,7 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 	ctx.fb_width, ctx.fb_height = fbw, fbh
 	ctx.dpi = platform_content_scale(ctx)
 
-	alpha: wg.CompositeAlphaMode = .Opaque
-	if .WINDOW_TRANSPARENT in ctx.config_flags {
-		// pick a surface-supported non-opaque mode for the transparent backdrop
-		want := [?]wg.CompositeAlphaMode{.Premultiplied, .Unpremultiplied, .Inherit, .Auto}
-		outer: for w in want {
-			for i in 0 ..< int(caps.alphaModeCount) {
-				if caps.alphaModes[i] == w {
-					alpha = w
-					break outer
-				}
-			}
-		}
-	}
+	alpha := _surface_alpha_mode(ctx.config_flags, caps.alphaModes[:caps.alphaModeCount])
 	ctx.composite_alpha = alpha
 	_stats_set_alpha_mode(ctx, alpha)
 	ctx.present_immediate_supported = false

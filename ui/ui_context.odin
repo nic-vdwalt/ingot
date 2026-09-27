@@ -28,6 +28,9 @@ Ui_Runtime :: struct {
 	// values are indices into that table, so anything holding one across a
 	// reset is holding a dangling handle.
 	font_epoch:            u64,
+	// Set by a font-face change; the backend reset runs at the next frame
+	// begin, once no recorded paint command still names the old table.
+	font_reset_pending:    bool,
 	pending_a11y:          A11y_Pending_Action,
 	semantics_enabled:     bool,
 	// focus_visible carries the focus-visible modality across frames: the
@@ -275,6 +278,19 @@ ui_runtime_set_scale_hooks :: proc(
 	runtime.scale_invalidate_hook = invalidate_hook
 }
 
+@(private = "file")
+ui_runtime_flush_font_reset :: proc(runtime: ^Ui_Runtime) {
+	assert(runtime != nil && runtime.initialized, "flush_font_reset: invalid runtime")
+	if !runtime.font_reset_pending do return
+	runtime.font_reset_pending = false
+	if runtime.text_backend.reset == nil do return
+	runtime.text_backend.reset(runtime.text_backend.data)
+	assert(runtime.font_epoch < max(u64), "flush_font_reset: font epoch exhausted")
+	runtime.font_epoch += 1
+	clear_measure_cache_with(&runtime.text)
+	clear_wrap_cache_with(&runtime.text)
+}
+
 ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input = nil) {
 	assert(frame != nil && runtime != nil, "ui_frame_begin: nil frame or runtime")
 	assert(runtime.initialized && !frame.open, "ui_frame_begin: invalid lifetime")
@@ -287,6 +303,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	ui_runtime_update_focus_modality(runtime, frame.input)
 	if frame.output != nil do ui_output_reset(frame.output)
 	a11y_expire_before_frame(runtime)
+	ui_runtime_flush_font_reset(runtime)
 	frame.runtime = runtime
 	frame.cursor.requested = .DEFAULT
 	frame.overlay = {}

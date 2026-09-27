@@ -91,6 +91,11 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Fixed
 
+- macOS (GLFW backend): modifier keys whose release was consumed by the system
+  (Spotlight, screenshot chords, menu key equivalents) no longer latch down and
+  block all typing until the app is re-focused. After each event pump, `gfx`
+  releases any modifier the hardware state (`+[NSEvent modifierFlags]`)
+  reports as up.
 - Width-dependent leaves inside a prepared attachment (wrapped labels, growing
   text inputs, custom leaves) were measured at width 0 in the resolved pass
   because width assignment skipped attachment subtrees. The attachment child

@@ -1063,6 +1063,13 @@ theme_terra :: proc() -> Theme {
 	result.fg_diff_gutter = phosphor_faint
 	result.ink_faded = phosphor_faint
 	result.spell_error = danger
+	_theme_terra_controls(&result, phosphor_bright, amber)
+	return result
+}
+
+@(private = "file")
+_theme_terra_controls :: proc(result: ^Theme, phosphor_bright: Color, amber: Color) {
+	assert(result != nil, "_theme_terra_controls: nil theme")
 	result.border_color = Color{46, 120, 86, 255}
 	result.border_subtle = Color{26, 66, 48, 255}
 	result.border_user_card = Color{26, 66, 48, 255}
@@ -1096,7 +1103,6 @@ theme_terra :: proc() -> Theme {
 		kind        = .Grid,
 		margin_rule = false,
 	}
-	return result
 }
 
 // theme_pixel is a limited-palette pixel-art theme drawn from the PICO-8
@@ -1327,11 +1333,12 @@ ui_runtime_apply_theme :: proc(runtime: ^Ui_Runtime, value: Theme) {
 	assert(runtime.initialized, "apply_theme: runtime not initialized")
 	face_changed := runtime.style.font_face != value.font_face
 	runtime.style = value
-	// A new face invalidates every loaded font and every cached width, so the
-	// reset publishes a new epoch exactly as a scale change does: a frame's
-	// memoised Font_Id would otherwise name a font of the other face.
+	// A theme is usually applied mid-frame (a settings click) after the open
+	// paint list already recorded Font_Ids, so the backend table must survive
+	// until the next frame begins. The epoch bump alone makes this frame's
+	// remaining lookups load the new face beside the old one.
 	if face_changed {
-		if runtime.text_backend.reset != nil do runtime.text_backend.reset(runtime.text_backend.data)
+		runtime.font_reset_pending = true
 		assert(runtime.font_epoch < max(u64), "apply_theme: font epoch exhausted")
 		runtime.font_epoch += 1
 		clear_measure_cache_with(&runtime.text)

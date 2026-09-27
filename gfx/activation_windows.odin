@@ -22,6 +22,11 @@ _platform_activation_poll :: proc(ctx: ^Context) {
 }
 
 @(private)
+_platform_modifier_reconcile :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_platform_modifier_reconcile: nil context")
+}
+
+@(private)
 _platform_activation_wait_timeout :: proc(ctx: ^Context, timeout: f64) -> f64 {
 	assert(ctx != nil, "_platform_activation_wait_timeout: nil context")
 	return timeout

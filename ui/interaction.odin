@@ -175,7 +175,12 @@ interact_clip_push :: proc(frame: ^Ui_Frame, rect: Rectangle) {
 	state := &frame.interaction
 	assert(state.hit_clip_count < HIT_CLIP_CAP, "interact_clip_push: clip stack full")
 	origin := frame_pane_origin(frame)
-	clip := Rectangle{rect.x + origin.x, rect.y + origin.y, max(rect.width, 0), max(rect.height, 0)}
+	clip := Rectangle {
+		rect.x + origin.x,
+		rect.y + origin.y,
+		max(rect.width, 0),
+		max(rect.height, 0),
+	}
 	if state.hit_clip_count > 0 {
 		parent := state.hit_clips[state.hit_clip_count - 1]
 		x0 := max(parent.x, clip.x)
@@ -204,6 +209,11 @@ interact_clip_contains :: proc(frame: ^Ui_Frame, point: Vector2) -> bool {
 
 @(private = "file")
 _interact_clip_allows :: proc(state: ^Interaction_State, point: Vector2) -> bool {
+	assert(state != nil, "_interact_clip_allows: nil state")
+	assert(
+		state.hit_clip_count >= 0 && state.hit_clip_count <= HIT_CLIP_CAP,
+		"_interact_clip_allows: clip count out of range",
+	)
 	if state.hit_clip_count == 0 do return true
 	return point_in_rect(point, state.hit_clips[state.hit_clip_count - 1])
 }

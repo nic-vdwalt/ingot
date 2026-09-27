@@ -197,6 +197,7 @@ when !INGOT_GFX_SDL3 {
 	platform_poll_events :: proc(ctx: ^Context) {
 		assert(ctx != nil, "platform_poll_events: nil context")
 		glfw.PollEvents()
+		_platform_modifier_reconcile(ctx)
 		_platform_activation_poll(ctx)
 	}
 
@@ -207,6 +208,7 @@ when !INGOT_GFX_SDL3 {
 	platform_wait_events :: proc(timeout: f64, ctx: ^Context) {
 		assert(ctx != nil, "platform_wait_events: nil context")
 		glfw.WaitEventsTimeout(_platform_activation_wait_timeout(ctx, timeout))
+		_platform_modifier_reconcile(ctx)
 		_platform_activation_poll(ctx)
 	}
 

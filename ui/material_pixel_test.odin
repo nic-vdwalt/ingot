@@ -103,6 +103,34 @@ font_face_change_bumps_font_epoch :: proc(t: ^testing.T) {
 }
 
 @(test)
+font_face_change_defers_backend_reset_to_next_frame :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	state: Scale_Reset_State
+	runtime.text_backend = {
+		data  = &state,
+		reset = scale_reset_count,
+	}
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+
+	ui_frame_begin(&frame, &runtime)
+	ui_runtime_apply_theme(&runtime, theme_pixel())
+	testing.expect_value(t, state.count, 0)
+	ui_frame_end(&frame)
+	testing.expect_value(t, state.count, 0)
+
+	ui_frame_begin(&frame, &runtime)
+	testing.expect_value(t, state.count, 1)
+	ui_frame_end(&frame)
+
+	ui_frame_begin(&frame, &runtime)
+	testing.expect_value(t, state.count, 1)
+	ui_frame_end(&frame)
+}
+
+@(test)
 pixel_surfaces_paint_only_rectangles :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

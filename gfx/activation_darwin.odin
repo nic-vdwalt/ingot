@@ -13,6 +13,47 @@ Focus_NS_Window :: struct {
 	using _: intrinsics.objc_object,
 }
 
+@(objc_class = "NSEvent")
+@(private = "file")
+Focus_NS_Event :: struct {
+	using _: intrinsics.objc_object,
+}
+
+@(private = "file")
+NS_MODIFIER_SHIFT :: uint(1 << 17)
+@(private = "file")
+NS_MODIFIER_CONTROL :: uint(1 << 18)
+@(private = "file")
+NS_MODIFIER_OPTION :: uint(1 << 19)
+@(private = "file")
+NS_MODIFIER_COMMAND :: uint(1 << 20)
+
+// +[NSEvent modifierFlags] reports the current hardware modifier state,
+// independent of which app or window received the key events.
+@(private)
+_platform_held_modifiers :: proc() -> (held: Modifier_Families, known: bool) {
+	flags := intrinsics.objc_send(uint, Focus_NS_Event, "modifierFlags")
+	if flags & NS_MODIFIER_SHIFT != 0 do held += {.Shift}
+	if flags & NS_MODIFIER_CONTROL != 0 do held += {.Control}
+	if flags & NS_MODIFIER_OPTION != 0 do held += {.Alt}
+	if flags & NS_MODIFIER_COMMAND != 0 do held += {.Super}
+	return held, true
+}
+
+@(private)
+_platform_modifier_reconcile :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_platform_modifier_reconcile: nil context")
+	if ctx.win == nil do return
+	held, known := _platform_held_modifiers()
+	if !known do return
+	released := _input_release_stale_modifiers(&ctx.inp, held)
+	if released == 0 do return
+	_idle_note_activity(&ctx.idle)
+	when INGOT_FOCUS_TRACE {
+		fmt.eprintfln("[ingot focus] released %d stale modifier key(s) held=%v", released, held)
+	}
+}
+
 @(private = "file")
 _darwin_activate_application :: proc(application: ^NS.Application) {
 	assert(application != nil, "_darwin_activate_application: nil application")

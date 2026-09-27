@@ -85,7 +85,15 @@ when !INGOT_GFX_SDL3 {
 			if monitor == nil do return
 			mode := glfw.GetVideoMode(monitor)
 			if mode == nil do return
-			glfw.SetWindowMonitor(window, monitor, 0, 0, mode.width, mode.height, mode.refresh_rate)
+			glfw.SetWindowMonitor(
+				window,
+				monitor,
+				0,
+				0,
+				mode.width,
+				mode.height,
+				mode.refresh_rate,
+			)
 		} else {
 			glfw.SetWindowMonitor(
 				window,

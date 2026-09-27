@@ -90,7 +90,11 @@ tactile_surfaces_preserve_palette_and_bound_paint :: proc(t: ^testing.T) {
 		}) {
 		ui_runtime_set_theme(&runtime, theme)
 		ui_frame_begin(&frame, &runtime, &input)
+		// Pixel surfaces are notched, bevelled rectangle unions bounded by
+		// pixel_surfaces_paint_only_rectangles, not the two-command smooth budget.
+		smooth := theme.surface_style != .Pixel
 		for surface in Surface {
+			if !smooth do break
 			for state in Visual_State {
 				output.main.count = 0
 				rect := Rectangle{10, 10, 80, 30}

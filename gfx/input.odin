@@ -233,6 +233,54 @@ _stage_char :: proc "contextless" (inp: ^Input, value: rune) {
 	inp.st_char_t = nt
 }
 
+Modifier_Family :: enum u8 {
+	Shift,
+	Control,
+	Alt,
+	Super,
+}
+
+Modifier_Families :: bit_set[Modifier_Family;u8]
+
+// _input_release_stale_modifiers stages a release for every modifier key that
+// input believes is down while the OS reports its family released. A missed
+// flagsChanged release (Spotlight, screenshot chords, menu equivalents) leaves
+// key_down latched, which makes every typed character look like a shortcut.
+// Release-only: it never synthesizes a press. Returns the number of keys
+// released so callers can wake the frame loop.
+@(private)
+_input_release_stale_modifiers :: proc(inp: ^Input, held: Modifier_Families) -> int {
+	assert(inp != nil, "_input_release_stale_modifiers: nil input")
+	Modifier_Pair :: struct {
+		family:      Modifier_Family,
+		left, right: KeyboardKey,
+	}
+	pairs := [4]Modifier_Pair {
+		{.Shift, .LEFT_SHIFT, .RIGHT_SHIFT},
+		{.Control, .LEFT_CONTROL, .RIGHT_CONTROL},
+		{.Alt, .LEFT_ALT, .RIGHT_ALT},
+		{.Super, .LEFT_SUPER, .RIGHT_SUPER},
+	}
+	released := 0
+	for pair in pairs {
+		if pair.family in held do continue
+		keys := [2]KeyboardKey{pair.left, pair.right}
+		for key in keys {
+			index := int(key)
+			assert(
+				index >= 0 && index < KEY_COUNT,
+				"_input_release_stale_modifiers: key out of range",
+			)
+			if !inp.key_down[index] do continue
+			inp.key_down[index] = false
+			inp.st_released[index] = true
+			released += 1
+		}
+	}
+	assert(released >= 0 && released <= 8)
+	return released
+}
+
 // _input_publish_staged moves one frame of staged events into the published
 // snapshot. It is the single writer of the published key edges: input_poll
 // clears them immediately before calling this, and every producer stages
