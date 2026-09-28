@@ -170,7 +170,14 @@ table_header_label_draw :: proc(
 	label_w := text_width(frame, label, .Label)
 	text_x := rect.x + ui_frame_sc(frame, 4)
 	if column.numeric do text_x = rect.x + rect.w - label_w - ui_frame_sc(frame, 4)
-	text(frame, label, text_x, rect.y + (rect.h - metrics.FONT_SIZE_LABEL) / 2, .Label, color)
+	text(
+		frame,
+		label,
+		text_x,
+		frame_text_center_y(frame, rect.y, rect.h, metrics.FONT_SIZE_LABEL),
+		.Label,
+		color,
+	)
 	if focus_opt_focused(fo) do draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 	semantic_push(frame, .Button, rect, column.label, {}, fo, widget = widget)
 }

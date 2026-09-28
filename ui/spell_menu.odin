@@ -281,7 +281,7 @@ spell_menu_draw_row :: proc(
 		frame,
 		text,
 		i32(row_local.x) + ui_frame_sc(frame, 8),
-		i32(row_local.y) + (item_h - font_size) / 2,
+		frame_text_center_y(frame, i32(row_local.y), item_h, font_size),
 		font_size,
 		color,
 	)
@@ -322,7 +322,7 @@ spell_menu_draw_suggestions :: proc(
 			frame,
 			text,
 			i32(row_local.x) + ui_frame_sc(frame, 8),
-			i32(row_local.y) + (layout.item_h - font_size) / 2,
+			frame_text_center_y(frame, i32(row_local.y), layout.item_h, font_size),
 			font_size,
 			text_ink(frame, .Disabled),
 		)

@@ -54,7 +54,7 @@ draw_panel_header :: proc(
 		frame,
 		label,
 		x + metrics.PADDING,
-		y + (metrics.PANEL_HEADER_H - metrics.FONT_SIZE_LABEL) / 2,
+		frame_text_center_y(frame, y, metrics.PANEL_HEADER_H, metrics.FONT_SIZE_LABEL),
 		metrics.FONT_SIZE_LABEL,
 		accent,
 	)
@@ -1327,7 +1327,7 @@ draw_pill :: proc(frame: ^Ui_Frame, text: string, x, y, font_size: i32, fg, bg: 
 	tw := measure_text_string_frame(frame, text, font_size)
 	pad_h: i32 = 6
 	pill_w := tw + pad_h * 2
-	pill_h := font_size + 4
+	pill_h := frame_text_size(frame, font_size) + 4
 	rect := Rectangle{f32(x), f32(y), f32(pill_w), f32(pill_h)}
 	draw_rounded_fill(frame, rect, .Pill, bg)
 	draw_text_string_frame(frame, text, x + pad_h, y + 2, font_size, fg)
@@ -2097,7 +2097,7 @@ collapsible_header_at :: proc(
 		if focus_opt_focused(options.focus) do draw_focus_ring(frame, x, y, w, height)
 
 		pad := ui_frame_sc(frame, 10)
-		text_y := y + (height - font_size) / 2
+		text_y := frame_text_center_y(frame, y, height, font_size)
 		indicator: cstring = "\u25BE" if open^ else "\u25B8"
 		indicator_w := measure_text_frame(frame, indicator, font_size)
 		draw_text_frame(frame, indicator, x + pad, text_y, font_size, style.fg_secondary)

@@ -65,6 +65,23 @@ text_role_size :: proc(frame: ^Ui_Frame, role: Text_Role) -> i32 {
 	return size
 }
 
+// text_role_drawn_size is the size a role is actually drawn at once the
+// active face has quantised it. Layout that must contain the glyphs sizes
+// from this, not the requested role size.
+text_role_drawn_size :: proc(frame: ^Ui_Frame, role: Text_Role) -> i32 {
+	assert(frame != nil, "text_role_drawn_size: nil frame")
+	result := frame_text_size(frame, text_role_size(frame, role))
+	assert(result > 0, "text_role_drawn_size: non-positive drawn size")
+	return result
+}
+
+// frame_text_center_y is the top edge that vertically centres text requested
+// at size inside [top, top+height), using the size the face actually draws.
+frame_text_center_y :: proc(frame: ^Ui_Frame, top, height, size: i32) -> i32 {
+	assert(frame != nil, "frame_text_center_y: nil frame")
+	return top + (height - frame_text_size(frame, size)) / 2
+}
+
 // text_role_line_height resolves the wrapped line advance for a role. Body
 // uses the metric directly; other roles keep the same ratio so mixed-size
 // blocks stay visually consistent across UI scales.

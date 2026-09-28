@@ -2518,7 +2518,7 @@ prepared_render_label :: proc(u: ^Ui, node: ^Prepared_Node) {
 			u.frame,
 			node.label.text,
 			node.rect.x,
-			node.rect.y + (node.rect.h - font_size) / 2,
+			frame_text_center_y(u.frame, node.rect.y, node.rect.h, font_size),
 			font_size,
 			text_ink(u.frame, node.label.ink),
 		)

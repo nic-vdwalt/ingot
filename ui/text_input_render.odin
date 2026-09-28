@@ -30,7 +30,7 @@ ti_spell :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) -> []Spell_Range {
 				text,
 				mouse,
 				ctx.inner_x,
-				ctx.y,
+				ti_line_top(ctx, 0) - ui_frame_sc(ctx.frame, TI_PAD_TOP),
 				v.vis_start,
 				v.vis_end,
 			)
@@ -118,13 +118,28 @@ ti_span_shift :: proc(v: ^TI_View, pos: int) -> int {
 	return pos
 }
 
+// ti_line_top returns the top of visual row `row`. A single-line box centres
+// the drawn glyph height, which a quantising face can make larger than the
+// requested body size; multiline boxes keep the fixed top padding.
+@(private)
+ti_line_top :: proc(ctx: ^TI_Ctx, row: i32) -> i32 {
+	assert(ctx != nil && ctx.frame != nil, "ti_line_top: invalid context")
+	assert(row >= 0, "ti_line_top: negative row")
+	metrics := ui_frame_metrics(ctx.frame)
+	if ctx.single_line {
+		drawn := frame_text_size(ctx.frame, metrics.FONT_SIZE_BODY)
+		return ctx.y + max(0, (ctx.h - drawn) / 2) + row * metrics.LINE_HEIGHT
+	}
+	return ctx.y + ui_frame_sc(ctx.frame, TI_PAD_TOP) + row * metrics.LINE_HEIGHT
+}
+
 @(private = "file")
 ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles: []Spell_Range) {
 	assert(v.caret_render, "ti_render_caret_lines: caret renderer required")
 	metrics := ui_frame_metrics(ctx.frame)
 	style := ui_frame_theme(ctx.frame)
 	font_size := metrics.FONT_SIZE_BODY
-	line_height := metrics.LINE_HEIGHT
+	drawn_size := frame_text_size(ctx.frame, font_size)
 	assert(
 		v.vis_start >= 0 && v.vis_end <= len(v.vlines),
 		"ti_render_caret_lines: window out of range",
@@ -134,13 +149,13 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 	for vi := v.vis_start; vi < v.vis_end; vi += 1 {
 		vl := v.vlines[vi]
 		line_c := strings.clone_to_cstring(text[vl.start:vl.end], context.temp_allocator)
-		line_y := ctx.y + ui_frame_sc(ctx.frame, TI_PAD_TOP) + render_idx * line_height
+		line_y := ti_line_top(ctx, render_idx)
 		// Selection highlight: overlap of this visual line with the range.
 		if sel.active && sel.sb == ctx.sb {
 			lo, hi := sel_range(sel)
 			lo, hi = ti_span_shift(v, lo), ti_span_shift(v, hi)
 			if hl, hl_ok := ti_line_span_px(ctx, text, vl, lo, hi, font_size); hl_ok {
-				draw_rectangle(ctx.frame, hl.x, line_y, hl.w, font_size, style.bg_selection)
+				draw_rectangle(ctx.frame, hl.x, line_y, hl.w, drawn_size, style.bg_selection)
 			}
 		}
 		// Pill spans are measured once and reused for the chip background and
@@ -167,7 +182,7 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 				draw_squiggle(
 					ctx.frame,
 					span.x,
-					line_y + font_size + ui_frame_sc(ctx.frame, 1),
+					line_y + drawn_size + ui_frame_sc(ctx.frame, 1),
 					span.w,
 					style.spell_error,
 				)
@@ -182,7 +197,7 @@ ti_render_caret_lines :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, squiggles
 				draw_rectangle(
 					ctx.frame,
 					ul.x,
-					line_y + font_size + ui_frame_sc(ctx.frame, 1),
+					line_y + drawn_size + ui_frame_sc(ctx.frame, 1),
 					ul.w,
 					ui_frame_sc(ctx.frame, 1),
 					style.fg_secondary,
@@ -252,6 +267,8 @@ ti_render_single :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bool)
 	metrics := ui_frame_metrics(ctx.frame)
 	style := ui_frame_theme(ctx.frame)
 	font_size := metrics.FONT_SIZE_BODY
+	drawn_size := frame_text_size(ctx.frame, font_size)
+	line_y := ti_line_top(ctx, 0)
 	display_text := v.masked_text if ctx.masked else text
 	display_c := strings.clone_to_cstring(display_text, context.temp_allocator)
 	text_pixel_w := measure_text_frame(ctx.frame, display_c, font_size)
@@ -261,20 +278,13 @@ ti_render_single :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, sel_all: bool)
 	}
 	if sel_all {
 		hl_w := min(text_pixel_w, ctx.inner_w)
-		draw_rectangle(
-			ctx.frame,
-			ctx.inner_x,
-			ctx.y + (ctx.h - font_size) / 2,
-			hl_w,
-			font_size,
-			style.bg_selection,
-		)
+		draw_rectangle(ctx.frame, ctx.inner_x, line_y, hl_w, drawn_size, style.bg_selection)
 	}
 	draw_text_frame(
 		ctx.frame,
 		display_c,
 		ctx.inner_x - text_offset,
-		ctx.y + (ctx.h - font_size) / 2,
+		line_y,
 		font_size,
 		style.fg_primary,
 	)
@@ -366,10 +376,7 @@ ti_draw_caret :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View) {
 	if v.caret_render {
 		if v.cur_vrow >= v.vis_start && v.cur_vrow < v.vis_end {
 			x := ctx.inner_x + v.cur_caret_x
-			y :=
-				ctx.y +
-				ui_frame_sc(ctx.frame, TI_PAD_TOP) +
-				i32(v.cur_vrow - v.vis_start) * line_height
+			y := ti_line_top(ctx, i32(v.cur_vrow - v.vis_start))
 			rect := text_input_caret_rect({f32(ctx.inner_x), f32(y)}, f32(x), metrics, 1)
 			ti_emit_caret(ctx, rect, blink.visible)
 		}
@@ -416,7 +423,7 @@ ti_draw_caret_single :: proc(
 	}
 	prefix_width := measure_text_string_frame(ctx.frame, prefix, font_size)
 	x := ctx.inner_x + prefix_width - offset
-	y := ctx.y + (ctx.h - font_size) / 2
+	y := ti_line_top(ctx, 0)
 	rect := text_input_caret_rect({f32(ctx.inner_x), f32(y)}, f32(x), metrics, 1)
 	ti_emit_caret(ctx, rect, blink_on)
 }
@@ -466,7 +473,7 @@ ti_render_content :: proc(
 			ctx.frame,
 			placeholder,
 			ctx.inner_x,
-			ctx.y + (ctx.h - font_size) / 2,
+			ti_line_top(ctx, 0),
 			font_size,
 			ui_frame_theme(ctx.frame).fg_secondary,
 		)
@@ -562,12 +569,14 @@ ti_draw_inactive_single_line :: proc(ctx: ^TI_Ctx) {
 	begin_pane_scissor(ctx.frame, ctx.inner_x, ctx.y, ctx.inner_w, ctx.h)
 	text := strings.to_string(ctx.sb^)
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
+	drawn_size := frame_text_size(ctx.frame, font_size)
+	line_y := ctx.y + max(0, (ctx.h - drawn_size) / 2)
 	if len(text) == 0 {
 		draw_text_string_frame(
 			ctx.frame,
 			ctx.placeholder,
 			ctx.inner_x,
-			ctx.y + (ctx.h - font_size) / 2,
+			line_y,
 			font_size,
 			ui_frame_theme(ctx.frame).fg_secondary,
 		)
@@ -576,7 +585,7 @@ ti_draw_inactive_single_line :: proc(ctx: ^TI_Ctx) {
 			ctx.frame,
 			text,
 			ctx.inner_x,
-			ctx.y + (ctx.h - font_size) / 2,
+			line_y,
 			font_size,
 			ui_frame_theme(ctx.frame).fg_label,
 		)

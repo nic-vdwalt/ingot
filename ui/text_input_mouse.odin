@@ -176,7 +176,7 @@ ti_mouse_press :: proc(ctx: ^TI_Ctx, text: string, v: ^TI_View, mouse: Vector2) 
 		text,
 		mouse,
 		ctx.inner_x,
-		ctx.y,
+		ti_line_top(ctx, 0) - ui_frame_sc(ctx.frame, TI_PAD_TOP),
 		v.vis_start,
 		v.vis_end,
 	)

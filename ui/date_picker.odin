@@ -286,7 +286,7 @@ date_picker_popup_weekdays :: proc(frame: ^Ui_Frame, layout: Date_Picker_Popup_L
 			layout.pad +
 			i32(column) * layout.cell +
 			(layout.cell - name_w) / 2,
-			i32(row_y) + (layout.cell - metrics.FONT_SIZE_LABEL) / 2,
+			frame_text_center_y(frame, i32(row_y), layout.cell, metrics.FONT_SIZE_LABEL),
 			metrics.FONT_SIZE_LABEL,
 			ui_frame_theme(frame).fg_secondary,
 		)
@@ -473,7 +473,7 @@ date_picker_days :: proc(
 			frame,
 			day_text,
 			i32(screen_cell.x) + (layout.cell - day_w) / 2,
-			i32(screen_cell.y) + (layout.cell - metrics.FONT_SIZE_LABEL) / 2,
+			frame_text_center_y(frame, i32(screen_cell.y), layout.cell, metrics.FONT_SIZE_LABEL),
 			metrics.FONT_SIZE_LABEL,
 			day_color,
 		)

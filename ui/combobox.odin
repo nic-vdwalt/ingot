@@ -308,7 +308,12 @@ combobox_popup :: proc(
 			frame,
 			"No matches",
 			i32(screen_rect.x) + metrics.PADDING,
-			i32(screen_rect.y) + metrics.MENU_PAD + (row_h - metrics.FONT_SIZE_BODY) / 2,
+			frame_text_center_y(
+				frame,
+				i32(screen_rect.y) + metrics.MENU_PAD,
+				row_h,
+				metrics.FONT_SIZE_BODY,
+			),
 			metrics.FONT_SIZE_BODY,
 			style.fg_secondary,
 		)
@@ -368,7 +373,7 @@ combobox_popup_rows :: proc(
 			frame,
 			label,
 			i32(row_screen.x) + metrics.PADDING,
-			i32(row_screen.y) + (row_h - metrics.FONT_SIZE_BODY) / 2,
+			frame_text_center_y(frame, i32(row_screen.y), row_h, metrics.FONT_SIZE_BODY),
 			metrics.FONT_SIZE_BODY,
 			style.fg_primary,
 		)

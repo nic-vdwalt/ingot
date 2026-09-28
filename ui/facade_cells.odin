@@ -46,7 +46,7 @@ cell_at :: proc(
 		frame,
 		fitted,
 		x,
-		rect.y + (rect.h - font_size) / 2,
+		frame_text_center_y(frame, rect.y, rect.h, font_size),
 		font_size,
 		text_ink(frame, ink),
 	)

@@ -56,6 +56,15 @@ Surface_Text_Sized_Width :: proc(surface: ^Surface, text: string, size: i32) -> 
 	return ui.measure_text_frame(u.frame, value, size)
 }
 
+// Surface_Text_Drawn_Size returns the size text requested at `size` is
+// actually drawn at by the active face.
+Surface_Text_Drawn_Size :: proc(surface: ^Surface, size: i32) -> i32 {
+	assert(surface != nil, "Fit.Surface_Text_Drawn_Size: nil surface")
+	assert(size > 0, "Fit.Surface_Text_Drawn_Size: invalid size")
+	u := surface_ui(surface)
+	return ui.frame_text_size(u.frame, size)
+}
+
 Surface_Text_Sized_Byte_At_X :: proc(surface: ^Surface, text: string, x, size: i32) -> int {
 	assert(surface != nil, "Fit.Surface_Text_Sized_Byte_At_X: nil surface")
 	assert(size > 0, "Fit.Surface_Text_Sized_Byte_At_X: invalid size")

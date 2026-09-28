@@ -112,7 +112,7 @@ toasts_draw :: proc(frame: ^Ui_Frame, st: ^Toast_State, screen: Rect_I32) {
 			frame,
 			shown,
 			x + metrics.PADDING,
-			y + (height - metrics.FONT_SIZE_BODY) / 2,
+			frame_text_center_y(frame, y, height, metrics.FONT_SIZE_BODY),
 			metrics.FONT_SIZE_BODY,
 			style.fg_primary,
 		)
