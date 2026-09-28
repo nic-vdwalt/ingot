@@ -834,13 +834,15 @@ let semanticTextInputsNext = [];
 		let locals = new WeakMap();
 		let nextLocal = 1;
 		let surface = null;
-		let stressSince = 0;
+		let stressSince = null;
 		let frameOps = null;
 		let initial = null;
 		let cachedJson = "";
 		const capturedFrames = [];
 		const api = {
 			state: "idle",
+			submits: 0,
+			section: "",
 			frames,
 			json: () => cachedJson,
 			uninstall: () => {
@@ -1016,7 +1018,6 @@ let semanticTextInputsNext = [];
 				}
 				for (const [id, tex] of initial.textures) {
 					if (!reachable.has(id)) continue;
-					buffers.length;
 					textures.push({
 						id, format: tex.format, width: tex.width, height: tex.height, bpp: tex.bpp,
 						b64: captureBase64(tex.bytes),
@@ -1042,6 +1043,7 @@ let semanticTextInputsNext = [];
 		};
 
 		const afterSubmit = () => {
+			api.submits += 1;
 			if (api.state === "capturing") {
 				capturedFrames.push({ ops: frameOps });
 				if (capturedFrames.length < frames) {
@@ -1059,12 +1061,13 @@ let semanticTextInputsNext = [];
 			try {
 				section = getSection();
 			} catch (_) {}
+			api.section = section;
 			if (section !== CAPTURE_SECTION) {
-				stressSince = 0;
+				stressSince = null;
 				return;
 			}
 			const t = now();
-			if (!stressSince) {
+			if (stressSince === null) {
 				stressSince = t;
 				return;
 			}
@@ -2365,6 +2368,9 @@ let semanticTextInputsNext = [];
 			box3dWorkers = await window.ingotBox3dWorkers.create(wasmPath, memory, opts);
 		}
 		wasmMemoryInterface = wmi;
+		// Before any GPU call so the capture sees every object the engine
+		// creates. Off unless ?ingot_capture=N.
+		const gpuCapture = installGpuCapture(window, bisectSwitches.capture, () => currentSection);
 		const webgpu = new window.odin.WebGPUInterface(wmi);
 		if (bisectSwitches.upload === "view" && "uploadMode" in webgpu) webgpu.uploadMode = "view";
 		// Feed the crash recorder the metrics that can explain a kill from
@@ -2549,6 +2555,7 @@ let semanticTextInputsNext = [];
 				safely(uninstallGpuSkips);
 				if (gpuBacklog) safely(gpuBacklog.uninstall);
 				if (gpuCallCounters) safely(gpuCallCounters.uninstall);
+				safely(gpuCapture.uninstall);
 				currentSection = "";
 				safely(clearDeviceLost);
 				safely(clearSemanticOverlays);
@@ -2616,6 +2623,7 @@ let semanticTextInputsNext = [];
 			installGpuCallCounters,
 			installGpuBacklogProbe,
 			installGpuSkips,
+			installGpuCapture,
 			setCurrentSection: (name) => { currentSection = String(name); },
 		});
 	}

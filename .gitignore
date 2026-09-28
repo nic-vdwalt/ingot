@@ -7,6 +7,7 @@ dist/
 web/ingot_web.wasm
 web/odin.js
 web/wgpu.js
+/web/repro/stress-frame.json
 
 # build artifacts
 *.dSYM/

@@ -29,6 +29,18 @@
 	  texkib (0..)     KiB/s of 64x64 writeTexture sub-rects into atlas 0.
 	  preset=ingot     indexed=1 layout=ingot draws=16 scissor=1 atlas=2;
 	                   explicit parameters override it.
+
+	Replay of real ingot frames (captured on desktop with
+	web/repro/capture_stress_frame.mjs, no ingot/wasm/wgpu.js at replay):
+	  replay=<url>     capture JSON, relative to this page (stress-frame.json).
+	  fps (30)         replay frame rate; 0 = every rAF.
+	  writes (1 | 0)   1: re-issue each frame's writeBuffer/writeTexture
+	                   every replayed frame. 0: upload during the first
+	                   cycle only, then redraw.
+	  draws (0..)      issue at most N draw calls per pass; 0 = all.
+	  cycle (0..)      replay captured frames 0..N-1 in rotation; 0 = all.
+	  hold (0 | 1)     1: keep references to the last 90 frames' encoders
+	                   and command buffers instead of dropping them.
 	-->
 	<style>
 		html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
@@ -71,6 +83,20 @@
 		const TEX_RECTS_PER_ROW = ATLAS_DIM / TEX_RECT;
 		const TEX_RECTS_PER_FRAME_MAX = 64;
 		const U16_VERTICES_MAX = 65535;
+		const REPLAY_FPS_DEFAULT = 30;
+		const REPLAY_HOLD_FRAMES = 90;
+		const REPLAY_DRAW_METHODS = new Set(["draw", "drawIndexed", "drawIndirect", "drawIndexedIndirect"]);
+		const REPLAY_CREATE_METHODS = {
+			buffer: "createBuffer",
+			texture: "createTexture",
+			sampler: "createSampler",
+			shaderModule: "createShaderModule",
+			bindGroupLayout: "createBindGroupLayout",
+			pipelineLayout: "createPipelineLayout",
+			renderPipeline: "createRenderPipeline",
+			computePipeline: "createComputePipeline",
+			bindGroup: "createBindGroup",
+		};
 		const PRESETS = {
 			ingot: { indexed: 1, layout: "ingot", draws: 16, scissor: 1, atlas: 2, texkib: 0 },
 		};
@@ -103,9 +129,15 @@
 			const deviceDpr = Number(window.devicePixelRatio) > 0 ? Number(window.devicePixelRatio) : 1;
 			const slotMiB = Math.floor(numberParam(params, "slotMiB", 4, 1, 64));
 			const layoutText = params.get("layout");
+			const replay = params.get("replay") || "";
 			return {
+				replay,
+				writes: flagParam(params, "writes", 1),
+				replayDraws: Math.floor(numberParam(params, "draws", 0, 0, 1 << 20)),
+				cycle: Math.floor(numberParam(params, "cycle", 0, 0, 1024)),
+				hold: flagParam(params, "hold", 0),
 				kib: Math.floor(numberParam(params, "kib", 400, 1, slotMiB * 1024)),
-				fps: numberParam(params, "fps", 0, 0, 120),
+				fps: numberParam(params, "fps", replay ? REPLAY_FPS_DEFAULT : 0, 0, 120),
 				dpr: numberParam(params, "dpr", Math.min(deviceDpr, 2), 0.5, 3),
 				slots: Math.floor(numberParam(params, "slots", 3, 1, 8)),
 				slotMiB,
@@ -123,6 +155,10 @@
 		}
 
 		function describeParams(p) {
+			if (p.replay) {
+				return `replay=${p.replay} fps=${p.fps || "raf"} writes=${p.writes} ` +
+					`draws=${p.replayDraws || "all"} cycle=${p.cycle || "all"} hold=${p.hold}`;
+			}
 			return `kib=${p.kib} fps=${p.fps || "raf"} dpr=${p.dpr} slots=${p.slots} ` +
 				`slotMiB=${p.slotMiB} src=${p.src} dom=${p.dom} draw=${p.draw} ` +
 				`indexed=${p.indexed} layout=${p.layout} draws=${p.draws} scissor=${p.scissor} ` +
@@ -281,6 +317,10 @@ struct VO {
 
 			const format = navigator.gpu.getPreferredCanvasFormat();
 			const context = canvas.getContext("webgpu");
+			if (params.replay) {
+				await startReplay(device, context, () => lost);
+				return;
+			}
 			fitCanvas();
 			context.configure({ device, format, alphaMode: "opaque" });
 			window.addEventListener("resize", fitCanvas);
@@ -681,6 +721,224 @@ struct VO {
 				frames += 1;
 			}
 			requestAnimationFrame(frame);
+		}
+
+		function decodeBase64(text) {
+			const binary = atob(text);
+			const bytes = new Uint8Array(binary.length);
+			for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+			return bytes;
+		}
+
+		// Replays frames captured from the ingot gallery by ingot_web.js's
+		// ?ingot_capture=N recorder: the same objects, shaders, pipeline state,
+		// uploads and draw calls, issued straight from JS.
+		async function startReplay(device, context, isLost) {
+			hudStat.textContent = `loading ${params.replay}...`;
+			const response = await fetch(new URL(params.replay, location.href));
+			if (!response.ok) throw new Error(`fetch ${params.replay}: HTTP ${response.status}`);
+			const capture = await response.json();
+			if (!capture || capture.version !== 1 || !capture.surface || !Array.isArray(capture.frames) ||
+				!capture.frames.length) {
+				throw new Error("not a version 1 capture with frames");
+			}
+			const surface = capture.surface;
+			canvas.width = surface.width;
+			canvas.height = surface.height;
+			context.configure({ device, format: surface.format, alphaMode: surface.alphaMode || "opaque" });
+
+			const objects = new Map();
+			let locals = new Map();
+			let surfaceTexture = null;
+			let surfaceView = null;
+			const currentSurface = (key) => {
+				if (!surfaceTexture) {
+					surfaceTexture = context.getCurrentTexture();
+					surfaceView = surfaceTexture.createView();
+				}
+				return key === "texture" ? surfaceTexture : surfaceView;
+			};
+			const resolve = (value, key) => {
+				if (value === "surface") return currentSurface(key);
+				if (value === null || typeof value !== "object") return value;
+				if (Array.isArray(value)) return value.map((item) => resolve(item, key));
+				if (typeof value.ref === "number") {
+					if (!objects.has(value.ref)) throw new Error(`missing object ${value.ref}`);
+					return objects.get(value.ref);
+				}
+				if (typeof value.local === "number") {
+					if (!locals.has(value.local)) throw new Error(`missing frame-local ${value.local}`);
+					return locals.get(value.local);
+				}
+				if (typeof value.typed === "string" && Array.isArray(value.values)) {
+					const Ctor = globalThis[value.typed];
+					if (typeof Ctor !== "function") throw new Error(`unknown typed array ${value.typed}`);
+					return new Ctor(value.values);
+				}
+				if (typeof value.unknown === "string") throw new Error(`capture has unrecorded ${value.unknown}`);
+				const out = {};
+				for (const name of Object.keys(value)) out[name] = resolve(value[name], name);
+				return out;
+			};
+
+			const initialBuffers = new Map((capture.initial && capture.initial.buffers || []).map((b) => [b.id, b]));
+			const initialTextures = new Map((capture.initial && capture.initial.textures || []).map((t) => [t.id, t]));
+			device.pushErrorScope("validation");
+			for (const record of capture.objects) {
+				let obj;
+				if (record.kind === "autoLayout") {
+					obj = resolve(record.pipeline).getBindGroupLayout(record.index);
+				} else if (record.kind === "view") {
+					if (!record.texture) throw new Error(`view ${record.id} has no recorded texture`);
+					obj = resolve(record.texture).createView(resolve(record.desc));
+				} else if (REPLAY_CREATE_METHODS[record.kind]) {
+					const desc = resolve(record.desc);
+					if (record.kind === "buffer") {
+						desc.mappedAtCreation = false;
+						if (initialBuffers.has(record.id)) desc.usage |= GPUBufferUsage.COPY_DST;
+					} else if (record.kind === "texture" && initialTextures.has(record.id)) {
+						desc.usage |= GPUTextureUsage.COPY_DST;
+					}
+					obj = device[REPLAY_CREATE_METHODS[record.kind]](desc);
+				} else {
+					throw new Error(`unknown object kind ${record.kind}`);
+				}
+				objects.set(record.id, obj);
+			}
+			for (const [id, entry] of initialBuffers) {
+				const bytes = decodeBase64(entry.b64);
+				if (bytes.length) device.queue.writeBuffer(objects.get(id), 0, bytes);
+			}
+			for (const [id, entry] of initialTextures) {
+				device.queue.writeTexture(
+					{ texture: objects.get(id) },
+					decodeBase64(entry.b64),
+					{ offset: 0, bytesPerRow: entry.width * entry.bpp, rowsPerImage: entry.height },
+					{ width: entry.width, height: entry.height },
+				);
+			}
+			const setupError = await device.popErrorScope();
+			if (setupError) throw new Error(`replay setup: ${setupError.message}`);
+
+			// Decode uploads once so the loop only issues GPU calls.
+			const frameCount = params.cycle > 0 ? Math.min(params.cycle, capture.frames.length) : capture.frames.length;
+			const frames = capture.frames.slice(0, frameCount).map((frame) => frame.ops.map((op) => {
+				if (op.op === "writeBuffer" || op.op === "writeTexture") return Object.assign({}, op, { bytes: decodeBase64(op.b64) });
+				return op;
+			}));
+			const drawsPerFrame = frames.map((ops) => ops.filter((op) => op.op === "pass" && REPLAY_DRAW_METHODS.has(op.method)).length);
+			const uploadPerFrame = frames.map((ops) => ops.reduce((sum, op) => sum + (op.bytes ? op.bytes.length : 0), 0));
+
+			const held = [];
+			const startedAt = performance.now();
+			const frameInterval = params.fps > 0 ? 1000 / params.fps : 0;
+			const describe = describeParams(params);
+			let replayed = 0;
+			let uploaded = 0;
+			let lastDraws = 0;
+			let lastUpload = 0;
+			let lastFrameAt = -Infinity;
+			let stopped = false;
+
+			const record = (alive) => saveRecord({
+				params: describe,
+				ua: navigator.userAgent,
+				elapsedMs: performance.now() - startedAt,
+				frames: replayed,
+				uploadedMiB: uploaded / (1024 * 1024),
+				alive,
+			});
+			record(true);
+			setInterval(() => record(true), RECORD_INTERVAL_MS);
+			window.addEventListener("pagehide", () => record(false));
+			setInterval(() => {
+				if (isLost() || stopped) return;
+				const seconds = (performance.now() - startedAt) / 1000;
+				const safeSeconds = Math.max(seconds, 0.001);
+				hudStat.textContent =
+					`replaying ${seconds.toFixed(1)} s  frames ${replayed} (${(replayed / safeSeconds).toFixed(1)}/s)\n` +
+					`captured frames ${frames.length}  draws/frame ${lastDraws} (of ${drawsPerFrame.join(",")})  ` +
+					`upload ${(lastUpload / 1024).toFixed(1)} KiB/frame  total ${(uploaded / (1024 * 1024)).toFixed(1)} MiB\n` +
+					`canvas ${canvas.width}x${canvas.height} ${surface.format}  objects ${objects.size}  ${describe}`;
+			}, HUD_INTERVAL_MS);
+
+			function replayFrame(ops, upload) {
+				locals = new Map();
+				surfaceTexture = null;
+				surfaceView = null;
+				let draws = 0;
+				let bytes = 0;
+				for (const op of ops) {
+					switch (op.op) {
+					case "writeBuffer":
+						if (!upload) break;
+						device.queue.writeBuffer(resolve(op.buffer), op.offset, op.bytes);
+						bytes += op.bytes.length;
+						break;
+					case "writeTexture":
+						if (!upload) break;
+						device.queue.writeTexture(resolve(op.destination), op.bytes, resolve(op.layout), resolve(op.size));
+						bytes += op.bytes.length;
+						break;
+					case "encoder":
+						locals.set(op.local, device.createCommandEncoder(resolve(op.desc) || undefined));
+						break;
+					case "beginRenderPass":
+						locals.set(op.local, resolve(op.encoder).beginRenderPass(resolve(op.desc)));
+						break;
+					case "pass": {
+						if (REPLAY_DRAW_METHODS.has(op.method)) {
+							if (params.replayDraws > 0 && draws >= params.replayDraws) break;
+							draws += 1;
+						}
+						const pass = resolve(op.pass);
+						if (typeof pass[op.method] !== "function") throw new Error(`unknown pass method ${op.method}`);
+						pass[op.method](...resolve(op.args));
+						break;
+					}
+					case "encoderCall": {
+						const encoder = resolve(op.encoder);
+						if (typeof encoder[op.method] !== "function") throw new Error(`unknown encoder method ${op.method}`);
+						encoder[op.method](...resolve(op.args));
+						break;
+					}
+					case "finish":
+						locals.set(op.local, resolve(op.encoder).finish(resolve(op.desc) || undefined));
+						break;
+					case "submit":
+						device.queue.submit(resolve(op.buffers));
+						break;
+					default:
+						throw new Error(`unknown replay op ${op.op}`);
+					}
+				}
+				if (params.hold) {
+					held.push(locals);
+					if (held.length > REPLAY_HOLD_FRAMES) held.shift();
+				}
+				lastDraws = draws;
+				lastUpload = bytes;
+				uploaded += bytes;
+			}
+
+			function tick(timestamp) {
+				if (isLost() || stopped) return;
+				requestAnimationFrame(tick);
+				if (frameInterval > 0 && timestamp - lastFrameAt < frameInterval - 1) return;
+				lastFrameAt = timestamp;
+				const index = replayed % frames.length;
+				const upload = params.writes === 1 || replayed < frames.length;
+				try {
+					replayFrame(frames[index], upload);
+				} catch (error) {
+					stopped = true;
+					fail(`replay frame ${index}: ${error && error.message || error}`);
+					return;
+				}
+				replayed += 1;
+			}
+			window.__replayStats = () => ({ replayed, lastDraws, lastUpload, drawsPerFrame, uploadPerFrame, stopped });
+			requestAnimationFrame(tick);
 		}
 
 		startButton.addEventListener("click", () => {
