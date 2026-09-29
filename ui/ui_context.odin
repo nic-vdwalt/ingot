@@ -1127,7 +1127,14 @@ _label_px :: proc(u: ^Ui, text: string, font_size: i32, color: Color) {
 		return
 	}
 	begin_scissor_mode(u.frame, r.x, r.y, r.w, r.h)
-	draw_text_string_frame(u.frame, text, r.x, frame_text_center_y(u.frame, r.y, r.h, font_size), font_size, color)
+	draw_text_string_frame(
+		u.frame,
+		text,
+		r.x,
+		frame_text_center_y(u.frame, r.y, r.h, font_size),
+		font_size,
+		color,
+	)
 	end_scissor_mode(u.frame)
 	semantic_push(u.frame, .Label, r, text, {})
 }

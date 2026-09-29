@@ -1248,9 +1248,9 @@ FPS_REFRESH_SECONDS :: 1.0
 #assert(FPS_REFRESH_SECONDS > 0)
 
 Fps_Meter :: struct {
-	frames:       i32,
-	elapsed:      f64,
-	displayed:    i32,
+	frames:    i32,
+	elapsed:   f64,
+	displayed: i32,
 }
 
 @(private)

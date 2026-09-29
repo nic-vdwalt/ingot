@@ -1014,28 +1014,26 @@ renderer_flush :: proc(
 	vertex_buffer, index_buffer: wg.Buffer
 	vertex_offset, index_offset: u64
 	if STREAMED_RENDERER_ENABLED {
-		buffer, uploaded_vertex_offset, uploaded_index_offset, upload_ok :=
-			_geometry_upload_batch(ctx, r, layout, r.verts[:], r.indices[:])
+		buffer, uploaded_vertex_offset, uploaded_index_offset, upload_ok := _geometry_upload_batch(
+			ctx,
+			r,
+			layout,
+			r.verts[:],
+			r.indices[:],
+		)
 		if upload_ok {
-			vertex_buffer = buffer
-			index_buffer = buffer
-			vertex_offset = uploaded_vertex_offset
-			index_offset = uploaded_index_offset
+			vertex_buffer, index_buffer = buffer, buffer
+			vertex_offset, index_offset = uploaded_vertex_offset, uploaded_index_offset
 		} else {
 			vertex_buffer, index_buffer = _geometry_upload_transient(ctx, r, layout)
-			if vertex_buffer == nil || index_buffer == nil {
-				clear(&r.verts)
-				clear(&r.indices)
-				return
-			}
 		}
 	} else {
 		vertex_buffer, index_buffer = _geometry_upload_transient(ctx, r, layout)
-		if vertex_buffer == nil || index_buffer == nil {
-			clear(&r.verts)
-			clear(&r.indices)
-			return
-		}
+	}
+	if vertex_buffer == nil || index_buffer == nil {
+		clear(&r.verts)
+		clear(&r.indices)
+		return
 	}
 	_stats_flush(ctx, u64(n), vertex_bytes + index_bytes, cause)
 	when RENDER_STATS_ENABLED {
@@ -1077,7 +1075,13 @@ renderer_flush :: proc(
 		_stats_bind_group_switches(ctx, 1)
 	}
 	wg.RenderPassEncoderSetVertexBuffer(pass, 0, vertex_buffer, vertex_offset, vertex_bytes)
-	wg.RenderPassEncoderSetIndexBuffer(pass, index_buffer, layout.index_format, index_offset, index_bytes)
+	wg.RenderPassEncoderSetIndexBuffer(
+		pass,
+		index_buffer,
+		layout.index_format,
+		index_offset,
+		index_bytes,
+	)
 	wg.RenderPassEncoderDrawIndexed(pass, u32(index_count), 1, 0, 0, 0)
 	when GPU_TIMING_DIAGNOSTICS {
 		_gpu_timing_diagnostic_batch_draw(ctx, r, pass, u32(index_count))
@@ -1174,7 +1178,9 @@ Batch_Upload_Layout :: struct {
 BATCH_U16_VERTICES_MAX :: 65536
 
 @(private)
-_batch_upload_layout :: proc "contextless" (vertex_count, index_count: int) -> Batch_Upload_Layout {
+_batch_upload_layout :: proc "contextless" (
+	vertex_count, index_count: int,
+) -> Batch_Upload_Layout {
 	layout := Batch_Upload_Layout {
 		vertex_bytes = u64(vertex_count) * size_of(Gpu_Vertex),
 		index_format = .Uint32,

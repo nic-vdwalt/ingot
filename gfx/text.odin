@@ -294,6 +294,11 @@ _glyph_prepare :: proc(
 @(private)
 _glyph_record :: proc(a: ^Atlas, cp: rune, px, py, gw, gh, ixoff, iyoff: i32, xadvance: f32) {
 	assert(a != nil, "_glyph_record: nil atlas")
+	assert(len(a.glyphs) < FONT_GLYPHS_MAX, "_glyph_record: glyph capacity exhausted")
+	assert(px >= 0 && px < ATLAS_DIM, "_glyph_record: invalid atlas x")
+	assert(py >= 0 && py < ATLAS_DIM, "_glyph_record: invalid atlas y")
+	assert(gw > 0 && gw <= ATLAS_DIM - px, "_glyph_record: invalid glyph width")
+	assert(gh > 0 && gh <= ATLAS_DIM - py, "_glyph_record: invalid glyph height")
 	a.glyphs[cp] = Glyph {
 		x        = u16(px),
 		y        = u16(py),

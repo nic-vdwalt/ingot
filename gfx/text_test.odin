@@ -475,13 +475,23 @@ test_batched_bake_matches_per_glyph :: proc(t: ^testing.T) {
 	lazy_atlas := context_get_atlas(g, lazy._atlas)
 	testing.expect(t, batched_atlas != nil && lazy_atlas != nil, "both fonts should own an atlas")
 	if batched_atlas == nil || lazy_atlas == nil do return
-	testing.expect(t, len(lazy_atlas.glyphs) == 0, "a font loaded without codepoints bakes nothing")
+	testing.expect(
+		t,
+		len(lazy_atlas.glyphs) == 0,
+		"a font loaded without codepoints bakes nothing",
+	)
 
 	baked: i32 = 0
 	for cp in cps {
 		if _bake_glyph(g, lazy_atlas, cp) do baked += 1
 	}
-	testing.expectf(t, batched.glyphCount == baked, "baked count %d != %d", batched.glyphCount, baked)
+	testing.expectf(
+		t,
+		batched.glyphCount == baked,
+		"baked count %d != %d",
+		batched.glyphCount,
+		baked,
+	)
 	testing.expect(t, len(batched_atlas.glyphs) == len(lazy_atlas.glyphs))
 	for cp in cps {
 		want, want_ok := lazy_atlas.glyphs[cp]
@@ -489,7 +499,10 @@ test_batched_bake_matches_per_glyph :: proc(t: ^testing.T) {
 		testing.expectf(t, want_ok && got_ok, "U+%04X missing from a glyph table", cp)
 		testing.expectf(t, got == want, "U+%04X: batched %v != per-glyph %v", cp, got, want)
 	}
-	testing.expect(t, batched_atlas.cur_x == lazy_atlas.cur_x && batched_atlas.cur_y == lazy_atlas.cur_y)
+	testing.expect(
+		t,
+		batched_atlas.cur_x == lazy_atlas.cur_x && batched_atlas.cur_y == lazy_atlas.cur_y,
+	)
 	testing.expect(t, batched_atlas.shelf_h == lazy_atlas.shelf_h)
 	testing.expect(t, !batched_atlas.glyphs[0xE000].valid, "a missing glyph stays invalid")
 }
@@ -500,7 +513,14 @@ test_batched_bake_matches_per_glyph :: proc(t: ^testing.T) {
 test_unbaked_glyph_reads_as_present :: proc(t: ^testing.T) {
 	cps: [95]rune
 	for i in 0 ..< 95 {cps[i] = rune(32 + i)}
-	f := LoadFontFromMemory(".ttf", raw_data(FONT_TTF), i32(len(FONT_TTF)), 24, raw_data(cps[:]), 95)
+	f := LoadFontFromMemory(
+		".ttf",
+		raw_data(FONT_TTF),
+		i32(len(FONT_TTF)),
+		24,
+		raw_data(cps[:]),
+		95,
+	)
 	defer UnloadFont(f)
 	atlas := context_get_atlas(g, f._atlas)
 	testing.expect(t, atlas != nil, "font should own an atlas")
@@ -508,8 +528,16 @@ test_unbaked_glyph_reads_as_present :: proc(t: ^testing.T) {
 	box: rune = 0x2500
 	_, baked := atlas.glyphs[box]
 	testing.expect(t, !baked, "box drawing must not be baked by an ASCII-only load")
-	testing.expect(t, context_font_has_glyph_impl(g, f, box), "an unbaked glyph the font has must read as present")
-	testing.expect(t, !context_font_has_glyph_impl(g, f, 0xE000), "a glyph the font lacks must read as absent")
+	testing.expect(
+		t,
+		context_font_has_glyph_impl(g, f, box),
+		"an unbaked glyph the font has must read as present",
+	)
+	testing.expect(
+		t,
+		!context_font_has_glyph_impl(g, f, 0xE000),
+		"a glyph the font lacks must read as absent",
+	)
 	testing.expect(t, _bake_glyph(g, atlas, box), "the lazy path must still bake it on demand")
 	testing.expect(t, atlas.glyphs[box].valid)
 }

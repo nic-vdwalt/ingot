@@ -630,7 +630,12 @@ context_menu_rows :: proc(
 			frame,
 			txt,
 			i32(row_screen.x) + ui_frame_sc(frame, 8),
-			frame_text_center_y(frame, i32(row_screen.y), metrics.MENU_ITEM_H, metrics.FONT_SIZE_BODY),
+			frame_text_center_y(
+				frame,
+				i32(row_screen.y),
+				metrics.MENU_ITEM_H,
+				metrics.FONT_SIZE_BODY,
+			),
 			metrics.FONT_SIZE_BODY,
 			col,
 		)

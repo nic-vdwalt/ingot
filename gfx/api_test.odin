@@ -155,7 +155,9 @@ fps_meter_averages_and_holds_between_refreshes :: proc(t: ^testing.T) {
 		_fps_meter_record(&meter, frame)
 		testing.expect_value(t, meter.displayed, i32(60))
 	}
-	meter = {displayed = 60}
+	meter = {
+		displayed = 60,
+	}
 	for _ in 0 ..< 119 do _fps_meter_record(&meter, 1.0 / 120.0)
 	testing.expect_value(t, meter.displayed, i32(60))
 	_fps_meter_record(&meter, 1.0 / 120.0 + 0.0001)
