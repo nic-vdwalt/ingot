@@ -868,19 +868,33 @@ button_fit_w_frame :: proc(frame: ^Ui_Frame, label: string, font_size: i32 = 0) 
 	return button_fit_width(frame, label, fs)
 }
 
-// Fit a button label to the button box: truncate with an ellipsis when it is
-// too wide, and return the drawn text plus its measured width for centring.
+// Fit a button label to the button box and return the drawn text, its
+// measured width for centring, and the size to draw it at. An ellipsis hides
+// what the button does, so it is the last resort: first the label may eat into
+// the horizontal padding down to a minimal inset, then step down in size (no
+// smaller than the note size) before it is truncated.
 @(private = "file")
-btn_label_fit :: proc(frame: ^Ui_Frame, label: string, w, font_size: i32) -> (string, i32) {
+btn_label_fit :: proc(frame: ^Ui_Frame, label: string, w, font_size: i32) -> (string, i32, i32) {
 	assert(frame != nil, "btn_label_fit: nil frame")
 	assert(font_size > 0, "btn_label_fit: non-positive font size")
 	assert(label != "", "btn_label_fit: empty label")
-	pad := ui_frame_metrics(frame).CONTROL_GAP
+	metrics := ui_frame_metrics(frame)
+	pad := metrics.CONTROL_GAP
 	avail := max(w - pad * 2, 0)
 	width := measure_text_string_frame(frame, label, font_size)
-	if width <= avail do return label, width
-	fitted := truncate_to_width_frame(frame, label, avail, font_size)
-	return fitted, measure_text_string_frame(frame, fitted, font_size)
+	if width <= avail do return label, width, font_size
+	inset := max(pad / 4, 1)
+	tight := max(w - inset * 2, 0)
+	if width <= tight do return label, width, font_size
+	drawn := frame_text_size(frame, font_size)
+	min_size := max(min(metrics.FONT_SIZE_NOTE, font_size), 1)
+	for size := font_size - 1; size >= min_size; size -= 1 {
+		if frame_text_size(frame, size) >= drawn do continue
+		smaller := measure_text_string_frame(frame, label, size)
+		if smaller <= tight do return label, smaller, size
+	}
+	fitted := truncate_to_width_frame(frame, label, tight, font_size)
+	return fitted, measure_text_string_frame(frame, fitted, font_size), font_size
 }
 
 // btn_sync_web_submit mirrors a button into the browser form overlay (web
@@ -996,11 +1010,11 @@ button_at :: proc(
 			draw_focus_ring(frame, x, y, w, h)
 		}
 
-		label_s, text_w := btn_label_fit(frame, label, w, fs)
+		label_s, text_w, label_fs := btn_label_fit(frame, label, w, fs)
 		nudge := button_label_nudge(frame, enabled && style != .Ghost, press)
 		label_x := x + (w - text_w) / 2 + nudge
-		label_y := y + (h - frame_text_size(frame, fs)) / 2 + nudge
-		draw_text_string_frame(frame, label_s, label_x, label_y, fs, fg)
+		label_y := y + (h - frame_text_size(frame, label_fs)) / 2 + nudge
+		draw_text_string_frame(frame, label_s, label_x, label_y, label_fs, fg)
 	}
 
 	sem: Sem_State
@@ -1150,11 +1164,11 @@ button_at_state :: proc(
 	if !culled {
 		button_surface_paint(frame, rrect, style, enabled, bg, border, press)
 		if enabled && focus_opt_focused(focus) do draw_focus_ring(frame, x, y, w, h)
-		label_s, text_w := btn_label_fit(frame, label, w, fs)
+		label_s, text_w, label_fs := btn_label_fit(frame, label, w, fs)
 		nudge := button_label_nudge(frame, enabled && style != .Ghost, press)
 		label_x := x + (w - text_w) / 2 + nudge
-		label_y := y + (h - frame_text_size(frame, fs)) / 2 + nudge
-		draw_text_string_frame(frame, label_s, label_x, label_y, fs, fg)
+		label_y := y + (h - frame_text_size(frame, label_fs)) / 2 + nudge
+		draw_text_string_frame(frame, label_s, label_x, label_y, label_fs, fg)
 	}
 	if semantic_will_emit(frame) {
 		sem: Sem_State
