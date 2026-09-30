@@ -1091,6 +1091,25 @@ markdown_table_parse_rows :: proc(
 }
 
 @(private = "file")
+markdown_table_cell_pad_y :: proc(ctx: ^Markdown_Context) -> i32 {
+	assert(ctx != nil, "markdown_table_cell_pad_y: nil ctx")
+	return max(ui_frame_metrics(ctx.frame).TABLE_CELL_PAD / 2, i32(1))
+}
+
+@(private = "file")
+markdown_table_cell_display :: proc(ctx: ^Markdown_Context, cell: string) -> string {
+	assert(ctx != nil, "markdown_table_cell_display: nil ctx")
+	if !strings.contains(cell, "**") &&
+	   strings.index_byte(cell, PILL_OPEN) < 0 &&
+	   strings.index_byte(cell, '`') < 0 &&
+	   strings.index_byte(cell, '[') < 0 {
+		return cell
+	}
+	spans := frame_view_items(ctx.frame, parse_inline_spans(ctx.frame, cell))
+	return frame_string_value(ctx.frame, spans_display_string(ctx.frame, spans))
+}
+
+@(private = "file")
 markdown_table_natural_widths :: proc(
 	ctx: ^Markdown_Context,
 	rows: []Markdown_Table_Row,
@@ -1106,7 +1125,8 @@ markdown_table_natural_widths :: proc(
 	for row in rows {
 		for cell, column in row.cells {
 			if len(cell) == 0 do continue
-			cell_c := strings.clone_to_cstring(cell, ui_frame_allocator(ctx.frame))
+			display := markdown_table_cell_display(ctx, cell)
+			cell_c := strings.clone_to_cstring(display, ui_frame_allocator(ctx.frame))
 			width :=
 				measure_text_frame(ctx.frame, cell_c, ui_frame_metrics(ctx.frame).FONT_SIZE_BODY) +
 				padding * 2
@@ -1216,21 +1236,16 @@ markdown_table_row_heights :: proc(
 	assert(ctx != nil, "markdown_table_row_heights: nil ctx")
 	heights: Markdown_Table_Heights
 	metrics := ui_frame_metrics(ctx.frame)
+	pad_y := markdown_table_cell_pad_y(ctx)
 	for row, row_index in rows {
 		height := i32(metrics.LINE_HEIGHT)
 		for cell, column in row.cells {
 			if column >= columns || len(cell) == 0 do continue
 			inner := max(widths[column] - metrics.TABLE_CELL_PAD * 2, i32(1))
-			cell_height := wrapped_height_px_frame(
-				ctx.frame,
-				cell,
-				inner,
-				metrics.FONT_SIZE_BODY,
-				metrics.LINE_HEIGHT,
-			)
+			cell_height := measure_wrapped_height_md(ctx, cell, inner, metrics.FONT_SIZE_BODY)
 			height = max(height, cell_height)
 		}
-		heights[row_index] = height
+		heights[row_index] = height + pad_y * 2
 	}
 	return heights
 }
@@ -1245,29 +1260,23 @@ markdown_table_draw_cell :: proc(
 	assert(ctx != nil, "markdown_table_draw_cell: nil ctx")
 	metrics := ui_frame_metrics(ctx.frame)
 	inner := max(width - metrics.TABLE_CELL_PAD * 2, i32(1))
-	padding_y := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE_BODY) / 2, i32(0))
-	text_y := y + padding_y
-	for line in wrap_text_frame(ctx.frame, cell, inner, metrics.FONT_SIZE_BODY) {
-		if line.end > line.start {
-			line_c := strings.clone_to_cstring(cell[line.start:line.end], context.temp_allocator)
-			draw_text_frame(
-				ctx.frame,
-				line_c,
-				x + metrics.TABLE_CELL_PAD,
-				text_y,
-				metrics.FONT_SIZE_BODY,
-				color,
-			)
-		}
-		text_y += i32(metrics.LINE_HEIGHT)
-	}
+	centering := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE_BODY) / 2, i32(0))
+	draw_text_wrapped_md(
+		ctx,
+		x + metrics.TABLE_CELL_PAD,
+		y + markdown_table_cell_pad_y(ctx) + centering,
+		inner,
+		cell,
+		color,
+		metrics.FONT_SIZE_BODY,
+	)
 }
 
 @(private = "file")
 markdown_table_draw_row :: proc(
 	ctx: ^Markdown_Context,
 	row: ^Markdown_Table_Row,
-	row_index: int,
+	row_index, row_count: int,
 	x, y, height, table_width: i32,
 	widths: Markdown_Table_Widths,
 	columns: int,
@@ -1278,6 +1287,12 @@ markdown_table_draw_row :: proc(
 	style := ui_frame_theme(ctx.frame)
 	is_header := row_index == 0
 	if is_header do draw_rectangle(ctx.frame, x, y, table_width, height, style.bg_table_header)
+	if row_index > 0 && row_index % 2 == 0 {
+		draw_rectangle(ctx.frame, x, y, table_width, height, markdown_table_stripe_color(style))
+	}
+	if row_index > 0 && row_index < row_count - 1 {
+		draw_rectangle(ctx.frame, x, y + height - 1, table_width, 1, style.border_subtle)
+	}
 	cell_x := x
 	for column in 0 ..< columns {
 		if column > 0 do draw_rectangle(ctx.frame, cell_x, y, 1, height, style.border_color)
@@ -1316,11 +1331,11 @@ markdown_table_hit_row :: proc(
 	if column >= len(row.cells) || len(row.cells[column]) == 0 do return block_start
 	metrics := ui_frame_metrics(ctx.frame)
 	inner := max(widths[column] - metrics.TABLE_CELL_PAD * 2, i32(1))
-	padding_y := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE_BODY) / 2, i32(0))
-	local := hit_test_wrapped_frame(
-		ctx.frame,
+	centering := max((i32(metrics.LINE_HEIGHT) - metrics.FONT_SIZE_BODY) / 2, i32(0))
+	local := hit_test_wrapped_md(
+		ctx,
 		cell_x + metrics.TABLE_CELL_PAD,
-		y + padding_y,
+		y + markdown_table_cell_pad_y(ctx) + centering,
 		inner,
 		row.cells[column],
 		mouse_x,
@@ -1369,6 +1384,7 @@ layout_table :: proc(
 				ctx,
 				&row,
 				row_index,
+				len(rows),
 				x,
 				row_y,
 				row_height,
@@ -2201,8 +2217,26 @@ markdown_layout_table :: proc(
 	layout.content_w = max(layout.content_w, layout.width if shrunk else table_width)
 	top := layout.content_h
 	metrics := ui_frame_metrics(ctx.frame)
+	pad_y := markdown_table_cell_pad_y(ctx)
+	centering := max((metrics.LINE_HEIGHT - metrics.FONT_SIZE_BODY) / 2, 0)
 	for row, row_index in rows {
 		height := heights[row_index]
+		row_top := layout.content_h
+		if row_index > 0 && row_index % 2 == 0 {
+			append(
+				&layout.decorations,
+				Markdown_Layout_Decoration{{0, row_top, table_width, height}, .Table_Stripe},
+			)
+		}
+		if row_index > 0 && row_index < len(rows) - 1 {
+			append(
+				&layout.decorations,
+				Markdown_Layout_Decoration {
+					{0, row_top + height - 1, table_width, 1},
+					.Table_Row_Border,
+				},
+			)
+		}
 		if row_index == 0 {
 			append(
 				&layout.decorations,
@@ -2235,21 +2269,18 @@ markdown_layout_table :: proc(
 					row.cells[column],
 					row.starts[column],
 					cell_x + metrics.TABLE_CELL_PAD,
-					layout.content_h + max((metrics.LINE_HEIGHT - metrics.FONT_SIZE_BODY) / 2, 0),
+					row_top + pad_y + centering,
 					max(widths[column] - metrics.TABLE_CELL_PAD * 2, 1),
 					metrics.FONT_SIZE_BODY,
 					metrics.LINE_HEIGHT,
 					.Table_Bold if row_index == 0 else .Body,
-					false,
+					true,
 				)
 				for &run in layout.runs[first_run:] {
-					run.hit_top = max(
-						run.bounds.y - max((metrics.LINE_HEIGHT - metrics.FONT_SIZE_BODY) / 2, 0),
-						layout.content_h,
-					)
+					run.hit_top = max(run.bounds.y - pad_y - centering, row_top)
 					run.hit_bottom = min(
-						run.hit_top + metrics.LINE_HEIGHT,
-						layout.content_h + height,
+						run.hit_top + metrics.LINE_HEIGHT + pad_y * 2,
+						row_top + height,
 					)
 				}
 			}

@@ -3,6 +3,7 @@ package ui
 
 import fmt "core:fmt"
 import "core:testing"
+import "core:strings"
 import time "core:time"
 
 markdown_benchmark_clock :: time.tick_now
@@ -591,4 +592,56 @@ markdown_prepared_matches_legacy_queries :: proc(t: ^testing.T) {
 		testing.expect_value(t, frame.markdown_telemetry.hit_queries, u64(1))
 		testing.expect_value(t, frame.markdown_telemetry.source_y_queries, u64(1))
 	}
+}
+
+@(test)
+markdown_table_cells_render_inline_spans_and_row_chrome :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	ctx := markdown_context(&frame)
+	source := "| A | B |\n|---|---|\n| **x** | `y` |\n| z | w |\n| q | r |"
+	prepared := markdown_prepare(&ctx, 400, source)
+	testing.expect_value(t, prepared.status, Markdown_Prepare_Status.Complete)
+	layout := prepared.layout
+	testing.expect(t, layout != nil, "prepared layout missing")
+	if layout == nil do return
+	bold_runs, code_runs := 0, 0
+	for run in layout.runs {
+		text := string(layout.text[run.text_start:run.text_end])
+		testing.expectf(t, !strings.contains(text, "**"), "raw bold marker in run %q", text)
+		testing.expectf(t, strings.index_byte(text, '`') < 0, "raw code marker in run %q", text)
+		if run.style == .Bold {
+			bold_runs += 1
+			testing.expect_value(t, text, "x")
+			testing.expect_value(t, source[run.source_start:run.source_start + 1], "x")
+		}
+		if run.style == .Code do code_runs += 1
+	}
+	testing.expect_value(t, bold_runs, 1)
+	testing.expect_value(t, code_runs, 1)
+	stripes, row_borders := 0, 0
+	for decoration in layout.decorations {
+		if decoration.kind == .Table_Stripe do stripes += 1
+		if decoration.kind == .Table_Row_Border do row_borders += 1
+	}
+	testing.expect_value(t, stripes, 1)
+	testing.expect_value(t, row_borders, 2)
+	metrics := ui_frame_metrics(&frame)
+	pad_y := max(metrics.TABLE_CELL_PAD / 2, i32(1))
+	row_height := i32(metrics.LINE_HEIGHT) + pad_y * 2
+	height := markdown_prepared_measure(&ctx, &prepared)
+	testing.expect_value(t, height, row_height * 4 + 1 + 5)
 }

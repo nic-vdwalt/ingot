@@ -176,6 +176,8 @@ Markdown_Layout_Decoration_Kind :: enum u8 {
 	Table_Header,
 	Bullet,
 	Outline,
+	Table_Stripe,
+	Table_Row_Border,
 }
 
 Markdown_Layout_Decoration :: struct {
@@ -325,6 +327,12 @@ markdown_layout_run_color :: proc(
 	return base
 }
 
+markdown_table_stripe_color :: proc(theme: ^Theme) -> Color {
+	assert(theme != nil, "markdown_table_stripe_color: nil theme")
+	header := theme.bg_table_header
+	return Color{header.r, header.g, header.b, header.a / 2}
+}
+
 markdown_layout_draw :: proc(
 	ctx: ^Markdown_Context,
 	layout: ^Markdown_Layout,
@@ -353,6 +361,10 @@ markdown_layout_draw :: proc(
 			fill = theme.border_subtle
 		case .Table_Header:
 			fill = theme.bg_table_header
+		case .Table_Stripe:
+			fill = markdown_table_stripe_color(theme)
+		case .Table_Row_Border:
+			fill = theme.border_subtle
 		case .Bullet:
 			draw_circle(ctx.frame, rect.x, rect.y, 2.5, theme.fg_bullet)
 			continue
