@@ -645,3 +645,56 @@ markdown_table_cells_render_inline_spans_and_row_chrome :: proc(t: ^testing.T) {
 	height := markdown_prepared_measure(&ctx, &prepared)
 	testing.expect_value(t, height, row_height * 4 + 1 + 5)
 }
+
+@(test)
+markdown_table_columns_respect_longest_word :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	backend: Test_Text_Backend_State
+	ui_runtime_set_text_backend(
+		&runtime,
+		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
+	)
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+	output := new(Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	defer ui_frame_end(&frame)
+	ctx := markdown_context(&frame)
+	detail := "the rollback plan depends on a manual restore that nobody has rehearsed against the current production schema and the restore window is unknown"
+	source := strings.concatenate(
+		{
+			"| # | Concern | Detail |\n|---|---|---|\n| 1 | No RDS snapshot yet | ",
+			detail,
+			" |\n| 2 | Script has blind spots | ",
+			detail,
+			" |",
+		},
+		context.temp_allocator,
+	)
+	words := make(map[string]bool, context.temp_allocator)
+	for word in strings.fields(source, context.temp_allocator) do words[word] = true
+	prepared := markdown_prepare(&ctx, 400, source)
+	testing.expect_value(t, prepared.status, Markdown_Prepare_Status.Complete)
+	layout := prepared.layout
+	testing.expect(t, layout != nil, "prepared layout missing")
+	if layout == nil do return
+	testing.expect(t, len(layout.runs) > 0, "table produced no runs")
+	snapshot_seen := false
+	for run in layout.runs {
+		text := string(layout.text[run.text_start:run.text_end])
+		for word in strings.fields(text, context.temp_allocator) {
+			testing.expectf(t, word in words, "table cell word split mid-word: %q", word)
+			if word == "snapshot" do snapshot_seen = true
+		}
+	}
+	testing.expect(t, snapshot_seen, "short column word missing from layout")
+	metrics := ui_frame_metrics(&frame)
+	pad_y := max(metrics.TABLE_CELL_PAD / 2, i32(1))
+	fits := markdown_prepare(&ctx, 400, "| a | b |\n|---|---|\n| c | d |")
+	fit_height := markdown_prepared_measure(&ctx, &fits)
+	testing.expect_value(t, fit_height, (i32(metrics.LINE_HEIGHT) + pad_y * 2) * 2 + 1 + 5)
+}

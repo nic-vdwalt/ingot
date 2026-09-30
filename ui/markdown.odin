@@ -1109,120 +1109,149 @@ markdown_table_cell_display :: proc(ctx: ^Markdown_Context, cell: string) -> str
 	return frame_string_value(ctx.frame, spans_display_string(ctx.frame, spans))
 }
 
+Markdown_Table_Column_Bounds :: struct {
+	max_w: Markdown_Table_Widths,
+	min_w: Markdown_Table_Widths,
+	floor: i32,
+}
+
 @(private = "file")
-markdown_table_natural_widths :: proc(
+markdown_table_longest_word_width :: proc(ctx: ^Markdown_Context, display: string) -> i32 {
+	assert(ctx != nil, "markdown_table_longest_word_width: nil ctx")
+	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
+	longest: i32
+	word_start := -1
+	for index in 0 ..= len(display) {
+		at_break := index == len(display) || display[index] == ' ' || display[index] == '\t'
+		if !at_break {
+			if word_start < 0 do word_start = index
+			continue
+		}
+		if word_start < 0 do continue
+		word_c := strings.clone_to_cstring(display[word_start:index], ui_frame_allocator(ctx.frame))
+		longest = max(longest, measure_text_frame(ctx.frame, word_c, font_size))
+		word_start = -1
+	}
+	return longest
+}
+
+@(private = "file")
+markdown_table_column_bounds :: proc(
 	ctx: ^Markdown_Context,
 	rows: []Markdown_Table_Row,
 	columns: int,
 	max_width: i32,
-) -> (
-	Markdown_Table_Widths,
-	i32,
-) {
-	assert(ctx != nil, "markdown_table_natural_widths: nil ctx")
-	widths: Markdown_Table_Widths
-	padding := ui_frame_metrics(ctx.frame).TABLE_CELL_PAD
+) -> Markdown_Table_Column_Bounds {
+	assert(ctx != nil, "markdown_table_column_bounds: nil ctx")
+	assert(columns > 0 && columns <= MARKDOWN_TABLE_COLS_MAX, "markdown_table_column_bounds: bad columns")
+	bounds: Markdown_Table_Column_Bounds
+	metrics := ui_frame_metrics(ctx.frame)
+	padding := metrics.TABLE_CELL_PAD
 	for row in rows {
 		for cell, column in row.cells {
-			if len(cell) == 0 do continue
+			if column >= columns || len(cell) == 0 do continue
 			display := markdown_table_cell_display(ctx, cell)
 			cell_c := strings.clone_to_cstring(display, ui_frame_allocator(ctx.frame))
-			width :=
-				measure_text_frame(ctx.frame, cell_c, ui_frame_metrics(ctx.frame).FONT_SIZE_BODY) +
-				padding * 2
-			widths[column] = max(widths[column], width)
+			width := measure_text_frame(ctx.frame, cell_c, metrics.FONT_SIZE_BODY) + padding * 2
+			bounds.max_w[column] = max(bounds.max_w[column], width)
+			word := markdown_table_longest_word_width(ctx, display) + padding * 2
+			bounds.min_w[column] = max(bounds.min_w[column], word)
 		}
 	}
-	minimum := padding * 2 + ui_frame_metrics(ctx.frame).FONT_SIZE_BODY * 2
-	minimum = clamp(minimum, i32(1), max_width / i32(columns))
-	for column in 0 ..< columns do widths[column] = max(widths[column], minimum)
-	return widths, minimum
+	floor := padding * 2 + metrics.FONT_SIZE_BODY * 2
+	bounds.floor = clamp(floor, i32(1), max(max_width / i32(columns), i32(1)))
+	for column in 0 ..< columns {
+		bounds.max_w[column] = max(bounds.max_w[column], bounds.floor)
+		bounds.min_w[column] = clamp(bounds.min_w[column], bounds.floor, bounds.max_w[column])
+	}
+	return bounds
 }
 
 @(private = "file")
-markdown_table_fix_columns :: proc(
-	naturals: Markdown_Table_Widths,
-	columns: int,
-	max_width: i32,
-	widths: ^Markdown_Table_Widths,
-	fixed: ^[MARKDOWN_TABLE_COLS_MAX]bool,
-) -> (
-	i32,
-	int,
-) {
-	assert(widths != nil, "markdown_table_fix_columns: nil widths")
-	assert(fixed != nil, "markdown_table_fix_columns: nil fixed")
-	remaining := max_width
-	flexible := columns
-	for _ in 0 ..< columns {
-		changed := false
-		share := remaining / i32(max(flexible, 1))
-		for column in 0 ..< columns {
-			if fixed[column] || naturals[column] > share do continue
-			fixed[column] = true
-			widths[column] = naturals[column]
-			remaining -= naturals[column]
-			flexible -= 1
-			changed = true
-		}
-		if !changed || flexible == 0 do break
-	}
-	return remaining, flexible
+markdown_table_widths_sum :: proc(widths: Markdown_Table_Widths, columns: int) -> i64 {
+	total: i64
+	for column in 0 ..< columns do total += i64(widths[column])
+	return total
 }
 
 @(private = "file")
-markdown_table_distribute_columns :: proc(
-	naturals: Markdown_Table_Widths,
+markdown_table_blend :: proc(
+	lo, hi: Markdown_Table_Widths,
 	columns: int,
-	minimum, remaining: i32,
-	fixed: ^[MARKDOWN_TABLE_COLS_MAX]bool,
+	avail: i32,
+) -> Markdown_Table_Widths {
+	lo_sum := markdown_table_widths_sum(lo, columns)
+	hi_sum := markdown_table_widths_sum(hi, columns)
+	assert(lo_sum <= i64(avail) && i64(avail) <= hi_sum, "markdown_table_blend: avail out of range")
+	widths := lo
+	slack_sum := hi_sum - lo_sum
+	if slack_sum <= 0 do return widths
+	extra := i64(avail) - lo_sum
+	for column in 0 ..< columns {
+		slack := i64(hi[column] - lo[column])
+		widths[column] = lo[column] + i32(slack * extra / slack_sum)
+	}
+	return widths
+}
+
+@(private = "file")
+markdown_table_give_remainder :: proc(
 	widths: ^Markdown_Table_Widths,
+	max_w: Markdown_Table_Widths,
+	columns: int,
+	avail: i32,
 ) {
-	assert(fixed != nil, "markdown_table_distribute_columns: nil fixed")
-	assert(widths != nil, "markdown_table_distribute_columns: nil widths")
-	flex_natural: i32
+	assert(widths != nil, "markdown_table_give_remainder: nil widths")
+	assert(columns > 0, "markdown_table_give_remainder: no columns")
+	left := i64(avail) - markdown_table_widths_sum(widths^, columns)
+	if left <= 0 do return
+	target := columns - 1
+	best_slack := i32(0)
 	for column in 0 ..< columns {
-		if !fixed[column] do flex_natural += naturals[column]
+		slack := max_w[column] - widths[column]
+		if slack > best_slack {
+			best_slack = slack
+			target = column
+		}
 	}
-	left := remaining
-	last := -1
-	for column in 0 ..< columns {
-		if fixed[column] do continue
-		width := remaining * naturals[column] / max(flex_natural, 1)
-		widths[column] = max(width, minimum)
-		left -= widths[column]
-		last = column
-	}
-	if last >= 0 && left > 0 do widths[last] += left
+	widths[target] += i32(left)
 }
 
 @(private = "file")
 markdown_table_column_widths :: proc(
-	naturals: Markdown_Table_Widths,
+	bounds: Markdown_Table_Column_Bounds,
 	columns: int,
-	max_width, minimum: i32,
+	max_width, font_size_body, pad: i32,
 ) -> (
 	Markdown_Table_Widths,
 	bool,
 ) {
+	assert(columns > 0 && columns <= MARKDOWN_TABLE_COLS_MAX, "markdown_table_column_widths: bad columns")
+	assert(max_width > 0, "markdown_table_column_widths: non-positive max_width")
+	if markdown_table_widths_sum(bounds.max_w, columns) <= i64(max_width) {
+		return bounds.max_w, false
+	}
+	comfort_target := pad * 2 + 20 * font_size_body / 2
+	comfort: Markdown_Table_Widths
+	floors: Markdown_Table_Widths
+	for column in 0 ..< columns {
+		comfort[column] = min(bounds.max_w[column], max(bounds.min_w[column], comfort_target))
+		floors[column] = bounds.floor
+	}
 	widths: Markdown_Table_Widths
-	total: i32
-	for column in 0 ..< columns do total += naturals[column]
-	if total <= max_width {
-		for column in 0 ..< columns do widths[column] = naturals[column]
-		return widths, false
+	switch {
+	case markdown_table_widths_sum(comfort, columns) <= i64(max_width):
+		widths = markdown_table_blend(comfort, bounds.max_w, columns, max_width)
+	case markdown_table_widths_sum(bounds.min_w, columns) <= i64(max_width):
+		widths = markdown_table_blend(bounds.min_w, comfort, columns, max_width)
+	case markdown_table_widths_sum(floors, columns) <= i64(max_width):
+		widths = markdown_table_blend(floors, bounds.min_w, columns, max_width)
+	case:
+		share := max(max_width / i32(columns), i32(1))
+		for column in 0 ..< columns do widths[column] = share
 	}
-	fixed: [MARKDOWN_TABLE_COLS_MAX]bool
-	remaining, flexible := markdown_table_fix_columns(
-		naturals,
-		columns,
-		max_width,
-		&widths,
-		&fixed,
-	)
-	if flexible > 0 {
-		markdown_table_distribute_columns(naturals, columns, minimum, remaining, &fixed, &widths)
-	}
+	markdown_table_give_remainder(&widths, bounds.max_w, columns, max_width)
+	for column in 0 ..< columns do assert(widths[column] >= 1, "markdown_table_column_widths: empty column")
 	return widths, true
 }
 
@@ -1371,8 +1400,15 @@ layout_table :: proc(
 	assert(max_width > 0, "layout_table: non-positive max_width")
 	rows, columns, next_byte := markdown_table_parse_rows(ctx, text, blk_start)
 	if columns == 0 || len(rows) == 0 do return blk_start, 0
-	naturals, minimum := markdown_table_natural_widths(ctx, rows[:], columns, max_width)
-	widths, shrunk := markdown_table_column_widths(naturals, columns, max_width, minimum)
+	metrics := ui_frame_metrics(ctx.frame)
+	bounds := markdown_table_column_bounds(ctx, rows[:], columns, max_width)
+	widths, shrunk := markdown_table_column_widths(
+		bounds,
+		columns,
+		max_width,
+		metrics.FONT_SIZE_BODY,
+		metrics.TABLE_CELL_PAD,
+	)
 	table_width := markdown_table_total_width(widths, columns)
 	if out_table_w != nil do out_table_w^ = max_width if shrunk else table_width
 	heights := markdown_table_row_heights(ctx, rows[:], widths, columns)
@@ -2210,13 +2246,19 @@ markdown_layout_table :: proc(
 	if !strings.contains(separator, "|") || !is_table_separator(separator) do return 0, false
 	rows, columns, next_byte := markdown_table_parse_rows(ctx, layout.source, start)
 	if columns == 0 || len(rows) == 0 do return 0, false
-	naturals, minimum := markdown_table_natural_widths(ctx, rows[:], columns, layout.width)
-	widths, shrunk := markdown_table_column_widths(naturals, columns, layout.width, minimum)
+	metrics := ui_frame_metrics(ctx.frame)
+	bounds := markdown_table_column_bounds(ctx, rows[:], columns, layout.width)
+	widths, shrunk := markdown_table_column_widths(
+		bounds,
+		columns,
+		layout.width,
+		metrics.FONT_SIZE_BODY,
+		metrics.TABLE_CELL_PAD,
+	)
 	heights := markdown_table_row_heights(ctx, rows[:], widths, columns)
 	table_width := markdown_table_total_width(widths, columns)
 	layout.content_w = max(layout.content_w, layout.width if shrunk else table_width)
 	top := layout.content_h
-	metrics := ui_frame_metrics(ctx.frame)
 	pad_y := markdown_table_cell_pad_y(ctx)
 	centering := max((metrics.LINE_HEIGHT - metrics.FONT_SIZE_BODY) / 2, 0)
 	for row, row_index in rows {
