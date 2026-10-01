@@ -57,6 +57,11 @@
           "file": "vendor/libvterm/src/encoding.c",
           "function": "decode_utf8",
           "summary": "Do not emit two codepoints when only one slot remains. The ASCII branch writes the U+FFFD marker for an abandoned multi-byte sequence followed by the character itself, but the loop guard only proves room for one, so landing the pair on the last slot wrote one uint32 past the end of vt->tmpbuffer and corrupted the C heap. Reachable from any terminal output containing a truncated UTF-8 sequence; it made scripts/test.sh abort about 43% of the time."
+        },
+        {
+          "file": "vendor/libvterm/src/state.c",
+          "function": "on_text",
+          "summary": "Clamp negative codepoint widths to zero. vterm_unicode_width() returns -1 for C1 controls (U+0080..U+009F) delivered as UTF-8 text, and adding that to the cursor column moved it to -1 and produced an inverted damage rect; a following resize then failed to place the cursor. Found by term.term_pump_resize_fuzz (seed 1790829414776857500) in Windows CI."
         }
       ],
       "license": "MIT",
@@ -68,12 +73,12 @@
       "artifacts": [
         {
           "path": "libvterm/lib/darwin_arm64/libvterm.a",
-          "sha256": "8a0befd7432dd0d384e457eddbf2ae900105ce30b1f39f43182274472044a111",
+          "sha256": "bd0d125e5153c0054d3d05c9597910eb6d7a7cd743dc4f2a1d180638bcf9baca",
           "built_from": "patched"
         },
         {
           "path": "libvterm/lib/darwin_amd64/libvterm.a",
-          "sha256": "c618fe7f4bbfb44333ea5762cde925d146646cb5e83b46a32915e905a2e33fce",
+          "sha256": "c7347787890b7c759f3dbf8adf57bce2adf1e71f5e84f78750a1dddd7c7f707a",
           "built_from": "patched"
         },
         {

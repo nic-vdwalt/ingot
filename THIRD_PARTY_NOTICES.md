@@ -67,7 +67,7 @@ the corresponding mirror tag points to commit
 
 ### Local modifications
 
-The vendored source is upstream 0.3.3 with three memory-safety patches
+The vendored source is upstream 0.3.3 with four robustness patches
 applied. All were found by fuzzing the `term` package, which now fences them:
 
 - `src/screen.c`, `erase_internal()`: skip cells for which `getcell()` returns
@@ -103,6 +103,15 @@ applied. All were found by fuzzing the `term` package, which now fences them:
   and is fenced by `term.vterm_wide_glyph_on_last_column_stays_in_bounds`. The
   guard uses the same `if(!cell)` idiom the rest of the file already applies
   to `getcell()` results.
+
+- `src/state.c`, `on_text()`: clamp negative codepoint widths to zero.
+  `vterm_unicode_width()` returns -1 for C1 controls (U+0080..U+009F) that
+  arrive as UTF-8 text, and adding that to the cursor column moved the cursor
+  to -1 and emitted a damage rect with `end_col < start_col`; a following
+  resize then failed to place the cursor. It surfaced as
+  `term.term_pump_resize_fuzz` failing in Windows CI with seed
+  `1790829414776857500` and is fenced by
+  `term.vterm_c1_control_text_keeps_cursor_in_grid`.
 
 Any upstream refresh must re-apply these patches or confirm upstream has fixed
 them. Both macOS archives have been rebuilt from the patched source and their

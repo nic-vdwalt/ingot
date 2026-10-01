@@ -367,6 +367,8 @@ static int on_text(const char bytes[], size_t len, void *user)
         abort();
       }
 #endif
+      if(this_width < 0)
+        this_width = 0;
       width += this_width;
     }
 

@@ -457,3 +457,38 @@ vterm_wide_glyph_on_last_column_stays_in_bounds :: proc(t: ^testing.T) {
 		)
 	}
 }
+
+// Regression: C1 controls (U+0080..U+009F) arriving as UTF-8 text reach
+// state.c on_text, where vterm_unicode_width() returns -1 for them. Upstream
+// added that to the cursor column, moving it to -1 and emitting a damage rect
+// with end_col < start_col; a later resize then failed to place the cursor.
+// Found by term_pump_resize_fuzz with seed 1790829414776857500.
+//
+// Fixed in vendor/libvterm/src/state.c; see THIRD_PARTY_NOTICES.md.
+@(test)
+vterm_c1_control_text_keeps_cursor_in_grid :: proc(t: ^testing.T) {
+	for lead in 0 ..< 3 {
+		ts := fuzz_vt_make(80, 4)
+		testing.expectf(t, ts != nil, "emulator should initialise (lead %v)", lead)
+		if ts == nil do continue
+		defer fuzz_vt_destroy(ts)
+
+		n := 0
+		for _ in 0 ..< lead {
+			ts.read_buf[n] = 'A'
+			n += 1
+		}
+		for code in 0x80 ..= 0x9F {
+			ts.read_buf[n] = 0xC2
+			ts.read_buf[n + 1] = u8(code)
+			n += 2
+		}
+		ts.utf8_hold_len = 0
+
+		_term_ingest(ts, n, false)
+
+		fuzz_vt_check_invariants(t, ts)
+		term_resize(ts, 40, 2)
+		fuzz_vt_check_invariants(t, ts)
+	}
+}
