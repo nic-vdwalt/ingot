@@ -1119,18 +1119,14 @@ Markdown_Table_Column_Bounds :: struct {
 markdown_table_longest_word_width :: proc(ctx: ^Markdown_Context, display: string) -> i32 {
 	assert(ctx != nil, "markdown_table_longest_word_width: nil ctx")
 	font_size := ui_frame_metrics(ctx.frame).FONT_SIZE_BODY
-	longest: i32
-	word_start := -1
-	for index in 0 ..= len(display) {
-		at_break := index == len(display) || display[index] == ' ' || display[index] == '\t'
-		if !at_break {
-			if word_start < 0 do word_start = index
+	longest, word: i32
+	for value in display {
+		if value == ' ' || value == '\n' {
+			word = 0
 			continue
 		}
-		if word_start < 0 do continue
-		word_c := strings.clone_to_cstring(display[word_start:index], ui_frame_allocator(ctx.frame))
-		longest = max(longest, measure_text_frame(ctx.frame, word_c, font_size))
-		word_start = -1
+		word += rune_width_frame(ctx.frame, value, font_size) + 1
+		longest = max(longest, word)
 	}
 	return longest
 }
@@ -1143,7 +1139,10 @@ markdown_table_column_bounds :: proc(
 	max_width: i32,
 ) -> Markdown_Table_Column_Bounds {
 	assert(ctx != nil, "markdown_table_column_bounds: nil ctx")
-	assert(columns > 0 && columns <= MARKDOWN_TABLE_COLS_MAX, "markdown_table_column_bounds: bad columns")
+	assert(
+		columns > 0 && columns <= MARKDOWN_TABLE_COLS_MAX,
+		"markdown_table_column_bounds: bad columns",
+	)
 	bounds: Markdown_Table_Column_Bounds
 	metrics := ui_frame_metrics(ctx.frame)
 	padding := metrics.TABLE_CELL_PAD
@@ -1182,7 +1181,10 @@ markdown_table_blend :: proc(
 ) -> Markdown_Table_Widths {
 	lo_sum := markdown_table_widths_sum(lo, columns)
 	hi_sum := markdown_table_widths_sum(hi, columns)
-	assert(lo_sum <= i64(avail) && i64(avail) <= hi_sum, "markdown_table_blend: avail out of range")
+	assert(
+		lo_sum <= i64(avail) && i64(avail) <= hi_sum,
+		"markdown_table_blend: avail out of range",
+	)
 	widths := lo
 	slack_sum := hi_sum - lo_sum
 	if slack_sum <= 0 do return widths
@@ -1226,7 +1228,10 @@ markdown_table_column_widths :: proc(
 	Markdown_Table_Widths,
 	bool,
 ) {
-	assert(columns > 0 && columns <= MARKDOWN_TABLE_COLS_MAX, "markdown_table_column_widths: bad columns")
+	assert(
+		columns > 0 && columns <= MARKDOWN_TABLE_COLS_MAX,
+		"markdown_table_column_widths: bad columns",
+	)
 	assert(max_width > 0, "markdown_table_column_widths: non-positive max_width")
 	if markdown_table_widths_sum(bounds.max_w, columns) <= i64(max_width) {
 		return bounds.max_w, false
@@ -1251,7 +1256,9 @@ markdown_table_column_widths :: proc(
 		for column in 0 ..< columns do widths[column] = share
 	}
 	markdown_table_give_remainder(&widths, bounds.max_w, columns, max_width)
-	for column in 0 ..< columns do assert(widths[column] >= 1, "markdown_table_column_widths: empty column")
+	for column in 0 ..< columns {
+		assert(widths[column] >= 1, "markdown_table_column_widths: empty column")
+	}
 	return widths, true
 }
 
@@ -2228,6 +2235,41 @@ markdown_layout_bullet :: proc(
 	layout.content_w = max(layout.content_w, metrics.BULLET_INDENT)
 }
 
+@(private = "file")
+markdown_layout_table_row_chrome :: proc(
+	layout: ^Markdown_Layout,
+	row_index, row_count: int,
+	row_top, height, table_width: i32,
+) {
+	assert(layout != nil, "markdown_layout_table_row_chrome: nil layout")
+	assert(row_index >= 0 && row_index < row_count, "markdown_layout_table_row_chrome: bad row")
+	if row_index > 0 && row_index % 2 == 0 {
+		append(
+			&layout.decorations,
+			Markdown_Layout_Decoration{{0, row_top, table_width, height}, .Table_Stripe},
+		)
+	}
+	if row_index > 0 && row_index < row_count - 1 {
+		append(
+			&layout.decorations,
+			Markdown_Layout_Decoration {
+				{0, row_top + height - 1, table_width, 1},
+				.Table_Row_Border,
+			},
+		)
+	}
+	if row_index == 0 {
+		append(
+			&layout.decorations,
+			Markdown_Layout_Decoration{{0, row_top, table_width, height}, .Table_Header},
+		)
+		append(
+			&layout.decorations,
+			Markdown_Layout_Decoration{{0, row_top + height, table_width, 1}, .Border},
+		)
+	}
+}
+
 markdown_layout_table :: proc(
 	ctx: ^Markdown_Context,
 	layout: ^Markdown_Layout,
@@ -2264,37 +2306,14 @@ markdown_layout_table :: proc(
 	for row, row_index in rows {
 		height := heights[row_index]
 		row_top := layout.content_h
-		if row_index > 0 && row_index % 2 == 0 {
-			append(
-				&layout.decorations,
-				Markdown_Layout_Decoration{{0, row_top, table_width, height}, .Table_Stripe},
-			)
-		}
-		if row_index > 0 && row_index < len(rows) - 1 {
-			append(
-				&layout.decorations,
-				Markdown_Layout_Decoration {
-					{0, row_top + height - 1, table_width, 1},
-					.Table_Row_Border,
-				},
-			)
-		}
-		if row_index == 0 {
-			append(
-				&layout.decorations,
-				Markdown_Layout_Decoration {
-					{0, layout.content_h, table_width, height},
-					.Table_Header,
-				},
-			)
-			append(
-				&layout.decorations,
-				Markdown_Layout_Decoration {
-					{0, layout.content_h + height, table_width, 1},
-					.Border,
-				},
-			)
-		}
+		markdown_layout_table_row_chrome(
+			layout,
+			row_index,
+			len(rows),
+			row_top,
+			height,
+			table_width,
+		)
 		cell_x: i32
 		for column in 0 ..< columns {
 			if column > 0 {

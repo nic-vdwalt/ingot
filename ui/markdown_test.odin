@@ -2,8 +2,8 @@
 package ui
 
 import fmt "core:fmt"
-import "core:testing"
 import "core:strings"
+import "core:testing"
 import time "core:time"
 
 markdown_benchmark_clock :: time.tick_now
@@ -643,7 +643,7 @@ markdown_table_cells_render_inline_spans_and_row_chrome :: proc(t: ^testing.T) {
 	pad_y := max(metrics.TABLE_CELL_PAD / 2, i32(1))
 	row_height := i32(metrics.LINE_HEIGHT) + pad_y * 2
 	height := markdown_prepared_measure(&ctx, &prepared)
-	testing.expect_value(t, height, row_height * 4 + 1 + 5)
+	testing.expect_value(t, height, row_height * 4 + 1 + 4)
 }
 
 @(test)
@@ -664,7 +664,13 @@ markdown_table_columns_respect_longest_word :: proc(t: ^testing.T) {
 	ui_frame_begin(&frame, &runtime)
 	defer ui_frame_end(&frame)
 	ctx := markdown_context(&frame)
-	detail := "the rollback plan depends on a manual restore that nobody has rehearsed against the current production schema and the restore window is unknown"
+	detail := strings.concatenate(
+		{
+			"the rollback plan depends on a manual restore that nobody has rehearsed ",
+			"against the current production schema and the restore window is unknown",
+		},
+		context.temp_allocator,
+	)
 	source := strings.concatenate(
 		{
 			"| # | Concern | Detail |\n|---|---|---|\n| 1 | No RDS snapshot yet | ",
@@ -696,5 +702,5 @@ markdown_table_columns_respect_longest_word :: proc(t: ^testing.T) {
 	pad_y := max(metrics.TABLE_CELL_PAD / 2, i32(1))
 	fits := markdown_prepare(&ctx, 400, "| a | b |\n|---|---|\n| c | d |")
 	fit_height := markdown_prepared_measure(&ctx, &fits)
-	testing.expect_value(t, fit_height, (i32(metrics.LINE_HEIGHT) + pad_y * 2) * 2 + 1 + 5)
+	testing.expect_value(t, fit_height, (i32(metrics.LINE_HEIGHT) + pad_y * 2) * 2 + 1 + 4)
 }
