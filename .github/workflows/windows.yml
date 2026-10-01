@@ -97,9 +97,15 @@ jobs:
       - name: Run Windows strict gate
         shell: pwsh
         run: ./scripts/check.ps1
+      - name: Rebuild patched Windows libvterm for SDL3 tests
+        shell: pwsh
+        run: cmd /c scripts\build-libvterm.bat
       - name: Run Windows SDL3 tests
         shell: pwsh
         run: ./scripts/test.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
+      - name: Restore committed Windows libvterm after SDL3 tests
+        shell: pwsh
+        run: git checkout -- libvterm/lib/windows_amd64/vterm.lib
       - name: Run Windows SDL3 strict gate
         shell: pwsh
         run: ./scripts/check.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
