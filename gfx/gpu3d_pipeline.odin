@@ -2237,7 +2237,10 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.Bi
 		false,
 	)
 	data_2_view, _, _ := _gpu_3d_scene_view(
-		pass.owner, material.extra_data_texture_2, resources.neutral_data_view, false,
+		pass.owner,
+		material.extra_data_texture_2,
+		resources.neutral_data_view,
+		false,
 	)
 	depth_view := resources.neutral_depth_view
 	if material.scene_depth_texture.id != 0 {
