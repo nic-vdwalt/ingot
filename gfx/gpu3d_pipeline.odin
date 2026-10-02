@@ -55,7 +55,7 @@ GPU_3D_SCENE_BINDS_PER_PASS :: 64
 // Group 3 layout: b0 roughness/AO, b1 sampler, b2 scene colour, b3 sampler,
 // b4 scene depth, b5/b6 extra filterable textures, b7 extra sampler, b8/b9
 // extra unfilterable data textures. Shaders may declare any subset.
-GPU_3D_SCENE_BINDING_COUNT :: 10
+GPU_3D_SCENE_BINDING_COUNT :: 11
 
 Gpu_Mesh :: struct {
 	id: u32,
@@ -120,6 +120,7 @@ Gpu_Material :: struct {
 	extra_texture_1:      Texture2D,
 	extra_data_texture:   Texture2D,
 	extra_data_texture_1: Texture2D,
+	extra_data_texture_2: Texture2D,
 	custom_params:        [4]f32,
 	custom_params_2:      [4]f32,
 	custom_params_3:      [4]f32,
@@ -189,6 +190,7 @@ Gpu_3D_Scene_Bind_Key :: struct {
 	extra_1:           u32,
 	extra_data_0:      u32,
 	extra_data_1:      u32,
+	extra_data_2:      u32,
 }
 
 @(private)
@@ -2195,6 +2197,7 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.Bi
 		extra_1           = material.extra_texture_1.id,
 		extra_data_0      = material.extra_data_texture.id,
 		extra_data_1      = material.extra_data_texture_1.id,
+		extra_data_2      = material.extra_data_texture_2.id,
 	}
 	for index in 0 ..< pass.scene_bind_count {
 		entry := &pass.scene_binds[index]
@@ -2233,6 +2236,9 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.Bi
 		resources.neutral_data_view,
 		false,
 	)
+	data_2_view, _, _ := _gpu_3d_scene_view(
+		pass.owner, material.extra_data_texture_2, resources.neutral_data_view, false,
+	)
 	depth_view := resources.neutral_depth_view
 	if material.scene_depth_texture.id != 0 {
 		slot := _texture_slot_context(
@@ -2253,6 +2259,7 @@ _gpu_3d_scene_bind :: proc(pass: ^Gpu_3D_Pass, material: Gpu_Material) -> (wg.Bi
 		{binding = 7, sampler = resources.extra_sampler},
 		{binding = 8, textureView = data_0_view},
 		{binding = 9, textureView = data_1_view},
+		{binding = 10, textureView = data_2_view},
 	}
 	bind := wg.DeviceCreateBindGroup(
 		pass.owner.device,
@@ -2926,6 +2933,11 @@ _gpu_3d_init_scene_layout :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) {
 			visibility = {.Vertex, .Fragment},
 			texture = {sampleType = .UnfilterableFloat, viewDimension = ._2D},
 		},
+		{
+			binding = 10,
+			visibility = {.Vertex, .Fragment},
+			texture = {sampleType = .UnfilterableFloat, viewDimension = ._2D},
+		},
 	}
 	resources.scene_layout = wg.DeviceCreateBindGroupLayout(
 		ctx.device,
@@ -2995,6 +3007,7 @@ _gpu_3d_init_neutral_scene :: proc(ctx: ^Context, resources: ^Gpu_3D_Resources) 
 		{binding = 7, sampler = resources.extra_sampler},
 		{binding = 8, textureView = resources.neutral_data_view},
 		{binding = 9, textureView = resources.neutral_data_view},
+		{binding = 10, textureView = resources.neutral_data_view},
 	}
 	resources.neutral_scene_bind = wg.DeviceCreateBindGroup(
 		ctx.device,
