@@ -92,3 +92,22 @@ Pointer positions use logical window or canvas coordinates with a top-left
 origin. `buttons` is the post-event held mask. `button` is meaningful only for
 `Down` and `Up`; `Move` and `Cancel` use `None`. `Cancel` always carries zero
 buttons and zero pressure.
+
+## Window focus
+
+Native GLFW and SDL3 windows take keyboard focus when the pointer moves over
+them. A visible, unfocused window requests focus at most once per pointer
+entry, and only after real pointer motion with no mouse button held. Entering
+without moving, dragging across the window, or re-entering a window that
+already has focus does not request focus. The operating system may still
+refuse the request.
+
+Opt out per window with `gfx.ConfigFlag.WINDOW_NO_FOCUS_ON_HOVER` or
+`fit.Window_Flag.No_Focus_On_Hover`. Web builds are unaffected; the browser
+owns page focus.
+
+Hover does not depend on focus. While the pointer is over an unfocused window,
+the mouse snapshot, hover feedback, and cursor shape stay live, and
+`gfx.platform_window_hovered` follows the backend's enter and leave events. The
+SDL3 backend sets `SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH`, so the click that
+focuses a window also reaches the UI.

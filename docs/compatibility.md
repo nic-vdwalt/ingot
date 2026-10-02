@@ -274,7 +274,9 @@ provider; a custom host must supply every function `gfx/platform_web.odin`
 declares, or `WebAssembly.instantiate` fails with a missing-import error.
 `ingot_device_lost(reason: i32)` was added for device-loss reporting: `reason`
 is the `wgpu.DeviceLostReason` value, and the host should tell the user that
-the page must be reloaded.
+the page must be reloaded. `ingot_web_mark(label_ptr: rawptr, label_len: i32)`
+was added in `0.3.3` for `gfx.web_mark`: it receives a UTF-8 label in wasm
+memory and may record it as a crash breadcrumb or ignore it.
 
 ### Mobile browsers
 
@@ -283,6 +285,13 @@ the page must be reloaded.
   engages, the effective ratio is rounded down to a 0.25 step so that small
   resizes (toolbars, keyboard) do not change it and force every font atlas to
   be rebuilt.
+- On iOS WebKit, `web/ingot_web.js` also caps the frame rate at 30 FPS and the
+  device-pixel ratio at 1.5 by default, because WebKit's GPU process kills
+  tabs under sustained presenting. `?ingot_fps=off` and `?ingot_dpr=off` remove
+  the caps; numeric values set them explicitly on any browser.
+- The staged `wgpu.js` copies `writeBuffer`/`writeTexture` data into one
+  pooled staging buffer instead of passing a view of the whole wasm memory.
+  `?ingot_upload=view` restores the upstream path.
 - Each distinct UI font size costs a 2048x2048 atlas (4 MiB of GPU memory). On
   web at most 16 sizes are cached; further sizes reuse the nearest loaded one.
 - The frame loop reclaims `context.temp_allocator` after every frame, on web

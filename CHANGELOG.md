@@ -9,12 +9,91 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+## [0.3.3] - 2026-10-02
+
+This is a source-only release; no binaries, installers, or web bundles are attached.
+It changes default behaviour: native windows now take keyboard focus when the
+pointer moves over them (opt out with `WINDOW_NO_FOCUS_ON_HOVER` /
+`fit.Window_Flag.No_Focus_On_Hover`). Custom web hosts must provide the new
+`ingot.ingot_web_mark` import.
+
+### Added
+
+- **Focus on hover** (native GLFW and SDL3): an unfocused, visible window
+  requests focus once per pointer entry, after real pointer motion with no
+  mouse button held. Entering a window without moving, dragging across it, or
+  re-entering the window that already has focus does not steal focus. Opt out
+  per window with `gfx.ConfigFlag.WINDOW_NO_FOCUS_ON_HOVER` or
+  `fit.Window_Flag.No_Focus_On_Hover`. The SDL3 backend also enables
+  `SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH`, so the first click on an unfocused
+  window reaches the UI. See [pointer input](docs/pointer-input.md#window-focus).
+- `gfx.web_mark(label)` records an application breadcrumb in the browser crash
+  recorder (`web/ingot_crash.js`), so a tab the OS kills without a JS error can
+  still be attributed to what the app was doing. It is a no-op natively.
+- **Host import**: `gfx` imports `ingot.ingot_web_mark(ptr, len)` for
+  `gfx.web_mark`. Custom hosts that build their own `ingot` import object must
+  add it or instantiation fails. See
+  [host imports](docs/compatibility.md#host-imports).
+- `gfx.Gpu_Material.extra_data_texture_2`: a third unfilterable 2D data
+  texture for the 3D scene group (group 3, binding 10), with a neutral
+  fallback when unset. The scene bind key includes it.
+- `ui.Icon.Play` and `ui.Icon.Pause`.
+- `fit.Surface_Text_Drawn_Size` and `ui.text_role_drawn_size` report the size
+  a quantising font face actually draws for a requested size.
+- Web crash heartbeat: presented frame count, font atlas count, live WebGPU
+  objects per type, and `writeBuffer`/`writeTexture` upload volume, with larger
+  breadcrumb retention.
+- Web diagnostic URL switches read by `web/ingot_web.js`: `ingot_dpr`,
+  `ingot_fps`, `ingot_upload=view`, `ingot_gc=1`, `ingot_a11y=off|static`,
+  `ingot_autoscroll=1`, `ingot_skip=scissor,texwrite`, `ingot_gpu_inflight=N`,
+  and `ingot_capture=N`. Nothing changes without them. `web/repro/` holds a
+  standalone WebGPU stress repro and a frame capture tool; captures stay local
+  and are gitignored.
+
 ### Changed
 
 - **Steady FPS readout**: `GetFPS`/`context_fps` now report the frame rate
   measured over each 1 s window and hold it until the next window closes,
   instead of the instantaneous rate of the previous frame. The Box3D advanced
   demo HUD also averages its physics time and steps per frame over 1 s.
+- Hovered but unfocused windows keep pointer input: the `ui_gfx` pointer
+  snapshot and `ui` cursor shape gate only on the pointer being over the
+  window, not on window focus, so hover feedback and cursor shapes work before
+  the window is focused. `gfx.platform_window_hovered` uses the backend's
+  enter/leave state.
+- The 2D batch uploads a packed 24-byte `gfx.Gpu_Vertex` (RGBA8 colour)
+  instead of the CPU-side `Vertex`, and uses 16-bit indices when a batch has at
+  most 65536 vertices. Shaders still receive colour as `vec4<f32>`; vertex
+  colour is now 8 bits per channel on the GPU.
+- `scripts/stage-web-runtime.sh` patches the staged `wgpu.js` to count live
+  WebGPU objects and upload bytes, and to copy `writeBuffer`/`writeTexture`
+  data into one pooled staging buffer instead of passing a view of the whole
+  wasm memory (`?ingot_upload=view` restores the upstream path).
+- On iOS WebKit, `web/ingot_web.js` caps the frame rate at 30 FPS and the
+  backing-store device-pixel ratio at 1.5 by default. `?ingot_fps=off` and
+  `?ingot_dpr=off` remove the caps.
+- Font atlas uploads are batched, and glyphs beyond the initial set are baked
+  on demand, to reduce GPU memory spikes on mobile.
+- Button labels first shrink their padding and font size to fit, and only
+  truncate with an ellipsis when they still do not fit.
+- Markdown tables size columns from their longest words, so words are not
+  split across lines; cells render inline markdown spans, and rows are
+  padded with alternating stripes and row borders.
+
+### Fixed
+
+- Text is vertically centred using the size the font face actually draws, not
+  the requested size, fixing misaligned text in buttons, combo boxes, date
+  pickers, tables, popups, toasts, and text inputs under quantising faces.
+- Web touch input: soft keyboards open reliably because the IME proxy is
+  focused inside the tap gesture; Android soft-keyboard text (`keyCode` 229) is
+  delivered through `input` without doubling hardware typing; and the proxy
+  uses a 16 px font so iOS no longer zooms the page on focus.
+- Glyph atlas recording asserts glyph capacity and atlas coordinates, and
+  renderer buffer creation failures clean up consistently.
+- libvterm: C1 control text with a negative width no longer moves the cursor
+  out of bounds or emits inverted damage rectangles. The macOS archives are
+  rebuilt; see `THIRD_PARTY_NOTICES.md`.
 
 ## [0.3.2] - 2026-09-27
 
@@ -1172,7 +1251,8 @@ Not validated:
 - Prevented a libvterm UTF-8 decode buffer overflow.
 - Validated `LoadFontFromMemory`'s caller-supplied buffer.
 
-[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.3.2...HEAD
+[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.3.3...HEAD
+[0.3.3]: https://github.com/Nic-vdwalt/ingot/compare/0.3.2...0.3.3
 [0.3.2]: https://github.com/Nic-vdwalt/ingot/compare/0.3.1...0.3.2
 [0.3.1]: https://github.com/Nic-vdwalt/ingot/compare/0.3.0...0.3.1
 [0.3.0]: https://github.com/Nic-vdwalt/ingot/compare/0.2.1...0.3.0
