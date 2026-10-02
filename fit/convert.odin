@@ -78,6 +78,7 @@ to_window_flags :: proc(value: Window_Flags) -> gfx.ConfigFlags {
 	if .Mouse_Passthrough in value do result += {.WINDOW_MOUSE_PASSTHROUGH}
 	if .Borderless_Windowed in value do result += {.BORDERLESS_WINDOWED_MODE}
 	if .Interlaced in value do result += {.INTERLACED_HINT}
+	if .No_Focus_On_Hover in value do result += {.WINDOW_NO_FOCUS_ON_HOVER}
 	return result
 }
 

@@ -11,6 +11,65 @@ import "core:testing"
 import wg "vendor:wgpu"
 
 @(test)
+test_window_focus_on_hover_policy :: proc(t: ^testing.T) {
+	testing.expect(t, _window_focus_on_hover({}), "hover focus is on by default")
+	testing.expect(
+		t,
+		!_window_focus_on_hover({.WINDOW_NO_FOCUS_ON_HOVER}),
+		"opt-out flag disables hover focus",
+	)
+	testing.expect(
+		t,
+		!_window_focus_on_hover({.WINDOW_UNFOCUSED}),
+		"unfocused window never takes hover focus",
+	)
+}
+
+@(test)
+test_hover_focus_step :: proc(t: ^testing.T) {
+	// armed, enabled, inside, motion, focused, visible, buttons_down
+	request, armed := _hover_focus_step(true, true, true, true, false, true, false)
+	testing.expect(t, request && !armed, "armed hover with motion requests once and disarms")
+
+	request, armed = _hover_focus_step(false, true, true, true, false, true, false)
+	testing.expect(t, !request && !armed, "disarmed window never requests")
+
+	request, armed = _hover_focus_step(true, true, true, true, true, true, false)
+	testing.expect(t, !request && !armed, "already focused disarms without requesting")
+
+	request, armed = _hover_focus_step(true, true, true, false, false, true, false)
+	testing.expect(t, !request && armed, "enter without motion stays armed")
+
+	request, armed = _hover_focus_step(true, true, true, true, false, true, true)
+	testing.expect(t, !request && armed, "held button defers the request")
+
+	request, armed = _hover_focus_step(true, true, true, true, false, false, false)
+	testing.expect(t, !request && armed, "hidden window defers the request")
+
+	request, armed = _hover_focus_step(true, false, true, true, false, true, false)
+	testing.expect(t, !request && armed, "disabled policy never requests")
+
+	request, armed = _hover_focus_step(true, true, false, true, false, true, false)
+	testing.expect(t, !request && armed, "pointer outside never requests")
+}
+
+@(test)
+test_hover_focus_enter_transitions :: proc(t: ^testing.T) {
+	ctx := new(Context)
+	defer free(ctx)
+	_hover_focus_enter(ctx, true)
+	testing.expect(t, ctx.pointer_inside && ctx.hover_focus_armed, "enter arms")
+	ctx.hover_focus_motion = true
+	_hover_focus_enter(ctx, false)
+	testing.expect(
+		t,
+		!ctx.pointer_inside && !ctx.hover_focus_armed && !ctx.hover_focus_motion,
+		"leave disarms and clears motion",
+	)
+	_hover_focus_enter(nil, true)
+}
+
+@(test)
 test_window_initial_focus_policy :: proc(t: ^testing.T) {
 	testing.expect(t, _window_wants_initial_focus({}), "default window requests focus")
 	testing.expect(t, _window_should_activate({}), "ready visible window activates")

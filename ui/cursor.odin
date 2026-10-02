@@ -16,7 +16,7 @@ request_cursor :: proc(frame: ^Ui_Frame, cursor: MouseCursor) {
 cursor_apply :: proc(frame: ^Ui_Frame) {
 	assert(frame != nil && frame.open, "cursor_apply: invalid frame")
 	state := &frame.cursor
-	if !frame_input(frame).window_focused || !frame_input(frame).cursor_on_screen {
+	if !frame_input(frame).cursor_on_screen {
 		state.initialized = false
 		return
 	}

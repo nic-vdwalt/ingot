@@ -215,6 +215,11 @@ Context :: struct {
 	application_was_active:      bool,
 	activation_next_at:          f64,
 	activation_view:             rawptr,
+	// Hover focus (platform.odin _hover_focus_step): enter/leave drive
+	// pointer_inside and arm one focus request; motion is per-poll.
+	pointer_inside:              bool,
+	hover_focus_armed:           bool,
+	hover_focus_motion:          bool,
 	// Pool sizes negotiated against the adapter's reported limits before the
 	// device was requested (limits.odin). The renderer and font atlas size
 	// themselves from this rather than from desktop constants.

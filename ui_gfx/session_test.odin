@@ -213,24 +213,37 @@ test_pointer_snapshot_policy :: proc(t: ^testing.T) {
 
 	unfocused := focused
 	unfocused.window_focused = false
-	unfocused.pointer_events[0] = {
+	pointer_snapshot_sanitize(&unfocused)
+	testing.expect(t, !unfocused.window_focused)
+	testing.expect(t, unfocused.cursor_on_screen, "hovered unfocused window keeps pointer")
+	testing.expect_value(t, unfocused.mouse_position, ui.Vec2{40, 24})
+	testing.expect_value(t, unfocused.mouse_delta, ui.Vec2{3, -2})
+	testing.expect_value(t, unfocused.mouse_wheel, ui.Vec2{0, 1})
+	testing.expect(t, unfocused.mouse_pressed[0])
+	testing.expect(t, unfocused.mouse_released[1])
+	testing.expect(t, unfocused.mouse_down[2])
+
+	unfocused_outside := focused
+	unfocused_outside.window_focused = false
+	unfocused_outside.cursor_on_screen = false
+	unfocused_outside.pointer_events[0] = {
 		id           = 4,
 		kind         = .Cancel,
 		pointer_type = .Touch,
 		button       = .None,
 	}
-	unfocused.pointer_event_count = 1
-	pointer_snapshot_sanitize(&unfocused)
-	testing.expect(t, !unfocused.window_focused)
-	testing.expect(t, !unfocused.cursor_on_screen)
-	testing.expect_value(t, unfocused.mouse_position, ui.Vec2{-1, -1})
-	testing.expect_value(t, unfocused.mouse_delta, ui.Vec2{})
-	testing.expect_value(t, unfocused.mouse_wheel, ui.Vec2{})
-	testing.expect(t, !unfocused.mouse_pressed[0])
-	testing.expect(t, !unfocused.mouse_released[1])
-	testing.expect(t, !unfocused.mouse_down[2])
-	testing.expect_value(t, unfocused.pointer_event_count, 1)
-	testing.expect_value(t, unfocused.pointer_events[0].kind, ui.Pointer_Event_Kind.Cancel)
+	unfocused_outside.pointer_event_count = 1
+	pointer_snapshot_sanitize(&unfocused_outside)
+	testing.expect(t, !unfocused_outside.window_focused)
+	testing.expect(t, !unfocused_outside.cursor_on_screen)
+	testing.expect_value(t, unfocused_outside.mouse_position, ui.Vec2{-1, -1})
+	testing.expect_value(t, unfocused_outside.mouse_delta, ui.Vec2{})
+	testing.expect_value(t, unfocused_outside.mouse_wheel, ui.Vec2{})
+	testing.expect(t, !unfocused_outside.mouse_pressed[0])
+	testing.expect(t, !unfocused_outside.mouse_released[1])
+	testing.expect(t, !unfocused_outside.mouse_down[2])
+	testing.expect_value(t, unfocused_outside.pointer_event_count, 1)
+	testing.expect_value(t, unfocused_outside.pointer_events[0].kind, ui.Pointer_Event_Kind.Cancel)
 
 	outside := focused
 	outside.cursor_on_screen = false

@@ -198,6 +198,7 @@ when !INGOT_GFX_SDL3 {
 		assert(ctx != nil, "platform_poll_events: nil context")
 		glfw.PollEvents()
 		_platform_modifier_reconcile(ctx)
+		_platform_hover_focus_poll(ctx)
 		_platform_activation_poll(ctx)
 	}
 
@@ -209,6 +210,7 @@ when !INGOT_GFX_SDL3 {
 		assert(ctx != nil, "platform_wait_events: nil context")
 		glfw.WaitEventsTimeout(_platform_activation_wait_timeout(ctx, timeout))
 		_platform_modifier_reconcile(ctx)
+		_platform_hover_focus_poll(ctx)
 		_platform_activation_poll(ctx)
 	}
 
@@ -383,6 +385,7 @@ when !INGOT_GFX_SDL3 {
 		// mouse state remains snapshot-polled. Focus, size, and WindowRefresh events
 		// wake the idle gate; WindowRefresh is the OS damage signal (uncover/resize).
 		glfw.SetCursorPosCallback(win, _cursor_pos_cb)
+		glfw.SetCursorEnterCallback(win, _cursor_enter_cb)
 		glfw.SetMouseButtonCallback(win, _mouse_button_cb)
 		glfw.SetWindowCloseCallback(win, _close_cb)
 		glfw.SetWindowRefreshCallback(win, _refresh_cb)
@@ -415,6 +418,8 @@ when !INGOT_GFX_SDL3 {
 		mx, my := glfw.GetCursorPos(win)
 		ctx.inp.mouse = {f32(mx), f32(my)}
 		ctx.inp.mouse_prev = ctx.inp.mouse
+		ctx.pointer_inside = glfw.GetWindowAttrib(win, glfw.HOVERED) != 0
+		ctx.hover_focus_armed = false
 	}
 
 	@(private)
@@ -496,6 +501,9 @@ when !INGOT_GFX_SDL3 {
 	platform_window_hovered :: proc(ctx: ^Context) -> bool {
 		if ctx == nil || ctx.win == nil do return false
 		win := _context_window(ctx)
+		if ctx.pointer_inside || glfw.GetWindowAttrib(win, glfw.HOVERED) != 0 do return true
+		// Enter/leave state latches after geometry changes under a still cursor
+		// (native fullscreen, Space switch); the rect test covers that while focused.
 		if glfw.GetWindowAttrib(win, glfw.FOCUSED) == 0 do return false
 		x, y := glfw.GetCursorPos(win)
 		width, height := glfw.GetWindowSize(win)
@@ -690,6 +698,7 @@ when !INGOT_GFX_SDL3 {
 		ctx := _callback_context(win)
 		if ctx == nil do return
 		_idle_note_activity(&ctx.idle)
+		ctx.hover_focus_motion = true
 		buttons := _native_pointer_buttons(win, -1, -1)
 		_ = pointer_stage(
 			&ctx.inp,
@@ -704,6 +713,14 @@ when !INGOT_GFX_SDL3 {
 				primary = true,
 			},
 		)
+	}
+
+	@(private)
+	_cursor_enter_cb :: proc "c" (win: glfw.WindowHandle, entered: i32) {
+		ctx := _callback_context(win)
+		if ctx == nil do return
+		_idle_note_activity(&ctx.idle)
+		_hover_focus_enter(ctx, entered != 0)
 	}
 
 	@(private)
@@ -766,7 +783,10 @@ when !INGOT_GFX_SDL3 {
 			)
 			ctx.inp.pointer_native_mouse_active = false
 		}
-		if focused != 0 do ctx.force_reconfigure = true
+		if focused != 0 {
+			ctx.force_reconfigure = true
+			ctx.hover_focus_armed = false
+		}
 		_idle_note_activity(&ctx.idle)
 	}
 

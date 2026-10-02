@@ -1737,6 +1737,7 @@ fit_window_flag_mapping_is_semantic :: proc(t: ^testing.T) {
 		.Mouse_Passthrough,
 		.Borderless_Windowed,
 		.Interlaced,
+		.No_Focus_On_Hover,
 	}
 	expected := gfx.ConfigFlags {
 		.FULLSCREEN_MODE,
@@ -1755,6 +1756,7 @@ fit_window_flag_mapping_is_semantic :: proc(t: ^testing.T) {
 		.WINDOW_MOUSE_PASSTHROUGH,
 		.BORDERLESS_WINDOWED_MODE,
 		.INTERLACED_HINT,
+		.WINDOW_NO_FOCUS_ON_HOVER,
 	}
 	testing.expect_value(t, to_window_flags({}), gfx.ConfigFlags{})
 	testing.expect_value(t, to_window_flags(all), expected)

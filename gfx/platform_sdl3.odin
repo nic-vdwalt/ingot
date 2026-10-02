@@ -100,6 +100,8 @@ when INGOT_GFX_SDL3 {
 	) -> bool {
 		assert(ctx != nil, "platform_create_window: nil context")
 		if g_sdl_window_count == 0 {
+			// Match GLFW: the click that activates an inactive window also reaches it.
+			_ = sdl.SetHint(sdl.HINT_MOUSE_FOCUS_CLICKTHROUGH, "1")
 			if !sdl.Init({.VIDEO, .GAMEPAD}) {
 				fmt.eprintfln("gfx: SDL init failed: %s", sdl.GetError())
 				return false
@@ -251,6 +253,7 @@ when INGOT_GFX_SDL3 {
 	platform_poll_events :: proc(ctx: ^Context) {
 		assert(ctx != nil, "platform_poll_events: nil context")
 		_sdl_poll_all()
+		_platform_hover_focus_poll(ctx)
 		_platform_activation_poll(ctx)
 	}
 
@@ -263,6 +266,7 @@ when INGOT_GFX_SDL3 {
 		event: sdl.Event
 		if sdl.WaitEventTimeout(&event, milliseconds) do _sdl_dispatch(&event)
 		_sdl_poll_all()
+		_platform_hover_focus_poll(ctx)
 		_platform_activation_poll(ctx)
 	}
 
@@ -494,7 +498,9 @@ when INGOT_GFX_SDL3 {
 		if ctx == nil || ctx.win == nil do return false
 		state := _sdl_state_for_window(_sdl_window(ctx))
 		if state == nil do return false
-		if state.mouse_inside do return true
+		if state.mouse_inside || ctx.pointer_inside do return true
+		// Rect fallback only while focused: enter/leave can latch after geometry
+		// changes under a still cursor, but an unfocused window may be covered.
 		if !platform_window_focused(ctx) do return false
 		x, y := platform_cursor_pos(ctx)
 		width, height := platform_window_size(ctx)
@@ -870,6 +876,7 @@ when INGOT_GFX_SDL3 {
 		if state == nil || event.motion.which == sdl.TOUCH_MOUSEID do return
 		ctx := state.owner
 		_idle_note_activity(&ctx.idle)
+		ctx.hover_focus_motion = true
 		ctx.inp.mouse = {event.motion.x, event.motion.y}
 		buttons := _sdl_pointer_buttons(state)
 		_ = pointer_stage(
@@ -924,8 +931,10 @@ when INGOT_GFX_SDL3 {
 			state.close_requested = true
 		case .WINDOW_MOUSE_ENTER:
 			state.mouse_inside = true
+			_hover_focus_enter(ctx, true)
 		case .WINDOW_MOUSE_LEAVE:
 			state.mouse_inside = false
+			_hover_focus_enter(ctx, false)
 		case .WINDOW_FOCUS_LOST:
 			if ctx.inp.pointer_native_mouse_active {
 				_ = pointer_stage(
@@ -943,12 +952,14 @@ when INGOT_GFX_SDL3 {
 			}
 			state.mouse_buttons = {}
 			ctx.inp.key_down = {}
+		case .WINDOW_FOCUS_GAINED:
+			ctx.hover_focus_armed = false
+			ctx.force_reconfigure = true
 		case .WINDOW_EXPOSED,
 		     .WINDOW_RESIZED,
 		     .WINDOW_PIXEL_SIZE_CHANGED,
 		     .WINDOW_METAL_VIEW_RESIZED,
 		     .WINDOW_RESTORED,
-		     .WINDOW_FOCUS_GAINED,
 		     .WINDOW_DISPLAY_CHANGED,
 		     .WINDOW_DISPLAY_SCALE_CHANGED:
 			ctx.force_reconfigure = true

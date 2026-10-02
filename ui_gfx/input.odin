@@ -22,7 +22,7 @@ INPUT_CHARACTER_DRAIN_MAX :: rl.CHAR_Q
 
 pointer_snapshot_sanitize :: proc(input: ^ui.Ui_Input) {
 	assert(input != nil, "pointer_snapshot_sanitize: nil input")
-	if input.window_focused && input.cursor_on_screen do return
+	if input.cursor_on_screen do return
 	input.cursor_on_screen = false
 	input.mouse_position = {-1, -1}
 	input.mouse_delta = {}

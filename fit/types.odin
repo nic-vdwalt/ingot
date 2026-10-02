@@ -141,6 +141,7 @@ Window_Flag :: enum i32 {
 	Mouse_Passthrough   = 14,
 	Borderless_Windowed = 15,
 	Interlaced          = 16,
+	No_Focus_On_Hover   = 18,
 }
 Window_Flags :: distinct bit_set[Window_Flag;i32]
 

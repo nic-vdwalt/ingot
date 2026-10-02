@@ -220,6 +220,7 @@ fit_window_bits_contract_complete :: proc(t: ^testing.T) {
 		{{.Mouse_Passthrough}, {.WINDOW_MOUSE_PASSTHROUGH}},
 		{{.Borderless_Windowed}, {.BORDERLESS_WINDOWED_MODE}},
 		{{.Interlaced}, {.INTERLACED_HINT}},
+		{{.No_Focus_On_Hover}, {.WINDOW_NO_FOCUS_ON_HOVER}},
 	}
 	all: Window_Flags
 	expected: gfx.ConfigFlags

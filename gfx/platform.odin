@@ -73,6 +73,26 @@ _window_should_focus_on_show :: proc(flags: ConfigFlags) -> bool {
 }
 
 @(private)
+_window_focus_on_hover :: proc(flags: ConfigFlags) -> bool {
+	return .WINDOW_NO_FOCUS_ON_HOVER not_in flags && .WINDOW_UNFOCUSED not_in flags
+}
+
+// One focus request per pointer entry, and only after real motion with no
+// button held, so a window under a still cursor or a cross-app drag never
+// steals focus and a user who switched away is not fought.
+@(private)
+_hover_focus_step :: proc(
+	armed, enabled, inside, motion, focused, visible, buttons_down: bool,
+) -> (
+	request, next_armed: bool,
+) {
+	if !armed do return false, false
+	if focused do return false, false
+	if !(enabled && inside && motion && visible) || buttons_down do return false, armed
+	return true, false
+}
+
+@(private)
 _window_wants_topmost :: proc(flags: ConfigFlags) -> bool {
 	return .WINDOW_TOPMOST in flags
 }

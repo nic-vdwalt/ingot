@@ -518,6 +518,7 @@ ConfigFlag :: enum i32 {
 	BORDERLESS_WINDOWED_MODE = 15,
 	INTERLACED_HINT          = 16,
 	PRESENT_IMMEDIATE        = 17,
+	WINDOW_NO_FOCUS_ON_HOVER = 18,
 }
 ConfigFlags :: distinct bit_set[ConfigFlag;i32]
 
