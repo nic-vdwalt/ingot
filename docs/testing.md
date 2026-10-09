@@ -69,7 +69,10 @@ wgpu-native libraries those targets need into the active toolchain, using the
 same release assets as CI; it needs the GitHub CLI once. Linux arm64 skips
 `box3d_workers` because no prebuilt Box3D library exists for it. The check
 proves the code compiles for each target; linking and running remain the job of
-the native gates.
+the native gates. Odin dev-2026-10 refuses `odin check -target:windows_amd64`
+on non-Windows hosts and only accepts `-windows-sdk-root` for `odin build`, so
+the Windows pass uses `odin build -build-mode:obj` into a scratch directory;
+that runs the same checker and code generator without invoking a linker.
 
 GitHub Actions also provisions the pinned toolchain on native Windows x64 and
 macOS arm64 runners. Windows runs `scripts/test.ps1` and `scripts/check.ps1`;

@@ -27,6 +27,16 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   repeatable `--odin-flag` to forward it. Consumers linking `ingot:gfx` on
   Windows need `-linker:msvc` or `-linker:lld` as well; see
   [dependencies](docs/dependencies.md).
+- `scripts/check-cross.sh` vets Windows with `odin build -build-mode:obj`
+  because Odin dev-2026-10 refuses `odin check -target:windows_amd64` on
+  non-Windows hosts; the Linux targets still use `odin check`.
+
+### Fixed
+
+- `sys.open_file_dialog` and `sys.save_file_dialog` compile again on Windows:
+  `core:sys/windows.OPENFILENAMEW.lpstrFile` became `LPWSTR` (`^u16`) in the
+  pinned Odin, so the path buffer is passed directly instead of cast to
+  `wstring`.
 
 ## [0.3.3] - 2026-10-02
 

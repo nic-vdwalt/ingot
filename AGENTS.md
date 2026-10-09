@@ -83,7 +83,10 @@ worked example applied to a subsystem before it is written.
 - **Cross-target type-check**: `bash scripts/check-cross.sh` - vets every gated
   package for Windows x64, Linux x64, and Linux arm64 from any host. The first
   run installs the other targets' vendor libraries with
-  `scripts/provision-cross-vendor.sh` (needs `gh`).
+  `scripts/provision-cross-vendor.sh` (needs `gh`). Run it before pushing
+  Windows-touching changes: Odin dev-2026-10 rejects
+  `odin check -target:windows_amd64` off Windows, so the script vets Windows
+  with `odin build -build-mode:obj` (no linker, no SDK) instead.
 - **Sanitizers on macOS**: `fuzz/run.sh` links ASan/TSan builds with the
   Homebrew `llvm@<N>` clang matching Odin's LLVM (`scripts/sanitizer-toolchain.sh`);
   Apple clang's runtime cannot link them.
