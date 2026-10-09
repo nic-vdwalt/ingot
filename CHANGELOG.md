@@ -24,7 +24,8 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   `/FORCE:MULTIPLE` flag `accesskit.odin` passes. `scripts/test.ps1` and
   `scripts/check.ps1` add the flag to every linking `odin` command, and
   `scripts/fuzz-corpus.py` and `scripts/wss-loopback-test.py` accept a
-  repeatable `--odin-flag` to forward it. Consumers linking `ingot:gfx` on
+  repeatable `--odin-flag=<flag>` to forward it (use the `=` form; argparse
+  rejects a separate `-linker:msvc` token as an option). Consumers linking `ingot:gfx` on
   Windows need `-linker:msvc` or `-linker:lld` as well; see
   [dependencies](docs/dependencies.md).
 - `scripts/check-cross.sh` vets Windows with `odin build -build-mode:obj`
