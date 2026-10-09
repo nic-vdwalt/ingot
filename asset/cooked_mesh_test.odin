@@ -61,11 +61,12 @@ _cooked_test_vertex :: proc(bytes: []u8, offset: int, position: Vec3, scalar: f3
 	_cooked_test_put_f32(bytes, offset + 24, scalar)
 }
 
-_cooked_test_decode :: proc(bytes: []u8) -> (Cooked_Mesh_Bundle, Cooked_Mesh_Result, bool) {
+_cooked_test_decode :: proc(bytes: []u8) -> (result: Cooked_Mesh_Result, ok: bool) {
 	meshes: [2]Mesh_View
 	vertices: [4]Vertex
 	indices: [6]u32
-	return cooked_mesh_decode(bytes, {meshes[:], vertices[:], indices[:]})
+	_, result, ok = cooked_mesh_decode(bytes, {meshes[:], vertices[:], indices[:]})
+	return result, ok
 }
 
 @(test)
@@ -91,12 +92,12 @@ cooked_mesh_decodes_multiple_meshes :: proc(t: ^testing.T) {
 cooked_mesh_rejects_bad_header_and_version :: proc(t: ^testing.T) {
 	bytes := _cooked_test_fixture()
 	bytes[0] = 0
-	_, result, ok := _cooked_test_decode(bytes[:])
+	result, ok := _cooked_test_decode(bytes[:])
 	testing.expect(t, !ok)
 	testing.expect_value(t, result.fault, Cooked_Mesh_Fault.Bad_Magic)
 	bytes = _cooked_test_fixture()
 	_cooked_test_put_u32(bytes[:], 8, 2)
-	_, result, ok = _cooked_test_decode(bytes[:])
+	result, ok = _cooked_test_decode(bytes[:])
 	testing.expect(t, !ok)
 	testing.expect_value(t, result.fault, Cooked_Mesh_Fault.Bad_Version)
 }
@@ -104,12 +105,12 @@ cooked_mesh_rejects_bad_header_and_version :: proc(t: ^testing.T) {
 @(test)
 cooked_mesh_rejects_truncation_and_trailing_data :: proc(t: ^testing.T) {
 	bytes := _cooked_test_fixture()
-	_, result, ok := _cooked_test_decode(bytes[:len(bytes) - 1])
+	result, ok := _cooked_test_decode(bytes[:len(bytes) - 1])
 	testing.expect(t, !ok)
 	testing.expect_value(t, result.fault, Cooked_Mesh_Fault.Truncated)
 	larger: [281]u8
 	copy(larger[:], bytes[:])
-	_, result, ok = _cooked_test_decode(larger[:])
+	result, ok = _cooked_test_decode(larger[:])
 	testing.expect(t, !ok)
 	testing.expect_value(t, result.fault, Cooked_Mesh_Fault.Trailing_Data)
 }
@@ -125,7 +126,7 @@ cooked_mesh_rejects_capacity_and_range_overflow :: proc(t: ^testing.T) {
 	testing.expect_value(t, result.fault, Cooked_Mesh_Fault.Capacity)
 	bytes = _cooked_test_fixture()
 	_cooked_test_put_u32(bytes[:], 24 + 4, 1)
-	_, result, ok = _cooked_test_decode(bytes[:])
+	result, ok = _cooked_test_decode(bytes[:])
 	testing.expect(t, !ok)
 	testing.expect_value(t, result.fault, Cooked_Mesh_Fault.Invalid_Record)
 }
@@ -134,12 +135,12 @@ cooked_mesh_rejects_capacity_and_range_overflow :: proc(t: ^testing.T) {
 cooked_mesh_rejects_duplicate_and_unsorted_ids :: proc(t: ^testing.T) {
 	bytes := _cooked_test_fixture()
 	_cooked_test_put_u32(bytes[:], 68, 1)
-	_, result, ok := _cooked_test_decode(bytes[:])
+	result, ok := _cooked_test_decode(bytes[:])
 	testing.expect(t, !ok)
 	testing.expect_value(t, result.fault, Cooked_Mesh_Fault.Invalid_Record)
 	bytes = _cooked_test_fixture()
 	_cooked_test_put_u32(bytes[:], 24, 3)
-	_, result, ok = _cooked_test_decode(bytes[:])
+	result, ok = _cooked_test_decode(bytes[:])
 	testing.expect(t, !ok)
 	testing.expect_value(t, result.fault, Cooked_Mesh_Fault.Invalid_Record)
 }
@@ -148,12 +149,12 @@ cooked_mesh_rejects_duplicate_and_unsorted_ids :: proc(t: ^testing.T) {
 cooked_mesh_rejects_invalid_vertex_index_and_bounds :: proc(t: ^testing.T) {
 	bytes := _cooked_test_fixture()
 	_cooked_test_put_u32(bytes[:], 256, 3)
-	_, result, ok := _cooked_test_decode(bytes[:])
+	result, ok := _cooked_test_decode(bytes[:])
 	testing.expect(t, !ok)
 	testing.expect_value(t, result.fault, Cooked_Mesh_Fault.Invalid_Mesh)
 	bytes = _cooked_test_fixture()
 	_cooked_test_put_f32(bytes[:], 24 + 20, 0.5)
-	_, result, ok = _cooked_test_decode(bytes[:])
+	result, ok = _cooked_test_decode(bytes[:])
 	testing.expect(t, !ok)
 	testing.expect_value(t, result.fault, Cooked_Mesh_Fault.Invalid_Mesh)
 }

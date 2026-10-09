@@ -18,6 +18,15 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   all native examples, hot-reload host/DLL, PlanetForger native/profile builds,
   and nine standard WASM builds pass. Regression suites and Linux/Windows CI
   have not been run locally.
+- Windows gates link with `-linker:msvc`. Odin dev-2026-10 made radlink the
+  default Windows linker, which rejects the Rust runtime symbols that
+  `vendor:wgpu` and `accesskit.lib` both define and ignores the
+  `/FORCE:MULTIPLE` flag `accesskit.odin` passes. `scripts/test.ps1` and
+  `scripts/check.ps1` add the flag to every linking `odin` command, and
+  `scripts/fuzz-corpus.py` and `scripts/wss-loopback-test.py` accept a
+  repeatable `--odin-flag` to forward it. Consumers linking `ingot:gfx` on
+  Windows need `-linker:msvc` or `-linker:lld` as well; see
+  [dependencies](docs/dependencies.md).
 
 ## [0.3.3] - 2026-10-02
 

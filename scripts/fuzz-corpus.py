@@ -60,7 +60,7 @@ def validate(root: pathlib.Path):
     return entries
 
 
-def run(root: pathlib.Path, entries):
+def run(root: pathlib.Path, entries, odin_flags=()):
     output = root / ".fuzz-corpus-bin"
     output.mkdir(exist_ok=True)
     built = {}
@@ -70,7 +70,7 @@ def run(root: pathlib.Path, entries):
             if target not in built:
                 package, defines = TARGETS[target]
                 binary = output / (target + (".exe" if sys.platform == "win32" else ""))
-                command = ["odin", "build", str(root / package), f"-collection:ingot={root}", *defines, f"-out:{binary}"]
+                command = ["odin", "build", str(root / package), f"-collection:ingot={root}", *defines, *odin_flags, f"-out:{binary}"]
                 subprocess.run(command, check=True, cwd=root)
                 built[target] = binary
             subprocess.run([str(built[target]), f"-replay:{tape}"], check=True, cwd=root, timeout=entry["timeout_seconds"])
@@ -84,12 +84,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=pathlib.Path(__file__).resolve().parents[1], type=pathlib.Path)
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--odin-flag", action="append", default=[])
     args = parser.parse_args()
     root = args.root.resolve()
     try:
         entries = validate(root)
         if not args.validate_only:
-            run(root, entries)
+            run(root, entries, args.odin_flag)
     except (ValueError, OSError, json.JSONDecodeError, subprocess.SubprocessError) as error:
         print(f"fuzz corpus: {error}", file=sys.stderr)
         return 1

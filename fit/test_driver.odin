@@ -8,6 +8,7 @@ Test_Driver_Impl :: struct {
 	runtime:     ui.Ui_Runtime,
 	frame:       ^ui.Ui_Frame,
 	output:      ^ui.Ui_Output,
+	input:       ui.Ui_Input,
 	builder:     Builder,
 	telemetry:   Frame_Telemetry,
 	diagnostics: Frame_Diagnostics,
@@ -101,11 +102,11 @@ Test_Driver_Frame_Timed :: proc(
 	if size.y <= 0 do size.y = 600
 	resolved_input := input
 	resolved_input.screen_size = size
-	inner_input := test_driver_input(resolved_input)
+	impl.input = test_driver_input(resolved_input)
 	impl.output^ = {}
 	impl.frame.output = impl.output
 	frame_started := time.tick_now()
-	ui.ui_frame_begin(impl.frame, &impl.runtime, &inner_input)
+	ui.ui_frame_begin(impl.frame, &impl.runtime, &impl.input)
 	builder_open(&impl.builder, impl.frame, {0, 0, i32(size.x), i32(size.y)})
 	build_started := time.tick_now()
 	draw(&impl.builder, user_data)

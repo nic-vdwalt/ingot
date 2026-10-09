@@ -3,6 +3,7 @@ param([Parameter(ValueFromRemainingArguments = $true)][string[]]$OdinFlags)
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Collection = "-collection:ingot=$Root"
+$Linker = "-linker:msvc"
 $Manifest = Get-Content (Join-Path $PSScriptRoot "gate-manifest.json") | ConvertFrom-Json
 $env:PYTHONDONTWRITEBYTECODE = "1"
 
@@ -57,7 +58,7 @@ foreach ($Mode in $Manifest.simulation_modes) {
     $Package = $Mode[0]
     $Define = $Mode[1]
     Write-Host "== checking $Package ($Define) =="
-    & odin test "$Root/$Package" $Collection "-define:$Define" -define:ODIN_TEST_NAMES=__compile_only__ @OdinFlags
+    & odin test "$Root/$Package" $Collection $Linker "-define:$Define" -define:ODIN_TEST_NAMES=__compile_only__ @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 foreach ($Package in $Manifest.binding_packages) {
@@ -69,12 +70,12 @@ $ExampleOut = Join-Path $env:TEMP "ingot-example-check"
 New-Item -ItemType Directory -Force -Path $ExampleOut | Out-Null
 foreach ($Example in $Manifest.examples) {
     Write-Host "== building example $Example =="
-    & odin build "$Root/examples/$Example" $Collection "-out:$ExampleOut/$Example.exe" @OdinFlags
+    & odin build "$Root/examples/$Example" $Collection $Linker "-out:$ExampleOut/$Example.exe" @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 foreach ($Package in $Manifest.hot_reload_packages) {
     Write-Host "== building example hot_reload/$Package =="
-    $Arguments = @("build", "$Root/examples/hot_reload/$Package", $Collection)
+    $Arguments = @("build", "$Root/examples/hot_reload/$Package", $Collection, $Linker)
     if ($Package -eq "game") {
         $Arguments += "-build-mode:dll"
         $Arguments += "-out:$ExampleOut/hot_reload_game.dll"

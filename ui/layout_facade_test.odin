@@ -73,7 +73,10 @@ layout_grow_height_case :: proc(measure_h, render_h: i32, sole_child: bool) -> R
 	u: Ui
 	begin(&u, &frame, {0, 0, 300, render_h})
 	defer end(&u)
-	header, body: Prepared_Custom_Counts
+	header := new(Prepared_Custom_Counts)
+	defer free(header)
+	body := new(Prepared_Custom_Counts)
+	defer free(body)
 	prepared: Prepared_Ui
 	prepared_begin(&prepared, intrinsic_constraints(max_w = 300, max_h = measure_h))
 	prepared_column_begin(&prepared)
@@ -83,7 +86,7 @@ layout_grow_height_case :: proc(measure_h, render_h: i32, sole_child: bool) -> R
 			{
 				measure = prepared_custom_measure_test,
 				render = prepared_custom_render_test,
-				userdata = &header,
+				userdata = header,
 			},
 			fixed(20),
 		)
@@ -93,7 +96,7 @@ layout_grow_height_case :: proc(measure_h, render_h: i32, sole_child: bool) -> R
 		{
 			measure = grow_leaf_measure_test,
 			render = prepared_custom_render_test,
-			userdata = &body,
+			userdata = body,
 			size = {width = grow(), height = grow()},
 		},
 	)

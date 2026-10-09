@@ -95,6 +95,7 @@ session_draw :: proc(session: ^Session, draw: Session_Draw_Proc, userdata: rawpt
 	session.graphics_open = true
 	session.adapter.graphics_open = true
 	session.adapter.gfx_frame = &graphics_frame
+	defer session.adapter.gfx_frame = nil
 	frame := session_begin_frame(session)
 	defer session_draw_finish(session, &graphics_frame)
 	draw(session, frame, userdata)

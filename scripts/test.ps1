@@ -4,6 +4,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Collection = "-collection:ingot=$Root"
 $Guard = "-define:INGOT_FRAME_SCRATCH_GUARD=true"
+$Linker = "-linker:msvc"
 $TimeoutSeconds = if ($env:INGOT_TEST_TIMEOUT_SECONDS) { $env:INGOT_TEST_TIMEOUT_SECONDS } else { "300" }
 $OutputLimit = if ($env:INGOT_TEST_OUTPUT_LIMIT_BYTES) { $env:INGOT_TEST_OUTPUT_LIMIT_BYTES } else { "16777216" }
 $LogDir = if ($env:INGOT_TEST_FAILURE_LOG_DIR) { $env:INGOT_TEST_FAILURE_LOG_DIR } else { Join-Path $env:TEMP "ingot-test-failures" }
@@ -29,14 +30,14 @@ foreach ($Package in $Manifest.test_packages) {
         $Extra += "-define:ODIN_TEST_THREADS=1"
     }
     $Label = $Package.Replace("/", "-")
-    $Command = @("odin", "test", "$Root/$Package", $Collection, $Guard, "-define:ODIN_TEST_FAIL_ON_EMPTY=true") + $Extra + $OdinFlags
+    $Command = @("odin", "test", "$Root/$Package", $Collection, $Guard, $Linker, "-define:ODIN_TEST_FAIL_ON_EMPTY=true") + $Extra + $OdinFlags
     Invoke-Supervised $Label $Command
 }
 foreach ($TestName in $Manifest.windows_gfx_expected_assert_tests) {
     Write-Host "== testing isolated $TestName =="
     $Label = "gfx-expected-assert-" + $TestName.Replace("gfx.", "").Replace("_", "-")
     $Command = @(
-        "odin", "test", "$Root/gfx", $Collection, $Guard,
+        "odin", "test", "$Root/gfx", $Collection, $Guard, $Linker,
         "-define:INGOT_GFX_EXPECTED_ASSERTS=true",
         "-define:ODIN_TEST_NAMES=$TestName",
         "-define:ODIN_TEST_THREADS=1",
@@ -48,7 +49,7 @@ foreach ($TestName in $Manifest.windows_ui_expected_assert_tests) {
     Write-Host "== testing isolated $TestName =="
     $Label = "ui-expected-assert-" + $TestName.Replace("ui.", "").Replace("_", "-")
     $Command = @(
-        "odin", "test", "$Root/ui", $Collection, $Guard,
+        "odin", "test", "$Root/ui", $Collection, $Guard, $Linker,
         "-define:INGOT_UI_EXPECTED_ASSERTS=true",
         "-define:ODIN_TEST_NAMES=$TestName",
         "-define:ODIN_TEST_THREADS=1",
@@ -60,7 +61,7 @@ foreach ($TestName in $Manifest.windows_fit_expected_assert_tests) {
     Write-Host "== testing isolated $TestName =="
     $Label = "fit-expected-assert-" + $TestName.Replace("fit.", "").Replace("_", "-")
     $Command = @(
-        "odin", "test", "$Root/fit", $Collection, $Guard,
+        "odin", "test", "$Root/fit", $Collection, $Guard, $Linker,
         "-define:INGOT_FIT_EXPECTED_ASSERTS=true",
         "-define:ODIN_TEST_NAMES=$TestName",
         "-define:ODIN_TEST_THREADS=1",
@@ -71,13 +72,13 @@ foreach ($TestName in $Manifest.windows_fit_expected_assert_tests) {
 foreach ($Example in $Manifest.test_examples) {
     Write-Host "== testing examples/$Example =="
     $Label = $Example.Replace("_", "-") + "-example"
-    $Command = @("odin", "test", "$Root/examples/$Example", $Collection, $Guard, "-define:ODIN_TEST_FAIL_ON_EMPTY=true") + $OdinFlags
+    $Command = @("odin", "test", "$Root/examples/$Example", $Collection, $Guard, $Linker, "-define:ODIN_TEST_FAIL_ON_EMPTY=true") + $OdinFlags
     Invoke-Supervised $Label $Command
 }
 Write-Host "== replaying fuzz regression corpus =="
-Invoke-Supervised "fuzz-corpus" @("python", "$PSScriptRoot/fuzz-corpus.py", "--root", $Root)
+Invoke-Supervised "fuzz-corpus" @("python", "$PSScriptRoot/fuzz-corpus.py", "--root", $Root, "--odin-flag", $Linker)
 Write-Host "== testing native WSS loopback TLS =="
-Invoke-Supervised "wss-loopback" @("python", "$PSScriptRoot/wss-loopback-test.py", "--fixture", "$Root/examples/wss_fixture", "--collection=$Collection")
+Invoke-Supervised "wss-loopback" @("python", "$PSScriptRoot/wss-loopback-test.py", "--fixture", "$Root/examples/wss_fixture", "--collection=$Collection", "--odin-flag", $Linker)
 foreach ($Package in $Manifest.compile_packages) {
     Write-Host "== checking $Package =="
     $Command = @("odin", "check", "$Root/$Package", $Collection, "-no-entry-point") + $OdinFlags

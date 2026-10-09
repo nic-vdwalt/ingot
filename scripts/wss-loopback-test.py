@@ -37,7 +37,7 @@ async def websocket_server(reader, writer, valid_upgrade=True):
             pass
 
 
-async def run_case(name, fixture, collection, pki, certificate, key, ca_file, expected_error, expect_message, valid_upgrade=True):
+async def run_case(name, fixture, collection, odin_flags, pki, certificate, key, ca_file, expected_error, expect_message, valid_upgrade=True):
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(pki / certificate, pki / key)
     server = await asyncio.start_server(
@@ -52,6 +52,7 @@ async def run_case(name, fixture, collection, pki, certificate, key, ca_file, ex
         "run",
         str(fixture),
         collection,
+        *odin_flags,
         "--",
         f"wss://localhost:{port}/secure?case={name}",
         str(pki / ca_file) if ca_file else str(pki / "wrong.pem"),
@@ -75,21 +76,22 @@ async def run_case(name, fixture, collection, pki, certificate, key, ca_file, ex
     print(f"wss-loopback: {name} PASS")
 
 
-async def run_matrix(fixture, collection, pki):
-    await run_case("valid", fixture, collection, pki, "localhost.pem", "localhost-key.pem", "root-ca.pem", 0, True)
-    await run_case("untrusted", fixture, collection, pki, "localhost.pem", "localhost-key.pem", "", 4, False)
-    await run_case("wrong-host", fixture, collection, pki, "wrong.pem", "wrong-key.pem", "root-ca.pem", 4, False)
-    await run_case("bad-upgrade", fixture, collection, pki, "localhost.pem", "localhost-key.pem", "root-ca.pem", 5, False, False)
+async def run_matrix(fixture, collection, odin_flags, pki):
+    await run_case("valid", fixture, collection, odin_flags, pki, "localhost.pem", "localhost-key.pem", "root-ca.pem", 0, True)
+    await run_case("untrusted", fixture, collection, odin_flags, pki, "localhost.pem", "localhost-key.pem", "", 4, False)
+    await run_case("wrong-host", fixture, collection, odin_flags, pki, "wrong.pem", "wrong-key.pem", "root-ca.pem", 4, False)
+    await run_case("bad-upgrade", fixture, collection, odin_flags, pki, "localhost.pem", "localhost-key.pem", "root-ca.pem", 5, False, False)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--fixture", required=True, type=pathlib.Path)
     parser.add_argument("--collection", required=True)
+    parser.add_argument("--odin-flag", action="append", default=[])
     args = parser.parse_args()
     pki = pathlib.Path(__file__).resolve().parents[1] / "testdata" / "wss"
     with tempfile.TemporaryDirectory(prefix="ingot-wss-"):
-        asyncio.run(run_matrix(args.fixture, args.collection, pki))
+        asyncio.run(run_matrix(args.fixture, args.collection, args.odin_flag, pki))
 
 
 if __name__ == "__main__":

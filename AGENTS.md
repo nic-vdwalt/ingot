@@ -65,6 +65,11 @@ worked example applied to a subsystem before it is written.
 - **Windows native gate**: `./scripts/test.ps1` then `./scripts/check.ps1`.
   Ordinary gfx tests run in parallel; expected-assert gfx tests are isolated per
   process due to Odin issue #7035, and shared-state gfx tests use one test guard.
+  Both launchers link with `-linker:msvc`: Odin dev-2026-10 made radlink the
+  Windows default, and radlink rejects the Rust runtime symbols that
+  `vendor:wgpu` and `accesskit.lib` both define while ignoring the
+  `/FORCE:MULTIPLE` flag `accesskit.odin` passes. Consumers linking `ingot:gfx`
+  on Windows need `-linker:msvc` (or `-linker:lld`) too.
 - **macOS native gate**: `bash scripts/test.sh -define:ODIN_TEST_THREADS=1` then
   `bash scripts/check.sh`.
 - **Format**: `odinfmt -w .` (settings pinned in `.odinfmt.json`: tabs width 4,

@@ -319,8 +319,9 @@ texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
 	testing.expect(t, !IsTextureValid(Texture2D{}))
 
 	before := texture_slots_used()
-	entry: Tex_Entry
-	id := _texture_register_context(g.id, &g.resources.textures, &entry)
+	entry := new(Tex_Entry)
+	defer free(entry)
+	id := _texture_register_context(g.id, &g.resources.textures, entry)
 	testing.expect(t, id != 0)
 	testing.expect_value(t, texture_slots_used(), before + 1)
 	testing.expect(t, IsTextureValid(Texture2D{id = id}))

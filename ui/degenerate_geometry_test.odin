@@ -121,12 +121,14 @@ radio_survives_degenerate_rects :: proc(t: ^testing.T) {
 @(test)
 slider_survives_degenerate_rects :: proc(t: ^testing.T) {
 	drops, clip_depth := with_frame(t, proc(t: ^testing.T, frame: ^Ui_Frame) {
+		st := new(Slider_State)
+		defer free(st)
 		for w in DEGENERATE_EXTENTS {
 			for h in DEGENERATE_EXTENTS {
 				if w > 0 && h > 0 do continue
-				st: Slider_State
+				st^ = {}
 				value: f32 = 0.5
-				changed := slider_at_state(frame, &st, Rect_I32{0, 0, w, h}, &value, 0, 1)
+				changed := slider_at_state(frame, st, Rect_I32{0, 0, w, h}, &value, 0, 1)
 				testing.expect(t, !changed, "degenerate slider must not report a change")
 				testing.expect_value(t, value, f32(0.5))
 			}
@@ -142,10 +144,11 @@ slider_survives_inverted_and_empty_ranges :: proc(t: ^testing.T) {
 	// bounds arrive; an inverted range is a caller bug that must still not take
 	// the process down.
 	drops, _ := with_frame(t, proc(t: ^testing.T, frame: ^Ui_Frame) {
-		st: Slider_State
+		st := new(Slider_State)
+		defer free(st)
 		value: f32 = 5
-		_ = slider_at_state(frame, &st, Rect_I32{0, 0, 100, 20}, &value, 5, 5)
-		_ = slider_at_state(frame, &st, Rect_I32{0, 0, 100, 20}, &value, 10, 0)
+		_ = slider_at_state(frame, st, Rect_I32{0, 0, 100, 20}, &value, 5, 5)
+		_ = slider_at_state(frame, st, Rect_I32{0, 0, 100, 20}, &value, 10, 0)
 	})
 	testing.expect(t, drops > 0, "collapsed and inverted ranges must be dropped, not trapped")
 }
@@ -249,14 +252,16 @@ listbox_survives_degenerate_rects_and_counts :: proc(t: ^testing.T) {
 	drops, clip_depth := with_frame(
 	t,
 	proc(t: ^testing.T, frame: ^Ui_Frame) {
+		st := new(Listbox_State)
+		defer free(st)
 		for w in DEGENERATE_EXTENTS {
 			for h in DEGENERATE_EXTENTS {
 				if w > 0 && h > 0 do continue
-				st: Listbox_State
+				st^ = {}
 				selected := 0
 				_ = listbox_begin(
 					frame,
-					&st,
+					st,
 					Listbox_Config {
 						rect = Rect_I32{0, 0, w, h},
 						label = "list",
@@ -265,15 +270,15 @@ listbox_survives_degenerate_rects_and_counts :: proc(t: ^testing.T) {
 						selected = &selected,
 					},
 				)
-				listbox_end(frame, &st)
+				listbox_end(frame, st)
 			}
 		}
 		// Healthy rect, no rows: the list has loaded and is genuinely empty.
-		st: Listbox_State
+		st^ = {}
 		selected := 4
 		_ = listbox_begin(
 			frame,
-			&st,
+			st,
 			Listbox_Config {
 				rect = Rect_I32{0, 0, 200, 100},
 				label = "list",
@@ -282,7 +287,7 @@ listbox_survives_degenerate_rects_and_counts :: proc(t: ^testing.T) {
 				selected = &selected,
 			},
 		)
-		listbox_end(frame, &st)
+		listbox_end(frame, st)
 		testing.expect_value(t, selected, -1)
 	},
 	)
@@ -355,9 +360,10 @@ golden_path_records_no_degenerate_drops :: proc(t: ^testing.T) {
 		_ = checkbox_at(frame, Rect_I32{0, 0, 120, 20}, "label", &checked)
 		selected: i32 = 0
 		_ = radio_at(frame, Rect_I32{0, 24, 120, 20}, "label", &selected, 0)
-		st: Slider_State
+		st := new(Slider_State)
+		defer free(st)
 		value: f32 = 0.5
-		_ = slider_at_state(frame, &st, Rect_I32{0, 48, 120, 20}, &value, 0, 1)
+		_ = slider_at_state(frame, st, Rect_I32{0, 48, 120, 20}, &value, 0, 1)
 		_ = pressable(
 			frame,
 			Pressable_Config {

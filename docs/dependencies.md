@@ -42,12 +42,21 @@ GLFW is the default native host. `-define:INGOT_GFX_SDL3=true` selects SDL3
 3.4.x at compile time while retaining `vendor:wgpu`; the unselected host is not
 linked. Browser builds continue using DOM events and WebGPU directly.
 
+On Windows, pass `-linker:msvc` (or `-linker:lld`) to every `odin build`,
+`run`, or `test` that links `ingot:gfx`. Odin dev-2026-10 made radlink the
+default Windows linker; radlink stops on the Rust runtime symbols
+(`rust_eh_personality` and friends) that both `vendor:wgpu` and the committed
+`accesskit.lib` define, and it ignores the `/FORCE:MULTIPLE` flag that
+`accesskit.odin` passes for link.exe and lld-link. `scripts/test.ps1` and
+`scripts/check.ps1` already do this; `odin check` does not link and must not
+receive the flag.
+
 ## Platform prerequisites
 
 | Target | Required | Optional application services |
 |---|---|---|
 | macOS | Pinned Odin and bundled wgpu-native/GLFW inputs; SDL3 3.4.x for SDL builds | AccessKit, libcurl, libvterm according to imported packages |
-| Windows | Pinned Odin and bundled wgpu-native/GLFW inputs; SDL3 3.4.x for SDL builds | AccessKit, libcurl, ConPTY/libvterm according to imports |
+| Windows | Pinned Odin and bundled wgpu-native/GLFW inputs; SDL3 3.4.x for SDL builds; `link.exe` (Visual Studio Build Tools) for `-linker:msvc` | AccessKit, libcurl, ConPTY/libvterm according to imports |
 | Linux | C toolchain, `pkg-config`, Vulkan and GLFW/X11 files; SDL3 3.4.x for SDL builds | libcurl for `net`; libvterm for `term`; desktop dialog helpers |
 | Browser | Pinned Odin, Node for repository checks, a WebGPU-capable browser at runtime | Browser networking and semantic DOM according to application use |
 
