@@ -28,6 +28,16 @@ Use the exact Odin revision in [`ODIN_VERSION`](../ODIN_VERSION). Its bundled
 `vendor:miniaudio` packages are part of the tested build boundary. A newer
 compiler or vendor archive is not assumed compatible.
 
+The current compiler is built from upstream commit
+`93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d` (PR #7842), reporting
+`dev-2026-10:93f71c2`. October's published compiler has a macOS Objective-C
+regression (#7793); the pinned commit fixes it without a local source patch.
+CI overlays this source on October's release assets and builds the compiler
+with `build_odin.sh release` (macOS/Linux) or `build.bat release` (Windows).
+Keep Git metadata at the exact commit so version output includes its revision
+and commit month. On macOS, LLVM 20 is used; install the result at
+`../tools/odin-93f71c2` or point `INGOT_ODIN_ROOT` to it.
+
 GLFW is the default native host. `-define:INGOT_GFX_SDL3=true` selects SDL3
 3.4.x at compile time while retaining `vendor:wgpu`; the unselected host is not
 linked. Browser builds continue using DOM events and WebGPU directly.

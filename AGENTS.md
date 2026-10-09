@@ -43,14 +43,16 @@ worked example applied to a subsystem before it is written.
 
 - **Local pinned tools**: install the Odin release named in `ODIN_VERSION` at
   `../tools/odin-<release>` or `../tools/odin-<rev>` (currently
-  `../tools/odin-902106f`), or point `INGOT_ODIN_ROOT` at it. The gate scripts
+  `../tools/odin-93f71c2`), or point `INGOT_ODIN_ROOT` at it. The gate scripts
   source `scripts/odin-toolchain.sh`, which puts that install ahead of any other
   `odin` on `PATH` (Homebrew Odin is a different revision). Put `../ols` on
   `PATH` for `odinfmt`.
-- **Odin pin policy**: pin the newest Odin release that passes every gate,
-  including the `-build-mode:dll` hot-reload builds. `dev-2026-09` fails those
-  on macOS and Linux (odin-lang/Odin#7559, fixed on master after the release),
-  so the pin stays on `dev-2026-08` until a release carries the fix.
+- **Odin pin policy**: the current pin is `dev-2026-10:93f71c2`, built from
+  upstream commit `93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d` (PR #7842).
+  This explicitly pinned post-release fix resolves October's macOS Objective-C
+  compiler crash (#7793). CI builds this source revision using October release
+  vendor assets. Native, DLL, profile, and standard WASM compilation passed;
+  regression suites and Linux/Windows CI remain human validation.
 - **Register the collection** when building a consumer:
   `odin build src -collection:ingot=libs/ingot`
 - **Test**: `bash scripts/test.sh` - runs the packages and examples in

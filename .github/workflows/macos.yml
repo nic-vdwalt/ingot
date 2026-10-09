@@ -36,7 +36,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir "$RUNNER_TEMP/odin" "$RUNNER_TEMP/ols" "$RUNNER_TEMP/wgpu"
-          gh api repos/odin-lang/Odin/releases/assets/504104905 \
+          gh api repos/odin-lang/Odin/releases/assets/615726666 \
             -H "Accept: application/octet-stream" > "$RUNNER_TEMP/odin.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
           gh api repos/DanielGavin/ols/releases/assets/487668580 \
@@ -50,6 +50,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-macos-aarch64-release/lib"
           cp "$RUNNER_TEMP/wgpu/lib/"* \
             "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-macos-aarch64-release/lib/"
+          gh api repos/odin-lang/Odin/tarball/93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d > "$RUNNER_TEMP/odin-source.tar.gz"
+          tar -xzf "$RUNNER_TEMP/odin-source.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
+          brew install llvm@20
+          (cd "$RUNNER_TEMP/odin" && git init && git fetch --depth=1 https://github.com/odin-lang/Odin 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d && git reset FETCH_HEAD && LLVM_CONFIG="$(brew --prefix llvm@20)/bin/llvm-config" sh build_odin.sh release)
           sh "$RUNNER_TEMP/odin/vendor/miniaudio/src/build_miniaudio.sh"
           sh "$RUNNER_TEMP/odin/vendor/stb/src/build_stb.sh" unix
           echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"

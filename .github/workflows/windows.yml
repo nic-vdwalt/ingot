@@ -46,7 +46,7 @@ jobs:
           $OlsRoot = Join-Path $env:RUNNER_TEMP "ols"
           $WgpuRoot = Join-Path $env:RUNNER_TEMP "wgpu"
           New-Item -ItemType Directory -Force -Path $OdinRoot, $OlsRoot, $WgpuRoot | Out-Null
-          gh api repos/odin-lang/Odin/releases/assets/504098430 `
+          gh api repos/odin-lang/Odin/releases/assets/615725640 `
             -H "Accept: application/octet-stream" > $OdinArchive
           gh api repos/DanielGavin/ols/releases/assets/487668593 `
             -H "Accept: application/octet-stream" > $OlsArchive
@@ -56,6 +56,17 @@ jobs:
           Expand-Archive -Path $OlsArchive -DestinationPath $OlsRoot
           Expand-Archive -Path $WgpuArchive -DestinationPath $WgpuRoot
           $OdinRoot = Join-Path $OdinRoot "dist"
+          $SourceArchive = Join-Path $env:RUNNER_TEMP "odin-source.tar.gz"
+          gh api repos/odin-lang/Odin/tarball/93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d > $SourceArchive
+          tar -xzf $SourceArchive -C $OdinRoot --strip-components=1
+          Push-Location $OdinRoot
+          git init
+          git fetch --depth=1 https://github.com/odin-lang/Odin 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d
+          if ($LASTEXITCODE -ne 0) { throw "Odin source fetch failed" }
+          git reset FETCH_HEAD
+          cmd /c build.bat release
+          if ($LASTEXITCODE -ne 0) { throw "Odin compiler build failed" }
+          Pop-Location
           $WgpuTarget = Join-Path $OdinRoot "vendor/wgpu/lib/wgpu-windows-x86_64-msvc-release/lib"
           New-Item -ItemType Directory -Force -Path $WgpuTarget | Out-Null
           Copy-Item -Force (Join-Path $WgpuRoot "lib/*") $WgpuTarget

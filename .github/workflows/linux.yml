@@ -24,6 +24,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
+            clang-18 \
+            llvm-18-dev \
             cmake \
             ninja-build \
             pkg-config \
@@ -45,7 +47,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir "$RUNNER_TEMP/odin"
-          gh api repos/odin-lang/Odin/releases/assets/504110654 \
+          gh api repos/odin-lang/Odin/releases/assets/615726879 \
             -H "Accept: application/octet-stream" > "$RUNNER_TEMP/odin.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
           gh api repos/DanielGavin/ols/releases/assets/487668598 \
@@ -65,6 +67,9 @@ jobs:
           cmake --build "$RUNNER_TEMP/sdl-build"
           sudo cmake --install "$RUNNER_TEMP/sdl-build"
           sudo ldconfig
+          gh api repos/odin-lang/Odin/tarball/93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d > "$RUNNER_TEMP/odin-source.tar.gz"
+          tar -xzf "$RUNNER_TEMP/odin-source.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
+          (cd "$RUNNER_TEMP/odin" && git init && git fetch --depth=1 https://github.com/odin-lang/Odin 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d && git reset FETCH_HEAD && LLVM_CONFIG=llvm-config-18 CXX=clang++-18 sh build_odin.sh release)
           sh "$RUNNER_TEMP/odin/vendor/miniaudio/src/build_miniaudio.sh"
           sh "$RUNNER_TEMP/odin/vendor/stb/src/build_stb.sh" unix
           echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"

@@ -9,6 +9,16 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+### Changed
+
+- Pin Odin to `dev-2026-10:93f71c2`, upstream commit
+  `93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d` (PR #7842), fixing the October
+  release's macOS Objective-C compiler assertion (#7793). CI rebuilds this
+  exact source revision with October's vendor assets. Native package checks,
+  all native examples, hot-reload host/DLL, PlanetForger native/profile builds,
+  and nine standard WASM builds pass. Regression suites and Linux/Windows CI
+  have not been run locally.
+
 ## [0.3.3] - 2026-10-02
 
 This is a source-only release; no binaries, installers, or web bundles are attached.
