@@ -196,9 +196,12 @@ a separate platform integration gate.
 Windows uses `scripts/test.ps1` and `scripts/check.ps1`. Both launchers consume
 `scripts/gate-manifest.json`, and package tests use the same bounded Python
 supervisor, simulation defaults, timeout, output budget, and failure-log policy
-as Unix. `.github/workflows/windows.yml` is manual until the pinned Odin and
-native libraries have a reproducible runner installation path; it must not be
-made mandatory with an ambient or unpinned toolchain.
+as Unix. `.github/workflows/windows.yml` runs on pushes to `main` and
+`develop` and on pull requests. It installs the pinned Odin toolchain and
+`odinfmt` from release assets, verifies them before any gate, and rebuilds the
+patched `libvterm/lib/windows_amd64/vterm.lib` with `scripts/build-libvterm.bat`
+for test runs; the committed archive is restored before the strict gate so the
+tree stays clean. It must never run with an ambient or unpinned toolchain.
 
 Validation runs use `scripts/validation-evidence.py` to emit bounded, redacted
 JSON and logs matching `docs/validation/schema.json`.

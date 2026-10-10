@@ -24,9 +24,10 @@ package.
 ## Toolchain
 
 Use the exact Odin revision in [`ODIN_VERSION`](../ODIN_VERSION). Its bundled
-`vendor:wgpu`, `vendor:glfw`, `vendor:sdl3`, `vendor:stb`, and
-`vendor:miniaudio` packages are part of the tested build boundary. A newer
-compiler or vendor archive is not assumed compatible.
+`vendor:wgpu`, `vendor:glfw`, `vendor:sdl3`, `vendor:stb`, `vendor:miniaudio`,
+`vendor:box3d`, `vendor:x11` (Linux drag-and-drop), and `vendor:curl` (the
+Windows libcurl import library) packages are part of the tested build boundary.
+A newer compiler or vendor archive is not assumed compatible.
 
 The current compiler is built from upstream commit
 `93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d` (PR #7842), reporting

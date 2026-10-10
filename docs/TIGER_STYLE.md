@@ -271,12 +271,19 @@ nobody modelled. Writing to these rules is what makes the harnesses in
 
 ## Dependencies and tooling
 
-- `ingot` is **pure Odin on `vendor:*`** (wgpu, glfw, stb) with committed
-  libvterm static libs - effectively a zero-external-dependency policy. Keep it
-  that way: every dependency is a supply-chain, safety, and performance risk that
-  is amplified through everything that builds on the engine.
-- Standardize on Odin for tooling too. Prefer an Odin program over a one-off
-  shell script where it's practical, for portability and type safety.
+- The framework API is Odin. Native integration is not dependency-free: the
+  build boundary is the pinned Odin toolchain's `vendor:*` packages (wgpu, glfw,
+  sdl3, stb, miniaudio, box3d, x11, curl on Windows), two committed native
+  archives with recorded provenance (libvterm, AccessKit), and the platform
+  libraries `docs/dependencies.md` lists. Every dependency is a supply-chain,
+  safety, and performance risk amplified through everything that builds on the
+  engine, so adding one requires a `THIRD_PARTY_NOTICES.md` entry, a
+  `docs/provenance/third-party-artifacts.json` record for any binary, and a
+  package boundary that keeps it out of applications that do not import it.
+- Tooling is Odin where it ships with the framework and Python 3 plus POSIX
+  shell for repository gates; `scripts/check-web.sh` also needs Node for the
+  `web/test` suites. Prefer an Odin program over a one-off shell script when the
+  tool is part of the product rather than the repository's own checks.
 
 ## The last stage
 
