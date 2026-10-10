@@ -290,7 +290,7 @@ bounded work it can assert against, and derived output it can check as data. An
 immediate-mode frame supplies all four without a testing layer being added on
 top, so a harness drives production widgets rather than a parallel test-only
 model. [Testing Ingot](testing.md) develops this argument, and
-[the 3D content pipeline plan](3d-content-pipeline-plan.md) shows it being
+[the 3D content pipeline plan](../../forgecore/docs/3d-content-pipeline-plan.md) shows it being
 applied to a subsystem before that subsystem is written.
 
 Tiger Style does not make the system correct by declaration, and fuzzing does

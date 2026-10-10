@@ -25,7 +25,6 @@ libvterm/lib/linux_arm64/
 /box3d_water
 /render_fixture
 /main
-/procgen-running.png
 /g.ll
 
 # Investigation evidence and frozen source snapshots live in the separate

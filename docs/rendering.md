@@ -8,11 +8,15 @@ validation contracts.
 ## Context and resource ownership
 
 The PascalCase compatibility API uses `default_context()`. `InitWindow` creates
-it and `CloseWindow` destroys it. Explicit `context_init`, `context_begin_frame`,
+it and `CloseWindow` destroys it. Explicit `context_init`, `context_begin_drawing`,
 and `context_close` support independently live native contexts rendered in a
 deterministic, interleaved order on one owner thread. Each context owns its
 window, renderer, input, timing, statistics, submission tracker, and bounded
-texture, font-atlas, shader, VAO/VBO, and GPU-3D pools.
+texture, font-atlas, shader, VAO/VBO, and GPU-3D pools. Native platform hooks
+(Metal presentation timing, drag-drop, IME) key their owner by window handle,
+so two live contexts receive their own events and closing one does not unhook
+the other. Geometry overflow diagnostics are capped per context
+(`context_renderer_overflow_reports`), not per process.
 
 Public resources use opaque context- and generation-checked handles. Zero is
 invalid, freed slots can be reused, and a handle from another context, an
@@ -32,8 +36,9 @@ can bind an explicit graphics frame. Direct adapter lifecycle calls are backend
 implementation details. Parallel renderer threads remain unsupported; browser
 hosting remains one managed canvas per module session.
 
-Audio has a separate lifecycle. Pair `InitAudioDevice` with `CloseAudioDevice`;
-`CloseWindow` does not close audio.
+Audio has a separate lifecycle and is process-scoped, not per-context: one
+audio device serves every live context. Pair `InitAudioDevice` with
+`CloseAudioDevice`; `CloseWindow` does not close audio.
 
 ## Text metrics and caret ownership
 
@@ -269,7 +274,7 @@ caller deliberately migrates them.
 
 The GPU 3D API is a visualization escape hatch rather than a scene graph,
 material system, asset pipeline, or full game engine.
-[The 3D content pipeline plan](3d-content-pipeline-plan.md) describes what those
+[The 3D content pipeline plan](../../forgecore/docs/3d-content-pipeline-plan.md) describes what those
 layers would require, including the renderer-independent package split that
 keeps import, cook, visibility, and batching testable without a window.
 

@@ -11,21 +11,16 @@ New subsystems are expected to preserve the four properties that make
 deterministic simulation cheap here: an explicit state-in/data-out boundary,
 nondeterminism confined to compile-gated simulation seams, bounded work with
 named upper bounds, and assertions plus inspectable derived output as oracles.
-`docs/testing.md` explains why, and `docs/3d-content-pipeline-plan.md` is a
-worked example applied to a subsystem before it is written.
+`docs/testing.md` explains why, and forgecore's `docs/3d-content-pipeline-plan.md`
+(the 3D content pipeline now lives in `../forgecore`) is a worked example
+applied to a subsystem before it is written.
 
 ## Packages
 
 | Package               | Role                                                                                                                                                              |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ingot:asset`         | Validated cooked mesh data. Must not import `ingot:gfx`.                                                                                                          |
-| `ingot:ecs`           | Sparse-set ECS: generational `Entity_Pool`, typed `Set(T)` registered via `Set_Header`, join iterators, bounded `Deferred` buffer, blittable snapshots. Zero non-`base` imports. |
-| `ingot:mesh`          | Mesh pipeline: simplify, optimize, cluster DAG, LOD cooking, variants. Imports `asset`/`noise`, never `gfx`.                                                      |
-| `ingot:noise`         | Seeded 2D/3D value noise and fractal/warped variants. Zero non-`core` imports.                                                                                    |
-| `ingot:scene`         | Visibility, LOD, sorting, and draw lists. Must not import `gfx`.                                                                                                  |
-| `ingot:scene_gfx`     | The only scene-to-`gfx` upload and replay bridge.                                                                                                                 |
 | `ingot:gfx`           | graphics core (raylib-shaped): window/context, 2D shapes, textures, text atlas, input, math, cameras, `rlgl` shim                                                 |
-| `ingot:box3d_workers` | Bounded Box3D task bridge for shared-memory WASM workers; examples own commands/snapshots, while this package owns task slots and wait/notify.                    |
+| `ingot:examples/box3d_workers` | Example-owned bounded Box3D task bridge for shared-memory WASM workers; the `box3d_*` examples own commands/snapshots, this package owns task slots and wait/notify. |
 | `ingot:ui`            | renderer-independent immediate-mode toolkit: widgets consume `Ui_Input` and append bounded paint, semantics, and platform output. It must not import `ingot:gfx`. |
 | `ingot:ui_gfx`        | bridge that snapshots `gfx` input, replays UI paint, manages UI fonts, and applies platform output                                                                |
 | `ingot:view`          | saved views: a flat, POD UI description a tool can author and any client can replay through `ui`. Imports `ingot:ui` only, and stays web-safe                     |

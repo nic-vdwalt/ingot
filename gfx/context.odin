@@ -1,7 +1,11 @@
 // ingot:gfx - window + WebGPU context lifecycle and the raylib-named entry
 // points apps call (InitWindow/BeginDrawing/EndDrawing/ClearBackground/...).
-// All mutable package state lives in the single `g` global so every gfx file
-// (batch, shapes, text, texture, input) shares one context.
+// All per-window mutable state lives in a `Context`. The PascalCase facade
+// routes through `default_context()`, which `set_default_context` rebinds as a
+// host-level handoff; explicit `context_*`/`frame_*` procedures take the owner.
+// The only package-scope variables are the default-context storage, process-
+// wide platform handles, and per-window owner tables keyed by native handle;
+// `scripts/check_gfx_context.py` enforces that inventory.
 package gfx
 
 import "base:runtime"

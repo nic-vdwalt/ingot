@@ -15,13 +15,8 @@ import check_odin_style
 # point the same gate at its own source tree; the rules are not ingot-specific,
 # only this default is.
 PACKAGES = (
-    "asset/",
-    "box3d_workers/",
+    "examples/box3d_workers/",
     "gfx/",
-    "noise/",
-    "mesh/",
-    "scene/",
-    "scene_gfx/",
     "ui/",
     "ui_gfx/",
     "view/",

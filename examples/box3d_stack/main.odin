@@ -2,7 +2,7 @@ package main
 
 import "base:intrinsics"
 import "core:math/linalg"
-import workers "ingot:box3d_workers"
+import workers "ingot:examples/box3d_workers"
 import rl "ingot:gfx"
 import b3 "vendor:box3d"
 

@@ -14,6 +14,19 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
 
 ### Removed
 
+- **Breaking:** `ingot:asset`, `ingot:ecs`, `ingot:mesh`, `ingot:noise`,
+  `ingot:scene`, and `ingot:scene_gfx` moved to forgecore as
+  `forgecore:<name>` with unchanged package names and public symbols, together
+  with `tools/mesh_cook.py`, `tools/blender_ingmesh_export.py`, their tests,
+  and `docs/{mesh-pipeline,cooked-mesh,cooked-mesh-v2,cluster-lod,
+  3d-content-pipeline-plan,grounded-whole-blade-lods-plan}.md`. Nothing in the
+  UI stack imported them; their only consumers are the forgecore demos, which
+  now build them from one checkout (`bash build.sh check`/`test`/`tools-test`
+  in forgecore). Update imports by replacing the `ingot:` prefix with
+  `forgecore:` and passing `-collection:forgecore=<forgecore>`.
+- **Breaking:** `ingot:box3d_workers` is now `ingot:examples/box3d_workers`.
+  It was only ever consumed by the `box3d_*` examples and is WASM-only, so it
+  lives with them; the JS halves stay in `web/`.
 - **Breaking:** every public `ingot:fit` procedure is renamed from PascalCase
   to snake_case with no deprecated forwarders, matching `docs/TIGER_STYLE.md`
   and the `0.3.0` `ingot:gfx` rename. The mapping is mechanical: lowercase the
@@ -64,6 +77,18 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
 
 ### Changed
 
+- `ingot:gfx` native platform hooks now key their owner by window handle
+  instead of a single process-wide owner. Metal presentation timing
+  (`presentation_darwin.odin`) keeps a layer-to-context table and carries the
+  owner on each presented-handler callback; drag-drop on macOS, Linux (X11),
+  and Windows keeps a view/HWND-to-context table (`NATIVE_WINDOW_TABLE_MAX`
+  entries, shared with the IME and SDL window tables) and
+  `platform_dragdrop_tick` takes the owning context. Geometry overflow
+  reporting moved from a package global into `Renderer.overflow_reports`;
+  `context_renderer_overflow_reports` exposes it. `scripts/check_gfx_context.py`
+  gains a package-global inventory (`ALLOWED_PACKAGE_GLOBALS`) so any new
+  `gfx` package-scope variable fails the gate until it is reviewed, and
+  `--measure` reports it under `package_globals`.
 - **Breaking:** `prefs.data_dir`, `prefs.path`, `prefs.read`, and
   `prefs.write` return `prefs.Prefs_Error` (`None`, `No_Data_Dir`,
   `Invalid_Name`, `Create_Dir`, `Open`, `Write`, `Missing`, `Read`) instead of
@@ -128,6 +153,16 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
 
 ### Fixed
 
+- Two live native `ingot:gfx` contexts no longer share one drag-drop and
+  presentation owner. Before, `platform_create_surface` on macOS overwrote the
+  single presentation owner so the first window's `nextDrawable` hook reported
+  timing into the second context, and closing the first window left its Metal
+  layer subclassed because the owner check failed; drag-drop registered only the
+  first window on every OS. Each window now routes to its own context, and
+  closing one restores only that window's layer/view/HWND.
+- Geometry overflow diagnostics were capped once per process, so a second
+  context never printed its first report after another had exhausted the cap.
+  The cap is now per renderer.
 - `sys.open_file_dialog` and `sys.save_file_dialog` compile again on Windows:
   `core:sys/windows.OPENFILENAMEW.lpstrFile` became `LPWSTR` (`^u16`) in the
   pinned Odin, so the path buffer is passed directly instead of cast to

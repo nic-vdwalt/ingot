@@ -179,8 +179,9 @@ aliases or broaden the compatibility facade into complete raymath support.
 
 Mixing is supported only for the default owner. Framework internals and
 multi-context applications must use owned `Frame` or `Context` procedures.
-There is no mutable active context and no scope that can reroute PascalCase calls
-to another live context.
+`set_default_context` rebinds which context the PascalCase facade targets; it is
+a host-level handoff (hot reload, tests), not a per-call scope, and there is no
+scope that reroutes an individual PascalCase call to another live context.
 
 ## Build dependencies
 

@@ -67,7 +67,7 @@ Windows x64, Linux x64, and Linux arm64. On first use
 `scripts/provision-cross-vendor.sh` installs the prebuilt stb, miniaudio, and
 wgpu-native libraries those targets need into the active toolchain, using the
 same release assets as CI; it needs the GitHub CLI once. Linux arm64 skips
-`box3d_workers` because no prebuilt Box3D library exists for it. The check
+`examples/box3d_workers` because no prebuilt Box3D library exists for it. The check
 proves the code compiles for each target; linking and running remain the job of
 the native gates. Odin dev-2026-10 refuses `odin check -target:windows_amd64`
 on non-Windows hosts and only accepts `-windows-sdk-root` for `odin build`, so
@@ -346,8 +346,9 @@ allocator play the same role for memory and concurrency errors, which have no
 natural in-language oracle at all.
 
 The consequence is that new subsystems should be designed to preserve these four
-properties rather than tested afterward. `docs/3d-content-pipeline-plan.md`
-applies that rule to a prospective asset and scene pipeline: import and cook are
+properties rather than tested afterward. Forgecore's
+`docs/3d-content-pipeline-plan.md` (the pipeline moved to `../forgecore`)
+applies that rule to the asset and scene pipeline: import and cook are
 pure byte-to-data transforms, the draw list is bounded plain data, and the
 renderer-independent packages are forbidden from importing `ingot:gfx`, so
 almost the whole pipeline is reachable by the harness described here without a

@@ -7,7 +7,7 @@ UI — and lets any other Ingot client render it. A view is data, not code, so i
 can be authored by a tool, saved, shipped, diffed, and fuzzed.
 
 This document is the specification. It is written before the implementation for
-the reason [3d-content-pipeline-plan.md](3d-content-pipeline-plan.md) is: a
+the reason [3d-content-pipeline-plan.md](../../forgecore/docs/3d-content-pipeline-plan.md) is: a
 subsystem that will carry untrusted input across a file boundary is cheaper to
 get right in design than in review.
 

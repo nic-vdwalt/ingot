@@ -21,8 +21,22 @@ main :: proc() {
 		draw_context(&secondary, rl.Color{38, 24, 28, 255}, false)
 		if rl.context_should_close(primary) || rl.context_should_close(&secondary) do break
 	}
+	fmt.printfln(
+		"multi_context_fixture: frame delivery primary=%v secondary=%v",
+		rl.context_frame_delivery_supported(primary),
+		rl.context_frame_delivery_supported(&secondary),
+	)
+	fmt.printfln(
+		"multi_context_fixture: overflow reports primary=%d secondary=%d",
+		rl.context_renderer_overflow_reports(primary),
+		rl.context_renderer_overflow_reports(&secondary),
+	)
+	secondary_delivery := rl.context_frame_delivery_supported(&secondary)
 	rl.context_close(primary)
 	draw_context(&secondary, rl.Color{20, 35, 28, 255}, false)
+	if rl.context_frame_delivery_supported(&secondary) != secondary_delivery {
+		panic("multi_context_fixture: closing primary changed secondary frame delivery")
+	}
 	fmt.println("multi_context_fixture: independent contexts validated")
 }
 

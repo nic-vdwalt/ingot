@@ -52,7 +52,7 @@ for target in windows_amd64 linux_amd64 linux_arm64; do
 	for pkg in $(manifest_values check_packages); do
 		# No prebuilt Box3D library exists for Linux arm64; its native gate
 		# builds one from source (vendor/box3d/src/build.sh).
-		if [ "$target" = linux_arm64 ] && [ "$pkg" = box3d_workers ]; then
+		if [ "$target" = linux_arm64 ] && [ "$pkg" = examples/box3d_workers ]; then
 			continue
 		fi
 		echo "== $target: checking $pkg =="
