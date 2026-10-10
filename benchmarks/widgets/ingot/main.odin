@@ -108,10 +108,10 @@ Harness :: struct {
 harness_make :: proc(layer: Ingot_Layer, semantics, measure_cache: bool) -> ^Harness {
 	h := new(Harness)
 	if layer == .Fit {
-		fit.Test_Driver_Init(&h.driver)
-		fit.Test_Driver_Set_Storage(&h.driver, {nodes = h.nodes[:], outputs = h.outputs[:]})
-		fit.Test_Driver_Set_Semantics(&h.driver, semantics)
-		fit.Test_Driver_Set_Backend_Measure_Cache(&h.driver, measure_cache)
+		fit.test_driver_init(&h.driver)
+		fit.test_driver_set_storage(&h.driver, {nodes = h.nodes[:], outputs = h.outputs[:]})
+		fit.test_driver_set_semantics(&h.driver, semantics)
+		fit.test_driver_set_backend_measure_cache(&h.driver, measure_cache)
 	} else {
 		h.ui_frame = new(ui.Ui_Frame)
 		h.ui_output = new(ui.Ui_Output)
@@ -138,9 +138,9 @@ harness_destroy :: proc(h: ^Harness, layer: Ingot_Layer) {
 	assert(h != nil, "harness_destroy: nil harness")
 	if layer == .Fit {
 		for index in 0 ..< DASHBOARD_MAX_GROUPS {
-			fit.Input_Box_Destroy(&h.dashboard_inputs[index])
+			fit.input_box_destroy(&h.dashboard_inputs[index])
 		}
-		fit.Test_Driver_Destroy(&h.driver)
+		fit.test_driver_destroy(&h.driver)
 	} else {
 		for index in 0 ..< DASHBOARD_MAX_GROUPS {
 			ui.input_box_destroy(&h.ui_inputs[index])
@@ -190,22 +190,22 @@ hash_u64 :: proc(hash, value: u64) -> u64 {
 }
 
 label_options :: proc(width, height: i32) -> fit.Label_Options {
-	return {size = {width = fit.Fixed(width), height = fit.Fixed(height)}}
+	return {size = {width = fit.fixed(width), height = fit.fixed(height)}}
 }
 
 control_options :: proc(width, height: i32) -> fit.Control_Options {
-	return {size = {width = fit.Fixed(width), height = fit.Fixed(height)}}
+	return {size = {width = fit.fixed(width), height = fit.fixed(height)}}
 }
 
 button_options :: proc(width, height: i32) -> fit.Button_Options {
-	return {size = {width = fit.Fixed(width), height = fit.Fixed(height)}}
+	return {size = {width = fit.fixed(width), height = fit.fixed(height)}}
 }
 
 run_labels :: proc(builder: ^fit.Builder, h: ^Harness, count: int, unique: bool) -> int {
 	assert(builder != nil && h != nil && count > 0, "run_labels: invalid argument")
-	grid := fit.Grid(builder, {columns = 10, row_height = 18})
+	grid := fit.grid(builder, {columns = 10, row_height = 18})
 	for index in 0 ..< count {
-		fit.Label(grid, label_for(h, index, unique), label_options(124, 18))
+		fit.label(grid, label_for(h, index, unique), label_options(124, 18))
 	}
 	return count
 }
@@ -217,10 +217,10 @@ run_isolated_labels :: proc(
 	changing: bool,
 ) -> int {
 	assert(builder != nil && h != nil && count > 0, "run_isolated_labels: invalid argument")
-	grid := fit.Grid(builder, {columns = 10, row_height = 18})
+	grid := fit.grid(builder, {columns = 10, row_height = 18})
 	for index in 0 ..< count {
 		label := changing_label_for(h, index) if changing else label_for(h, index, true)
-		fit.Label(grid, label, label_options(124, 18))
+		fit.label(grid, label, label_options(124, 18))
 	}
 	return count
 }
@@ -228,16 +228,16 @@ run_isolated_labels :: proc(
 run_inputs :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 	assert(builder != nil && h != nil && count > 0, "run_inputs: invalid argument")
 	assert(count <= DASHBOARD_MAX_GROUPS, "run_inputs: too many inputs")
-	grid := fit.Grid(builder, {columns = 1, row_height = 24})
+	grid := fit.grid(builder, {columns = 1, row_height = 24})
 	for index in 0 ..< count {
-		fit.Text_Input(
+		fit.text_input(
 			grid,
 			u64(index + 1),
 			&h.dashboard_inputs[index],
 			"Filter",
 			fit.Builder_Text_Input_Options {
 				semantics = {name = "Filter"},
-				size = {width = fit.Fixed(180), height = fit.Fixed(24)},
+				size = {width = fit.fixed(180), height = fit.fixed(24)},
 			},
 		)
 	}
@@ -246,18 +246,18 @@ run_inputs :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 
 run_checkboxes :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 	assert(builder != nil && h != nil && count > 0, "run_checkboxes: invalid argument")
-	grid := fit.Grid(builder, {columns = 10, row_height = 24})
+	grid := fit.grid(builder, {columns = 10, row_height = 24})
 	for index in 0 ..< count {
-		fit.Checkbox(grid, u64(index + 1), "Check", &h.checked[index], control_options(96, 24))
+		fit.checkbox(grid, u64(index + 1), "Check", &h.checked[index], control_options(96, 24))
 	}
 	return count
 }
 
 run_sliders :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 	assert(builder != nil && h != nil && count > 0, "run_sliders: invalid argument")
-	grid := fit.Grid(builder, {columns = 8, row_height = 24})
+	grid := fit.grid(builder, {columns = 8, row_height = 24})
 	for index in 0 ..< count {
-		fit.Slider(
+		fit.slider(
 			grid,
 			u64(index + 1),
 			&h.values[index],
@@ -273,27 +273,27 @@ run_sliders :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 
 run_buttons :: proc(builder: ^fit.Builder, count: int) -> int {
 	assert(builder != nil && count > 0, "run_buttons: invalid argument")
-	grid := fit.Grid(builder, {columns = 10, row_height = 24})
+	grid := fit.grid(builder, {columns = 10, row_height = 24})
 	for index in 0 ..< count {
-		fit.Button(grid, u64(index + 1), "Button", button_options(96, 24))
+		fit.button(grid, u64(index + 1), "Button", button_options(96, 24))
 	}
 	return count
 }
 
 run_mixed :: proc(builder: ^fit.Builder, h: ^Harness, groups: int) -> int {
 	assert(builder != nil && h != nil && groups > 0, "run_mixed: invalid argument")
-	grid := fit.Grid(builder, {columns = 1, row_height = 30})
+	grid := fit.grid(builder, {columns = 1, row_height = 30})
 	for index in 0 ..< groups {
-		row_parent := fit.Row(grid, {size = {height = fit.Fixed(30)}})
-		fit.Label(row_parent, "Label", label_options(100, 24))
-		fit.Checkbox(
+		row_parent := fit.row(grid, {size = {height = fit.fixed(30)}})
+		fit.label(row_parent, "Label", label_options(100, 24))
+		fit.checkbox(
 			row_parent,
 			u64(index * 4 + 1),
 			"Check",
 			&h.checked[index],
 			control_options(120, 24),
 		)
-		fit.Slider(
+		fit.slider(
 			row_parent,
 			u64(index * 4 + 2),
 			&h.values[index],
@@ -303,8 +303,8 @@ run_mixed :: proc(builder: ^fit.Builder, h: ^Harness, groups: int) -> int {
 			"Value",
 			control_options(140, 24),
 		)
-		fit.Label(row_parent, "Input", label_options(160, 24))
-		fit.Button(row_parent, u64(index * 4 + 3), "Submit", button_options(96, 24))
+		fit.label(row_parent, "Input", label_options(160, 24))
+		fit.button(row_parent, u64(index * 4 + 3), "Submit", button_options(96, 24))
 	}
 	return groups * 5
 }
@@ -312,19 +312,19 @@ run_mixed :: proc(builder: ^fit.Builder, h: ^Harness, groups: int) -> int {
 run_dashboard :: proc(builder: ^fit.Builder, h: ^Harness, groups: int) -> int {
 	assert(builder != nil && h != nil && groups > 0, "run_dashboard: invalid argument")
 	assert(groups <= DASHBOARD_MAX_GROUPS, "run_dashboard: too many groups")
-	grid := fit.Grid(builder, {columns = 1, row_height = 30})
+	grid := fit.grid(builder, {columns = 1, row_height = 30})
 	for index in 0 ..< groups {
-		row_parent := fit.Row(grid, {size = {height = fit.Fixed(30)}})
-		fit.Label(row_parent, label_for(h, index, true), label_options(124, 24))
-		fit.Label(row_parent, "Healthy", label_options(76, 24))
-		fit.Checkbox(
+		row_parent := fit.row(grid, {size = {height = fit.fixed(30)}})
+		fit.label(row_parent, label_for(h, index, true), label_options(124, 24))
+		fit.label(row_parent, "Healthy", label_options(76, 24))
+		fit.checkbox(
 			row_parent,
 			u64(index * 4 + 1),
 			"Live",
 			&h.checked[index],
 			control_options(88, 24),
 		)
-		fit.Slider(
+		fit.slider(
 			row_parent,
 			u64(index * 4 + 2),
 			&h.values[index],
@@ -334,18 +334,18 @@ run_dashboard :: proc(builder: ^fit.Builder, h: ^Harness, groups: int) -> int {
 			"Value",
 			control_options(130, 24),
 		)
-		fit.Text_Input(
+		fit.text_input(
 			row_parent,
 			u64(index * 4 + 3),
 			&h.dashboard_inputs[index],
 			"Filter",
 			fit.Builder_Text_Input_Options {
 				semantics = {name = "Filter"},
-				size = {width = fit.Fixed(150), height = fit.Fixed(24)},
+				size = {width = fit.fixed(150), height = fit.fixed(24)},
 			},
 		)
-		fit.Button(row_parent, u64(index * 4 + 4), "Open", button_options(72, 24))
-		for _ in 0 ..< 4 do fit.Label(row_parent, "Data", label_options(82, 24))
+		fit.button(row_parent, u64(index * 4 + 4), "Open", button_options(72, 24))
+		for _ in 0 ..< 4 do fit.label(row_parent, "Data", label_options(82, 24))
 	}
 	return groups * DASHBOARD_WIDGETS_PER_GROUP
 }
@@ -354,46 +354,46 @@ layout_render :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: rawptr) 
 	assert(surface != nil && user_data != nil, "layout_render: invalid argument")
 	h := cast(^Harness)user_data
 	flow: fit.Flow_State
-	fit.Flow_Begin(surface, &flow, rect, 6, 4)
+	fit.flow_begin(surface, &flow, rect, 6, 4)
 	checksum := FNV_BASIS
 	for index in 0 ..< h.scale {
-		item := fit.Flow_Next(&flow, i32(24 + index % 17 * 7), i32(18 + index % 3 * 4))
+		item := fit.flow_next(&flow, i32(24 + index % 17 * 7), i32(18 + index % 3 * 4))
 		checksum = hash_u64(checksum, u64(item.x))
 		checksum = hash_u64(checksum, u64(item.y))
 		checksum = hash_u64(checksum, u64(item.w))
 		checksum = hash_u64(checksum, u64(item.h))
 	}
-	bounds := fit.Flow_End(&flow)
+	bounds := fit.flow_end(&flow)
 	h.layout_checksum = hash_u64(checksum, u64(bounds.h))
 	return false
 }
 
 run_layout_flow :: proc(builder: ^fit.Builder, h: ^Harness) -> int {
 	assert(builder != nil && h != nil && h.scale > 0, "run_layout_flow: invalid argument")
-	fit.Canvas(builder, layout_render, h)
+	fit.canvas(builder, layout_render, h)
 	return h.scale
 }
 
 run_prepared_flat :: proc(builder: ^fit.Builder, h: ^Harness, fixed: bool) -> int {
 	assert(builder != nil && h != nil && h.scale > 0, "prepared flat: invalid argument")
-	grid := fit.Grid(builder, {columns = 8, row_height = 18})
+	grid := fit.grid(builder, {columns = 8, row_height = 18})
 	for index in 0 ..< h.scale {
 		options := label_options(124, 18) if fixed else fit.Label_Options{}
-		fit.Label(grid, label_for(h, index, true), options)
+		fit.label(grid, label_for(h, index, true), options)
 	}
 	return h.scale
 }
 
 run_prepared_rows :: proc(builder: ^fit.Builder, h: ^Harness, fixed: bool) -> int {
 	assert(builder != nil && h != nil && h.scale >= 4, "prepared rows: invalid argument")
-	grid := fit.Grid(builder, {columns = 1, row_height = 18})
+	grid := fit.grid(builder, {columns = 1, row_height = 18})
 	rows := h.scale / 4
 	for row in 0 ..< rows {
-		row_parent := fit.Row(grid, {size = {height = fit.Fixed(18)}})
+		row_parent := fit.row(grid, {size = {height = fit.fixed(18)}})
 		for column in 0 ..< 4 {
 			index := row * 4 + column
 			options := label_options(124, 18) if fixed else fit.Label_Options{}
-			fit.Label(row_parent, label_for(h, index, true), options)
+			fit.label(row_parent, label_for(h, index, true), options)
 		}
 	}
 	return rows * 4
@@ -402,33 +402,33 @@ run_prepared_rows :: proc(builder: ^fit.Builder, h: ^Harness, fixed: bool) -> in
 run_prepared_deep :: proc(builder: ^fit.Builder, h: ^Harness, fixed: bool) -> int {
 	assert(builder != nil && h != nil && h.scale > 0, "prepared deep: invalid argument")
 	depth := min(h.scale, 15)
-	parent := fit.Column(builder, {size = {width = fit.Fixed(320)}})
-	for _ in 1 ..< depth do parent = fit.Column(parent, {size = {width = fit.Fixed(320)}})
+	parent := fit.column(builder, {size = {width = fit.fixed(320)}})
+	for _ in 1 ..< depth do parent = fit.column(parent, {size = {width = fit.fixed(320)}})
 	options := label_options(124, 18) if fixed else fit.Label_Options{}
-	fit.Label(parent, "Deep", options)
+	fit.label(parent, "Deep", options)
 	return 1
 }
 
 run_prepared_wrapped :: proc(builder: ^fit.Builder, h: ^Harness) -> int {
 	assert(builder != nil && h != nil && h.scale > 0, "prepared wrapped: invalid argument")
-	grid := fit.Grid(builder, {columns = 4, row_height = 36})
+	grid := fit.grid(builder, {columns = 4, row_height = 36})
 	for _ in 0 ..< h.scale {
-		fit.Label(grid, "Prepared wrapped label content", {wrap = true})
+		fit.label(grid, "Prepared wrapped label content", {wrap = true})
 	}
 	return h.scale
 }
 
 run_prepared_mixed :: proc(builder: ^fit.Builder, h: ^Harness) -> int {
 	assert(builder != nil && h != nil && h.scale > 0, "prepared mixed: invalid argument")
-	grid := fit.Grid(builder, {columns = 4, row_height = 24})
+	grid := fit.grid(builder, {columns = 4, row_height = 24})
 	for index in 0 ..< h.scale {
-		width := fit.Fixed(100)
-		if index % 3 == 1 do width = fit.Grow()
-		if index % 3 == 2 do width = fit.Percent(0.25)
-		fit.Label(
+		width := fit.fixed(100)
+		if index % 3 == 1 do width = fit.grow()
+		if index % 3 == 2 do width = fit.percent(0.25)
+		fit.label(
 			grid,
 			label_for(h, index, true),
-			{size = {width = width, height = fit.Fixed(24)}},
+			{size = {width = width, height = fit.fixed(24)}},
 		)
 	}
 	return h.scale
@@ -438,20 +438,20 @@ run_virtual_list :: proc(builder: ^fit.Builder, h: ^Harness, logical_count: int)
 	assert(builder != nil && h != nil && logical_count > 0, "run_virtual_list: invalid argument")
 	submitted := min(logical_count, VIRTUAL_ROWS + VIRTUAL_OVERSCAN * 2)
 	start := clamp(logical_count / 2 - VIRTUAL_OVERSCAN, 0, logical_count - submitted)
-	grid := fit.Grid(builder, {columns = 1, row_height = 18})
+	grid := fit.grid(builder, {columns = 1, row_height = 18})
 	for offset in 0 ..< submitted {
-		fit.Label(grid, label_for(h, start + offset, true), label_options(320, 18))
+		fit.label(grid, label_for(h, start + offset, true), label_options(320, 18))
 	}
 	return submitted
 }
 
 run_table :: proc(builder: ^fit.Builder, h: ^Harness, rows: int, unique: bool) -> int {
 	assert(builder != nil && h != nil && rows > 0, "run_table: invalid argument")
-	grid := fit.Grid(builder, {columns = 4, row_height = 18})
+	grid := fit.grid(builder, {columns = 4, row_height = 18})
 	for row in 0 ..< rows {
 		for column in 0 ..< 4 {
 			label := label_for(h, (row * 4 + column) % MAX_SCALE, unique)
-			fit.Label(grid, label, label_options(216, 18))
+			fit.label(grid, label, label_options(216, 18))
 		}
 	}
 	return rows * 4
@@ -459,11 +459,11 @@ run_table :: proc(builder: ^fit.Builder, h: ^Harness, rows: int, unique: bool) -
 
 run_churn :: proc(builder: ^fit.Builder, h: ^Harness, count: int) -> int {
 	assert(builder != nil && h != nil && count > 0, "run_churn: invalid argument")
-	grid := fit.Grid(builder, {columns = 1, row_height = 18})
+	grid := fit.grid(builder, {columns = 1, row_height = 18})
 	for position in 0 ..< count {
 		churned := (position + h.frame_index) % 10 == 0
 		index := (position + h.frame_index) % count if churned else position
-		fit.Label(grid, label_for(h, index, true), label_options(320, 18))
+		fit.label(grid, label_for(h, index, true), label_options(320, 18))
 	}
 	return count
 }
@@ -961,7 +961,7 @@ measure_frame_fit :: proc(h: ^Harness, options: Options, index: int) -> Frame_Ti
 		}
 		h.active_input_stage += 1
 	}
-	timing, ok := fit.Test_Driver_Frame_Timed(&h.driver, h.input, benchmark_draw, h)
+	timing, ok := fit.test_driver_frame_timed(&h.driver, h.input, benchmark_draw, h)
 	assert(ok, "measure_frame_fit: frame failed")
 	return {
 		timing.build_ns,
@@ -1026,9 +1026,9 @@ benchmark_evidence :: proc(
 ) {
 	assert(h != nil, "benchmark_evidence: nil harness")
 	if layer == .Fit {
-		return fit.Test_Driver_Paint_Summary(
+		return fit.test_driver_paint_summary(
 			&h.driver,
-		), fit.Test_Driver_Telemetry(&h.driver), fit.Test_Driver_Diagnostics(&h.driver)
+		), fit.test_driver_telemetry(&h.driver), fit.test_driver_diagnostics(&h.driver)
 	}
 	telemetry := fit.Frame_Telemetry {
 		scratch_allocations           = h.ui_telemetry.scratch_allocation_count,

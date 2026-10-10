@@ -10,9 +10,9 @@
 // fixed CAPTURE_WIDTH x CAPTURE_HEIGHT target also decouples the output from the
 // host window size and HiDPI factor.
 //
-// Why its own loop instead of fit.Run: Builder paint is replayed by Render.
+// Why its own loop instead of fit.run: Builder paint is replayed by Render.
 // Wrapping the draw callback alone would capture direct draws and none of the
-// widgets, so the target brackets explicit fit.Render in a manual fit.Session.
+// widgets, so the target brackets explicit fit.render in a manual fit.Session.
 //
 // Determinism: capture forces reduced motion, an explicit 1.0 UI scale, and a
 // settle delay before each shot. Caret blink and progress easing are wall-clock
@@ -132,7 +132,7 @@ when CAPTURE {
 			reduced_motion = !capture_sequence
 			apply_gallery_theme()
 			apply_scale(CAPTURE_UI_SCALE)
-			fit.Pane_Reset(&content_pane)
+			fit.pane_reset(&content_pane)
 			capture_seed_inputs()
 			if capture_sequence do capture_replay_animations()
 			capture_state_applied = true
@@ -147,17 +147,17 @@ when CAPTURE {
 	// gallery's own "Replay" button resets.
 	capture_replay_animations :: proc() {
 		progress_anim = 0
-		fit.Chart_Reset(&line_state)
-		fit.Chart_Reset(&bar_state)
+		fit.chart_reset(&line_state)
+		fit.chart_reset(&bar_state)
 	}
 
 	// capture_seed_inputs fills the text boxes so the Inputs shot shows real
 	// content, selection, and spellcheck rather than three empty placeholders.
 	capture_seed_inputs :: proc() {
 		if section != .Inputs do return
-		fit.Input_Box_Set_Text(&input_state.name, "Ada Lovelace")
-		fit.Input_Box_Set_Text(&input_state.pass, "correct horse battery")
-		fit.Input_Box_Set_Text(
+		fit.input_box_set_text(&input_state.name, "Ada Lovelace")
+		fit.input_box_set_text(&input_state.pass, "correct horse battery")
+		fit.input_box_set_text(
 			&input_state.notes,
 			"Immediate mode all the way up: the caller owns this text, undo, and selection.",
 		)
@@ -214,7 +214,7 @@ when CAPTURE {
 	capture_finish :: proc() {
 		assert(capture_dir != "", "capture_finish: no output directory")
 		if capture_target.texture.id != 0 do rl.UnloadRenderTexture(capture_target)
-		fit.Session_Destroy(&capture_session)
+		fit.session_destroy(&capture_session)
 		rl.CloseWindow()
 		shutdown()
 		if capture_sequence do fmt.printfln("capture: %d frames", capture_sequence_frame)
@@ -225,7 +225,7 @@ when CAPTURE {
 	// frame - build and paint replay - with the capture target, then blits the
 	// result to the window so the run is visible while it records.
 	capture_frame :: proc() {
-		if !fit.Session_Draw(&capture_session, capture_draw) do return
+		if !fit.session_draw(&capture_session, capture_draw) do return
 		capture_write()
 	}
 
@@ -233,15 +233,15 @@ when CAPTURE {
 		assert(builder != nil, "capture_draw: nil builder")
 		_ = user_data
 		theme := palette_theme(palette)
-		background := rl.Color(fit.Theme_Background(theme))
+		background := rl.Color(fit.theme_background(theme))
 		background.a = 255
 		rl.ClearBackground(background)
 
 		rl.BeginTextureMode(capture_target)
 		rl.ClearBackground(background)
 		gallery_build(builder, nil)
-		_ = fit.Measure(builder)
-		fit.Render_At(builder, {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT})
+		_ = fit.measure(builder)
+		fit.render_at(builder, {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT})
 		rl.EndTextureMode()
 
 		// Negative source height blits the bottom-left-origin target upright
@@ -256,7 +256,7 @@ when CAPTURE {
 		)
 	}
 
-	// capture_main replaces the normal fit.Run entry point under -define.
+	// capture_main replaces the normal fit.run entry point under -define.
 	capture_main :: proc() {
 		capture_dir = os.get_env("INGOT_CAPTURE_DIR", context.allocator)
 		if capture_dir == "" do capture_dir = strings.clone("docs/media")
@@ -273,7 +273,7 @@ when CAPTURE {
 			"ingot widget gallery (capture)",
 		)
 		rl.SetTargetFPS(60)
-		fit.Session_Init(
+		fit.session_init(
 			&capture_session,
 			{user_scale = CAPTURE_UI_SCALE, semantics_enabled = true},
 		)

@@ -3,17 +3,17 @@ package fit
 import "core:strings"
 import "ingot:ui"
 
-Surface_Fill_Circle :: proc(surface: ^Surface, center: Point, radius: f32, color: Color) {
+surface_fill_circle :: proc(surface: ^Surface, center: Point, radius: f32, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_circle_v(u.frame, ui.Vector2{center.x, center.y}, radius, ui.Color(color))
 }
 
-Surface_Stroke_Circle :: proc(surface: ^Surface, center: Point, radius: f32, color: Color) {
+surface_stroke_circle :: proc(surface: ^Surface, center: Point, radius: f32, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_circle_lines_v(u.frame, ui.Vector2{center.x, center.y}, radius, ui.Color(color))
 }
 
-Surface_Ring :: proc(
+surface_ring :: proc(
 	surface: ^Surface,
 	center: Point,
 	inner_radius, outer_radius, start_angle, end_angle: f32,
@@ -33,7 +33,7 @@ Surface_Ring :: proc(
 	)
 }
 
-Surface_Triangle :: proc(surface: ^Surface, a, b, c: Point, color: Color) {
+surface_triangle :: proc(surface: ^Surface, a, b, c: Point, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_triangle(
 		u.frame,
@@ -44,91 +44,91 @@ Surface_Triangle :: proc(surface: ^Surface, a, b, c: Point, color: Color) {
 	)
 }
 
-Surface_Text_Sized :: proc(surface: ^Surface, text: string, x, y, size: i32, color: Color) {
+surface_text_sized :: proc(surface: ^Surface, text: string, x, y, size: i32, color: Color) {
 	u := surface_ui(surface)
 	value := strings.clone_to_cstring(text, context.temp_allocator)
 	ui.draw_text_frame(u.frame, value, x, y, size, ui.Color(color))
 }
 
-Surface_Text_Sized_Width :: proc(surface: ^Surface, text: string, size: i32) -> i32 {
+surface_text_sized_width :: proc(surface: ^Surface, text: string, size: i32) -> i32 {
 	u := surface_ui(surface)
 	value := strings.clone_to_cstring(text, context.temp_allocator)
 	return ui.measure_text_frame(u.frame, value, size)
 }
 
-// Surface_Text_Drawn_Size returns the size text requested at `size` is
+// surface_text_drawn_size returns the size text requested at `size` is
 // actually drawn at by the active face.
-Surface_Text_Drawn_Size :: proc(surface: ^Surface, size: i32) -> i32 {
-	assert(surface != nil, "Fit.Surface_Text_Drawn_Size: nil surface")
-	assert(size > 0, "Fit.Surface_Text_Drawn_Size: invalid size")
+surface_text_drawn_size :: proc(surface: ^Surface, size: i32) -> i32 {
+	assert(surface != nil, "fit.surface_text_drawn_size: nil surface")
+	assert(size > 0, "fit.surface_text_drawn_size: invalid size")
 	u := surface_ui(surface)
 	return ui.frame_text_size(u.frame, size)
 }
 
-Surface_Text_Sized_Byte_At_X :: proc(surface: ^Surface, text: string, x, size: i32) -> int {
-	assert(surface != nil, "Fit.Surface_Text_Sized_Byte_At_X: nil surface")
-	assert(size > 0, "Fit.Surface_Text_Sized_Byte_At_X: invalid size")
+surface_text_sized_byte_at_x :: proc(surface: ^Surface, text: string, x, size: i32) -> int {
+	assert(surface != nil, "fit.surface_text_sized_byte_at_x: nil surface")
+	assert(size > 0, "fit.surface_text_sized_byte_at_x: invalid size")
 	u := surface_ui(surface)
 	column := ui.caret_pixel_to_col_frame(u.frame, text, x, size)
 	return ui.caret_col_to_byte(text, column)
 }
 
-Surface_Rune_Width :: proc(surface: ^Surface, value: rune, size: i32) -> i32 {
+surface_rune_width :: proc(surface: ^Surface, value: rune, size: i32) -> i32 {
 	u := surface_ui(surface)
 	return ui.rune_width_frame(u.frame, value, size)
 }
 
-// Surface_Reading_Begin opens a reading region: text measured or drawn until
-// the matching Surface_Reading_End uses the theme's reading face. Wrap both
+// surface_reading_begin opens a reading region: text measured or drawn until
+// the matching surface_reading_end uses the theme's reading face. Wrap both
 // the measurement and the drawing of long-form text in a region.
-Surface_Reading_Begin :: proc(surface: ^Surface) {
-	assert(surface != nil, "Fit.Surface_Reading_Begin: nil surface")
+surface_reading_begin :: proc(surface: ^Surface) {
+	assert(surface != nil, "fit.surface_reading_begin: nil surface")
 	u := surface_ui(surface)
 	ui.frame_reading_begin(u.frame)
 }
 
-Surface_Reading_End :: proc(surface: ^Surface) {
-	assert(surface != nil, "Fit.Surface_Reading_End: nil surface")
+surface_reading_end :: proc(surface: ^Surface) {
+	assert(surface != nil, "fit.surface_reading_end: nil surface")
 	u := surface_ui(surface)
 	ui.frame_reading_end(u.frame)
 }
 
-Surface_Codepoint :: proc(surface: ^Surface, value: rune, x, y, size: i32, color: Color) {
+surface_codepoint :: proc(surface: ^Surface, value: rune, x, y, size: i32, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_codepoint_frame(u.frame, value, x, y, size, ui.Color(color))
 }
 
-Surface_Clip_Begin :: proc(surface: ^Surface, rect: Rect) {
+surface_clip_begin :: proc(surface: ^Surface, rect: Rect) {
 	u := surface_ui(surface)
 	ui.begin_scissor_mode(u.frame, rect.x, rect.y, rect.w, rect.h)
 }
 
-Surface_Clip_End :: proc(surface: ^Surface) {
+surface_clip_end :: proc(surface: ^Surface) {
 	u := surface_ui(surface)
 	ui.end_scissor_mode(u.frame)
 }
 
-Surface_Canvas_Begin :: proc(surface: ^Surface, rect: Rect, translation: Point = {}) {
+surface_canvas_begin :: proc(surface: ^Surface, rect: Rect, translation: Point = {}) {
 	u := surface_ui(surface)
-	ui.canvas_begin(u.frame, to_rect(rect), ui.Vector2{translation.x, translation.y})
+	ui.canvas_begin(u.frame, rect, ui.Vector2{translation.x, translation.y})
 }
 
-Surface_Canvas_End :: proc(surface: ^Surface) {
+surface_canvas_end :: proc(surface: ^Surface) {
 	u := surface_ui(surface)
 	ui.canvas_end(u.frame)
 }
 
-Surface_Canvas_Clear :: proc(surface: ^Surface, rect: Rect, color: Color) {
+surface_canvas_clear :: proc(surface: ^Surface, rect: Rect, color: Color) {
 	u := surface_ui(surface)
-	ui.canvas_clear(u.frame, to_rect(rect), ui.Color(color))
+	ui.canvas_clear(u.frame, rect, ui.Color(color))
 }
 
-Surface_Pane_Origin_Push :: proc(surface: ^Surface, origin: Point) {
+surface_pane_origin_push :: proc(surface: ^Surface, origin: Point) {
 	u := surface_ui(surface)
 	ui.ui_frame_pane_push(u.frame, ui.Vector2{origin.x, origin.y})
 }
 
-Surface_Pane_Origin_Pop :: proc(surface: ^Surface) {
+surface_pane_origin_pop :: proc(surface: ^Surface) {
 	u := surface_ui(surface)
 	ui.ui_frame_pane_pop(u.frame)
 }

@@ -167,6 +167,13 @@ class ConsumerPolicyTests(unittest.TestCase):
     def test_split_session_lifecycle_is_rejected(self) -> None:
         failures = policy.fit_public_violations("Session_Begin :: proc(session: ^Session) {}\n")
         self.assertTrue(any("split session lifecycle" in message for _, message in failures))
+        failures = policy.fit_public_violations("session_begin :: proc(session: ^Session) {}\n")
+        self.assertTrue(any("split session lifecycle" in message for _, message in failures))
+
+    def test_fit_snake_case_public_procedure_exposing_ui_is_rejected(self) -> None:
+        source = "surface_ui :: proc(surface: ^Surface) -> ^ui.Ui { return nil }\n"
+        failures = policy.fit_public_violations(source)
+        self.assertTrue(any("internal UI type" in message for _, message in failures))
 
     def test_gallery_rejects_compatibility_fit_alias_and_names(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

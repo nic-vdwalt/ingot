@@ -8,7 +8,7 @@
       "fit_builder": "complete",
       "symbols": [
         "ui.button",
-        "fit.Button"
+        "fit.button"
       ],
       "state_owner": "caller",
       "tests": [
@@ -26,7 +26,7 @@
       "fit_builder": "complete",
       "symbols": [
         "ui.checkbox",
-        "fit.Checkbox"
+        "fit.checkbox"
       ],
       "state_owner": "caller",
       "tests": [
@@ -44,7 +44,7 @@
       "fit_builder": "complete",
       "symbols": [
         "ui.toggle_at",
-        "fit.Toggle"
+        "fit.toggle"
       ],
       "state_owner": "caller",
       "tests": [
@@ -62,7 +62,7 @@
       "fit_builder": "complete",
       "symbols": [
         "ui.radio",
-        "fit.Radio"
+        "fit.radio"
       ],
       "state_owner": "caller",
       "tests": [
@@ -80,7 +80,7 @@
       "fit_builder": "complete",
       "symbols": [
         "ui.slider",
-        "fit.Slider"
+        "fit.slider"
       ],
       "state_owner": "caller",
       "tests": [
@@ -98,7 +98,7 @@
       "fit_builder": "complete",
       "symbols": [
         "ui.text_input_box",
-        "fit.Text_Input"
+        "fit.text_input"
       ],
       "state_owner": "caller",
       "tests": [
@@ -116,9 +116,9 @@
       "fit_builder": "complete",
       "symbols": [
         "ui.dropdown",
-        "fit.Surface_Dropdown",
-        "fit.Region_Dropdown",
-        "fit.Dropdown"
+        "fit.surface_dropdown",
+        "fit.region_dropdown",
+        "fit.dropdown"
       ],
       "state_owner": "caller",
       "tests": [
@@ -136,9 +136,9 @@
       "fit_builder": "complete",
       "symbols": [
         "ui.combobox",
-        "fit.Surface_Combobox",
-        "fit.Region_Combobox",
-        "fit.Combobox"
+        "fit.surface_combobox",
+        "fit.region_combobox",
+        "fit.combobox"
       ],
       "state_owner": "caller",
       "tests": [
@@ -156,8 +156,8 @@
       "fit_builder": "complete",
       "symbols": [
         "ui.tab_bar",
-        "fit.Region_Tab_Bar",
-        "fit.Tabs"
+        "fit.region_tab_bar",
+        "fit.tabs"
       ],
       "state_owner": "caller",
       "tests": [
@@ -174,7 +174,7 @@
       "fit_builder": "absent",
       "symbols": [
         "ui.listbox_begin",
-        "fit.Surface_Listbox_Begin"
+        "fit.surface_listbox_begin"
       ],
       "state_owner": "caller",
       "tests": [
@@ -191,7 +191,7 @@
       "fit_builder": "absent",
       "symbols": [
         "ui.virtual_list_begin",
-        "fit.Virtual_List_Begin"
+        "fit.virtual_list_begin"
       ],
       "state_owner": "caller",
       "tests": [
@@ -208,7 +208,7 @@
       "fit_builder": "absent",
       "symbols": [
         "ui.split_pane",
-        "fit.Split_Pane"
+        "fit.split_pane"
       ],
       "state_owner": "caller",
       "tests": [
@@ -257,7 +257,7 @@
       "fit_builder": "absent",
       "symbols": [
         "ui.date_picker",
-        "fit.Surface_Date_Picker"
+        "fit.surface_date_picker"
       ],
       "state_owner": "caller",
       "tests": [
@@ -274,7 +274,7 @@
       "fit_builder": "absent",
       "symbols": [
         "ui.time_of_day_parse",
-        "fit.Time_Of_Day_Parse"
+        "fit.time_of_day_parse"
       ],
       "state_owner": "caller",
       "tests": [
@@ -291,7 +291,7 @@
       "fit_builder": "absent",
       "symbols": [
         "ui.color_parse_hex",
-        "fit.Color_Parse_Hex"
+        "fit.color_parse_hex"
       ],
       "state_owner": "caller",
       "tests": [
@@ -308,7 +308,7 @@
       "fit_builder": "partial",
       "symbols": [
         "ui.table_begin",
-        "fit.Table_Begin"
+        "fit.table_begin"
       ],
       "state_owner": "caller",
       "tests": [
@@ -326,7 +326,7 @@
       "fit_builder": "absent",
       "symbols": [
         "ui.line_chart_at",
-        "fit.Surface_Line_Chart"
+        "fit.surface_line_chart"
       ],
       "state_owner": "caller",
       "tests": [

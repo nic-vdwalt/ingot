@@ -6,6 +6,7 @@ package pty
 
 import "core:c"
 import "core:os"
+import "core:sys/posix"
 
 when ODIN_OS == .Darwin {
 	TIOCSWINSZ :: 0x80087467
@@ -180,6 +181,15 @@ master_setup :: proc(master_fd: c.int, cols: u16, rows: u16) -> bool {
 		ws_row = c.ushort(rows),
 	}
 	ioctl(master_fd, TIOCSWINSZ, &ws)
+	// The host app forwards Ctrl+S/Ctrl+Q to the child as raw ^S/^Q. With the
+	// line discipline's XON/XOFF flow control left at its default, ^S stops
+	// PTY output and the child's next write to stdout/stderr blocks until a
+	// ^Q arrives, which looks like a hard freeze of the profiled program.
+	attributes: posix.termios
+	if posix.tcgetattr(posix.FD(master_fd), &attributes) == .OK {
+		attributes.c_iflag -= {.IXON, .IXOFF}
+		_ = posix.tcsetattr(posix.FD(master_fd), .TCSANOW, &attributes)
+	}
 	return true
 }
 

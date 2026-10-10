@@ -49,10 +49,10 @@ ui_session: fit.Session
 main :: proc() {
 	rl.InitWindow(960, 720, "ingot renderer fixture")
 	rl.SetTargetFPS(60)
-	fit.Session_Init(&ui_session, {semantics_enabled = true})
+	fit.session_init(&ui_session, {semantics_enabled = true})
 	rl.run(frame)
 	when ODIN_OS != .JS {
-		fit.Session_Destroy(&ui_session)
+		fit.session_destroy(&ui_session)
 		rl.CloseWindow()
 	}
 }
@@ -65,7 +65,7 @@ frame :: proc() {
 		draw_main_fixture()
 		draw_stream_lifetime_stress()
 	}
-	_ = fit.Session_Draw(&ui_session, draw_fit_overlay)
+	_ = fit.session_draw(&ui_session, draw_fit_overlay)
 
 	when rl.RENDER_STATS_ENABLED {
 		@(static) reported := false
@@ -269,11 +269,11 @@ draw_main_fixture :: proc() {
 
 draw_fit_overlay :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	_ = user_data
-	root := fit.Column(builder)
-	fit.Custom(
+	root := fit.column(builder)
+	fit.custom(
 		root,
 		{measure = fit_overlay_measure, render = fit_overlay_render},
-		{size = {width = fit.Grow(), height = fit.Grow()}},
+		{size = {width = fit.grow(), height = fit.grow()}},
 	)
 }
 
@@ -286,12 +286,12 @@ fit_overlay_render :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: raw
 	_ = rect
 	_ = user_data
 	x, y := i32(632), i32(506)
-	fit.Surface_Text(surface, "RETINA 1x/2x RUNTIME TEXT", x, y)
-	fit.Surface_Text_Truncated(
+	fit.surface_text(surface, "RETINA 1x/2x RUNTIME TEXT", x, y)
+	fit.surface_text_truncated(
 		surface,
 		"Truncation uses the same runtime atlas and measurement cache",
 		x,
-		y + fit.Surface_Metrics(surface).line_height,
+		y + fit.surface_metrics(surface).line_height,
 		280,
 		.Note,
 		.Secondary,

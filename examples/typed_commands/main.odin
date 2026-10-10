@@ -20,7 +20,7 @@ app: fit.App
 state: State
 
 main :: proc() {
-	if !fit.Run(&app, {width = 640, height = 400, title = "Ingot typed commands"}, Draw, &state) {
+	if !fit.run(&app, {width = 640, height = 400, title = "Ingot typed commands"}, Draw, &state) {
 		fmt.eprintln("Unable to run typed commands example")
 	}
 }
@@ -28,11 +28,11 @@ main :: proc() {
 Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil, "typed commands draw: invalid argument")
 	data := cast(^State)user_data
-	fit.Typed_Commands_Begin(&data.commands)
-	defer fit.Typed_Commands_End(&data.commands)
+	fit.typed_commands_begin(&data.commands)
+	defer fit.typed_commands_end(&data.commands)
 	command: Command
 	for _ in 0 ..< COMMAND_CAPACITY {
-		if !fit.Typed_Commands_Take(&data.commands, &command) do break
+		if !fit.typed_commands_take(&data.commands, &command) do break
 		switch command {
 		case .Continue:
 			data.clicks += 1
@@ -41,18 +41,18 @@ Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 		}
 	}
 
-	root := fit.Center(builder, {gap = .SM, padding = .LG})
-	fit.Label(root, "Caller-owned typed commands")
-	fit.Label(root, fmt.tprintf("Button clicks: %d", data.clicks))
-	ready_dropped, activation_dropped := fit.Typed_Commands_Dropped(&data.commands)
+	root := fit.center(builder, {gap = .SM, padding = .LG})
+	fit.label(root, "Caller-owned typed commands")
+	fit.label(root, fmt.tprintf("Button clicks: %d", data.clicks))
+	ready_dropped, activation_dropped := fit.typed_commands_dropped(&data.commands)
 	if data.declaration_failed || ready_dropped > 0 || activation_dropped > 0 {
-		fit.Label(
+		fit.label(
 			root,
 			fmt.tprintf("Queue full: ready=%d, controls=%d", ready_dropped, activation_dropped),
 		)
 	}
 	data.declaration_failed = false
-	continued := fit.Button_Command(root, "continue", "Continue", &data.commands, Command.Continue)
-	reset := fit.Button_Command(root, "reset", "Reset", &data.commands, Command.Reset)
+	continued := fit.button_command(root, "continue", "Continue", &data.commands, Command.Continue)
+	reset := fit.button_command(root, "reset", "Reset", &data.commands, Command.Reset)
 	data.declaration_failed = continued != .Accepted || reset != .Accepted
 }

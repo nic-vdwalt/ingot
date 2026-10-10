@@ -11,10 +11,10 @@ Fixture_State :: struct {
 
 fixture_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	state := cast(^Fixture_State)user_data
-	root := fit.Center(builder, {gap = .SM, padding = .LG})
-	fit.Label(root, "Multi-App fixture", {role = .Title})
-	fit.Label(root, state.label)
-	fit.Label(root, "Each App owns an isolated Fit lifecycle.", {ink = .Success})
+	root := fit.center(builder, {gap = .SM, padding = .LG})
+	fit.label(root, "Multi-App fixture", {role = .Title})
+	fit.label(root, state.label)
+	fit.label(root, "Each App owns an isolated Fit lifecycle.", {ink = .Success})
 }
 
 main :: proc() {
@@ -29,13 +29,13 @@ main :: proc() {
 		label = "Secondary",
 	}
 	flags: fit.Window_Flags = {.Resizable}
-	primary_ok := fit.Init(
+	primary_ok := fit.init(
 		primary,
 		{width = 640, height = 360, title = "Ingot primary App", flags = flags},
 		{draw = fixture_draw},
 		&primary_state,
 	)
-	secondary_ok := fit.Init(
+	secondary_ok := fit.init(
 		secondary,
 		{width = 480, height = 300, title = "Ingot secondary App", flags = flags},
 		{draw = fixture_draw},
@@ -43,27 +43,27 @@ main :: proc() {
 	)
 	if !primary_ok || !secondary_ok {
 		fmt.eprintln("multi_app_fixture: initialization failed")
-		if primary_ok do fit.Destroy(primary)
-		if secondary_ok do fit.Destroy(secondary)
+		if primary_ok do fit.destroy(primary)
+		if secondary_ok do fit.destroy(secondary)
 		return
 	}
 	defer {
-		if fit.Get_State(primary) == .Running do _ = fit.Stop(primary)
-		if fit.Get_State(primary) != .Empty do fit.Destroy(primary)
-		if fit.Get_State(secondary) == .Running do _ = fit.Stop(secondary)
-		if fit.Get_State(secondary) != .Empty do fit.Destroy(secondary)
+		if fit.get_state(primary) == .Running do _ = fit.stop(primary)
+		if fit.get_state(primary) != .Empty do fit.destroy(primary)
+		if fit.get_state(secondary) == .Running do _ = fit.stop(secondary)
+		if fit.get_state(secondary) != .Empty do fit.destroy(secondary)
 	}
-	if !fit.Start(primary) || !fit.Start(secondary) {
+	if !fit.start(primary) || !fit.start(secondary) {
 		fmt.eprintln("multi_app_fixture: start failed")
 		return
 	}
 	for frame_index in 0 ..< FIXTURE_FRAME_LIMIT {
-		if !fit.Tick(primary) || !fit.Tick(secondary) do break
+		if !fit.tick(primary) || !fit.tick(secondary) do break
 		if frame_index == FIXTURE_FRAME_LIMIT / 2 {
-			_ = fit.Stop(primary)
-			fit.Destroy(primary)
+			_ = fit.stop(primary)
+			fit.destroy(primary)
 			for _ in frame_index ..< FIXTURE_FRAME_LIMIT {
-				if !fit.Tick(secondary) do break
+				if !fit.tick(secondary) do break
 			}
 			break
 		}

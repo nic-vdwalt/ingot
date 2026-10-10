@@ -10,20 +10,20 @@ import "ingot:ui_gfx"
 @(test)
 fit_variable_list_append_keeps_public_snapshot_current :: proc(t: ^testing.T) {
 	index: Variable_List_Index
-	Variable_List_Init(&index)
-	defer Variable_List_Destroy(&index)
+	variable_list_init(&index)
+	defer variable_list_destroy(&index)
 	for position in 0 ..< 257 {
-		testing.expect(t, Variable_List_Append(&index, i64(position)))
+		testing.expect(t, variable_list_append(&index, i64(position)))
 		testing.expect_value(t, len(index.heights), position + 1)
 		testing.expect_value(t, index.heights[position], i64(position))
 		testing.expect_value(t, index.total, i64(position * (position + 1) / 2))
 	}
 	total := index.total
-	testing.expect(t, !Variable_List_Append(&index, -1))
+	testing.expect(t, !variable_list_append(&index, -1))
 	testing.expect_value(t, index.total, total)
 	testing.expect_value(t, len(index.heights), 257)
-	testing.expect(t, Variable_List_Update(&index, 0, 10))
-	testing.expect_value(t, Variable_List_Prefix(&index, 1), i64(10))
+	testing.expect(t, variable_list_update(&index, 0, 10))
+	testing.expect_value(t, variable_list_prefix(&index, 1), i64(10))
 }
 
 Fit_Test_Counts :: struct {
@@ -67,23 +67,23 @@ Fit_Test_Wrapped_Height_State :: struct {
 }
 
 fit_test_icon_render :: proc(surface: ^Surface, _: Rect, _: rawptr) -> bool {
-	_ = Surface_Icon_Button(surface, Widget_Id(1), .Settings, "Settings", {10, 10, 28, 28})
+	_ = surface_icon_button(surface, Widget_Id(1), .Settings, "Settings", {10, 10, 28, 28})
 	return false
 }
 
 fit_test_icon_draw :: proc(builder: ^Builder, _: rawptr) {
-	Canvas(builder, fit_test_icon_render)
+	canvas(builder, fit_test_icon_render)
 }
 
 fit_test_wheel_render :: proc(surface: ^Surface, _: Rect, userdata: rawptr) -> bool {
 	state := cast(^Fit_Test_Wheel_State)userdata
-	state.wheel = Surface_Wheel_V(surface)
-	state.dominant = Surface_Wheel(surface)
+	state.wheel = surface_wheel_v(surface)
+	state.dominant = surface_wheel(surface)
 	return false
 }
 
 fit_test_wheel_draw :: proc(builder: ^Builder, userdata: rawptr) {
-	Canvas(builder, fit_test_wheel_render, userdata)
+	canvas(builder, fit_test_wheel_render, userdata)
 }
 
 fit_test_wrapped_height_render :: proc(surface: ^Surface, _: Rect, userdata: rawptr) -> bool {
@@ -91,8 +91,8 @@ fit_test_wrapped_height_render :: proc(surface: ^Surface, _: Rect, userdata: raw
 	assert(userdata != nil)
 	state := cast(^Fit_Test_Wrapped_Height_State)userdata
 	widget := surface_ui(surface)
-	font_size := Surface_Text_Size(surface, .Label)
-	line_height := Surface_Text_Line_Height(surface, .Label)
+	font_size := surface_text_size(surface, .Label)
+	line_height := surface_text_line_height(surface, .Label)
 	texts := [?]string {
 		"alpha beta gamma",
 		"alpha\nbeta",
@@ -102,7 +102,7 @@ fit_test_wrapped_height_render :: proc(surface: ^Surface, _: Rect, userdata: raw
 	widths := [?]i32{48, 200, 32, 40}
 	state.matched = true
 	for text, index in texts {
-		measured := Surface_Text_Wrapped_Height(
+		measured := surface_text_wrapped_height(
 			surface,
 			text,
 			widths[index],
@@ -126,7 +126,7 @@ fit_test_wrapped_height_render :: proc(surface: ^Surface, _: Rect, userdata: raw
 }
 
 fit_test_wrapped_height_draw :: proc(builder: ^Builder, userdata: rawptr) {
-	Canvas(builder, fit_test_wrapped_height_render, userdata)
+	canvas(builder, fit_test_wrapped_height_render, userdata)
 }
 
 fit_test_noop_render :: proc(_: ^Surface, _: Rect, _: rawptr) -> bool {
@@ -134,15 +134,15 @@ fit_test_noop_render :: proc(_: ^Surface, _: Rect, _: rawptr) -> bool {
 }
 
 fit_test_bridge_draw :: proc(builder: ^Builder, state: rawptr) {
-	root := Column(builder)
-	Label(root, "Bridge")
-	Label(root, "Body")
+	root := column(builder)
+	label(root, "Bridge")
+	label(root, "Body")
 	if s := cast(^Fit_Test_Build_State)state; s != nil do s.calls += 1
 }
 
 fit_test_modal_draw :: proc(builder: ^Builder, state: rawptr) {
-	root := Column(builder)
-	Label(root, "Modal body")
+	root := column(builder)
+	label(root, "Modal body")
 	if s := cast(^Fit_Test_Build_State)state; s != nil do s.calls += 1
 }
 
@@ -154,23 +154,23 @@ Fit_Buffer_Field :: struct {
 
 fit_buffer_field_draw :: proc(builder: ^Builder, user_data: rawptr) {
 	f := cast(^Fit_Buffer_Field)user_data
-	root := Column(builder, {gap = .XS})
-	Text_Input(
+	root := column(builder, {gap = .XS})
+	text_input(
 		root,
 		"field",
 		f.text,
 		f.state,
 		"Name",
-		{semantics = {name = "Name"}, size = {width = Grow()}},
+		{semantics = {name = "Name"}, size = {width = grow()}},
 	)
 	f.built = true
 }
 
 fit_test_overflow_draw :: proc(builder: ^Builder, _: rawptr) {
-	root := Column(builder)
-	Canvas_Leaf(
+	root := column(builder)
+	canvas_leaf(
 		root,
-		{intrinsic = {w = 80, h = 60}, size = {width = Fixed(80), height = Fixed(60)}},
+		{intrinsic = {w = 80, h = 60}, size = {width = fixed(80), height = fixed(60)}},
 		fit_test_noop_render,
 	)
 }
@@ -178,12 +178,12 @@ fit_test_overflow_draw :: proc(builder: ^Builder, _: rawptr) {
 @(test)
 fit_standard_icon_button_is_font_independent :: proc(t: ^testing.T) {
 	driver: Test_Driver
-	Test_Driver_Init(&driver)
-	defer Test_Driver_Destroy(&driver)
-	Test_Driver_Set_Semantics(&driver, true)
-	testing.expect(t, Test_Driver_Frame(&driver, {}, fit_test_icon_draw))
-	summary := Test_Driver_Paint_Summary(&driver)
-	diagnostics := Test_Driver_Diagnostics(&driver)
+	test_driver_init(&driver)
+	defer test_driver_destroy(&driver)
+	test_driver_set_semantics(&driver, true)
+	testing.expect(t, test_driver_frame(&driver, {}, fit_test_icon_draw))
+	summary := test_driver_paint_summary(&driver)
+	diagnostics := test_driver_diagnostics(&driver)
 	testing.expect(t, summary.main_geometry_commands >= 11)
 	testing.expect_value(t, summary.semantic_nodes, 1)
 	testing.expect_value(t, diagnostics.unsupported_glyphs, i32(0))
@@ -192,14 +192,14 @@ fit_standard_icon_button_is_font_independent :: proc(t: ^testing.T) {
 @(test)
 fit_surface_wheel_preserves_both_axes :: proc(t: ^testing.T) {
 	driver: Test_Driver
-	Test_Driver_Init(&driver)
-	defer Test_Driver_Destroy(&driver)
+	test_driver_init(&driver)
+	defer test_driver_destroy(&driver)
 	state: Fit_Test_Wheel_State
 	input := Test_Input {
 		mouse_wheel = {3, 1},
 		screen_size = {320, 240},
 	}
-	testing.expect(t, Test_Driver_Frame(&driver, input, fit_test_wheel_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, input, fit_test_wheel_draw, &state))
 	testing.expect_value(t, state.wheel, input.mouse_wheel)
 	expected_dominant := input.mouse_wheel.y
 	when ODIN_OS == .Windows || ODIN_OS == .Linux {
@@ -211,10 +211,10 @@ fit_surface_wheel_preserves_both_axes :: proc(t: ^testing.T) {
 @(test)
 fit_surface_wrapped_height_matches_rendering :: proc(t: ^testing.T) {
 	driver: Test_Driver
-	Test_Driver_Init(&driver)
-	defer Test_Driver_Destroy(&driver)
+	test_driver_init(&driver)
+	defer test_driver_destroy(&driver)
 	state: Fit_Test_Wrapped_Height_State
-	testing.expect(t, Test_Driver_Frame(&driver, {}, fit_test_wrapped_height_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, {}, fit_test_wrapped_height_draw, &state))
 	testing.expect(t, state.matched)
 	testing.expect_value(t, state.cases, i32(4))
 }
@@ -233,8 +233,8 @@ fit_reports_constrained_layout_overflow :: proc(t: ^testing.T) {
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 100, 100})
 	fit_test_overflow_draw(&builder, nil)
-	_ = Measure(&builder)
-	Render_At(&builder, {0, 0, 40, 30})
+	_ = measure(&builder)
+	render_at(&builder, {0, 0, 40, 30})
 	testing.expect_value(t, ui.ui_frame_diagnostics(&frame).layout_overflows, i32(1))
 	builder_close(&builder)
 	ui.ui_frame_end(&frame)
@@ -260,13 +260,13 @@ fit_surface_builder_bridge_renders_in_subrect :: proc(t: ^testing.T) {
 	}
 	builder: Builder
 	state: Fit_Test_Build_State
-	Surface_Builder_With(&surface, &builder, {20, 20, 200, 120}, fit_test_bridge_draw, &state)
+	surface_builder_with(&surface, &builder, {20, 20, 200, 120}, fit_test_bridge_draw, &state)
 	testing.expect_value(t, state.calls, i32(1))
 	testing.expect(t, !builder.bound, "bridge left builder bound")
 	testing.expect(t, builder.inner.prepared.rendered, "bridge did not render")
 	frame.markdown_telemetry.preparations = 7
 	frame.markdown_telemetry.layout_walks = 11
-	performance := Surface_Performance_Snapshot(&surface)
+	performance := surface_performance_snapshot(&surface)
 	testing.expect_value(t, performance.markdown_preparations, u64(7))
 	testing.expect_value(t, performance.markdown_layout_walks, u64(11))
 	testing.expect_value(t, performance.scratch_allocations, frame.scratch.allocation_count)
@@ -301,8 +301,8 @@ fit_surface_modal_builder_bridge_renders :: proc(t: ^testing.T) {
 	modal: Modal_State
 	builder: Builder
 	state: Fit_Test_Build_State
-	testing.expect(t, Surface_Modal_Open(&surface, &modal, Modal_Id(42)))
-	reason := Surface_Modal_Builder_With(
+	testing.expect(t, surface_modal_open(&surface, &modal, Modal_Id(42)))
+	reason := surface_modal_builder_with(
 		&surface,
 		&modal,
 		"Modal",
@@ -334,7 +334,7 @@ fit_surface_modal_builder_bridge_renders :: proc(t: ^testing.T) {
 
 @(test)
 fit_builder_text_input_accepts_caller_buffer :: proc(t: ^testing.T) {
-	// The declarative Text_Input must accept app-owned (strings.Builder,
+	// The declarative text_input must accept app-owned (strings.Builder,
 	// Text_Input_State) state, not only a bundled Input_Box.
 	runtime: ui.Ui_Runtime
 	backend := i32(1)
@@ -356,13 +356,13 @@ fit_builder_text_input_accepts_caller_buffer :: proc(t: ^testing.T) {
 	defer strings.builder_destroy(&text)
 	strings.write_string(&text, "hello")
 	state: Text_Input_State
-	defer Text_Input_State_Destroy(&state)
+	defer text_input_state_destroy(&state)
 	builder: Builder
 	ctx := Fit_Buffer_Field {
 		text  = &text,
 		state = &state,
 	}
-	Surface_Builder_With(&surface, &builder, {20, 20, 240, 80}, fit_buffer_field_draw, &ctx)
+	surface_builder_with(&surface, &builder, {20, 20, 240, 80}, fit_buffer_field_draw, &ctx)
 	testing.expect(t, ctx.built, "declarative caller-buffer text input did not build")
 	testing.expect(t, !builder.bound, "bridge left builder bound")
 	testing.expect(t, builder.inner.prepared.rendered, "buffer input did not render")
@@ -371,7 +371,7 @@ fit_builder_text_input_accepts_caller_buffer :: proc(t: ^testing.T) {
 
 @(test)
 fit_theme_facade_builds_and_validates_palette :: proc(t: ^testing.T) {
-	theme := Theme_From_Palette(
+	theme := theme_from_palette(
 		{
 			basis = .Dark,
 			ground = {18, 20, 24, 255},
@@ -391,22 +391,22 @@ fit_theme_facade_builds_and_validates_palette :: proc(t: ^testing.T) {
 			focus = {126, 200, 255, 230},
 		},
 	)
-	testing.expect(t, Theme_Is_Valid(theme))
-	Theme_Set_Color(&theme, .Background_Selection, Color{50, 70, 96, 255})
-	testing.expect_value(t, Theme_Get_Color(theme, .Background_Selection), Color{50, 70, 96, 255})
+	testing.expect(t, theme_is_valid(theme))
+	theme_set_color(&theme, .Background_Selection, Color{50, 70, 96, 255})
+	testing.expect_value(t, theme_get_color(theme, .Background_Selection), Color{50, 70, 96, 255})
 }
 
 @(test)
 fit_session_try_theme_rejects_without_mutation :: proc(t: ^testing.T) {
 	session := new(Session)
 	defer free(session)
-	Session_Init(session)
-	defer Session_Destroy(session)
+	session_init(session)
+	defer session_destroy(session)
 	before := ui_gfx.session_runtime(&session.inner).style
 	generation := ui_gfx.session_runtime(&session.inner).generation
-	invalid := Theme_Dark()
-	Theme_Set_Color(&invalid, .Foreground_Primary, Theme_Get_Color(invalid, .Background))
-	validation := Session_Try_Set_Theme(session, invalid)
+	invalid := theme_dark()
+	theme_set_color(&invalid, .Foreground_Primary, theme_get_color(invalid, .Background))
+	validation := session_try_set_theme(session, invalid)
 	testing.expect_value(t, validation.code, Theme_Validation_Code.Primary_Contrast)
 	testing.expect_value(t, ui_gfx.session_runtime(&session.inner).style, before)
 	testing.expect_value(t, ui_gfx.session_runtime(&session.inner).generation, generation)
@@ -486,12 +486,12 @@ fit_root_grow_container_centers_children_in_viewport :: proc(t: ^testing.T) {
 	defer ui.ui_frame_end(&frame)
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 960, 640})
-	root := Center(&builder, {gap = .SM, padding = .LG})
-	Label(root, "Hello from Ingot")
-	Button(root, "continue", "Continue")
-	size := Measure(&builder)
+	root := center(&builder, {gap = .SM, padding = .LG})
+	label(root, "Hello from Ingot")
+	button(root, "continue", "Continue")
+	size := measure(&builder)
 	testing.expect_value(t, size, Size{960, 640, false})
-	Render_At(&builder, {0, 0, size.w, size.h})
+	render_at(&builder, {0, 0, size.w, size.h})
 	semantics := ui.sem_frame(&frame)
 	testing.expect_value(t, semantics.count, 2)
 	label, button := semantics.nodes[0].rect, semantics.nodes[1].rect
@@ -518,59 +518,59 @@ fit_test_continue :: proc(user_data: rawptr) {
 fit_test_readme_draw :: proc(builder: ^Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil, "fit readme test: invalid argument")
 	state := cast(^Fit_Test_Readme_State)user_data
-	root := Center(builder, {gap = .SM, padding = .LG})
-	Label(root, "Hello from Ingot")
-	Button(root, "continue", "Continue", action(fit_test_continue, state))
+	root := center(builder, {gap = .SM, padding = .LG})
+	label(root, "Hello from Ingot")
+	button(root, "continue", "Continue", action(fit_test_continue, state))
 	state.confirmation_visible = state.continued
-	if state.continued do Label(root, "Continued")
+	if state.continued do label(root, "Continued")
 }
 
 @(test)
 fit_button_action_runs_once_in_activating_frame :: proc(t: ^testing.T) {
 	driver: Test_Driver
-	Test_Driver_Init(&driver)
-	defer Test_Driver_Destroy(&driver)
+	test_driver_init(&driver)
+	defer test_driver_destroy(&driver)
 	nodes: [STORAGE_NODE_DEFAULT + 64]Storage_Node
 	outputs: [STORAGE_NODE_DEFAULT + 64]^bool
-	Test_Driver_Set_Storage(&driver, {nodes = nodes[:], outputs = outputs[:]})
+	test_driver_set_storage(&driver, {nodes = nodes[:], outputs = outputs[:]})
 	state: Fit_Test_Readme_State
 	base := Test_Input {
 		mouse_position = {480, 332},
 		screen_size    = {960, 640},
 		dpi_scale      = 1,
 	}
-	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_readme_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, base, fit_test_readme_draw, &state))
 	testing.expect(t, !state.continued && !state.confirmation_visible)
-	testing.expect(t, !Test_Driver_Redraw_Requested(&driver))
+	testing.expect(t, !test_driver_redraw_requested(&driver))
 	pressed := base
 	pressed.mouse_pressed[0] = true
 	pressed.mouse_down[0] = true
-	testing.expect(t, Test_Driver_Frame(&driver, pressed, fit_test_readme_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, pressed, fit_test_readme_draw, &state))
 	testing.expect(t, !state.continued && state.action_calls == 0)
-	testing.expect(t, !Test_Driver_Redraw_Requested(&driver))
+	testing.expect(t, !test_driver_redraw_requested(&driver))
 	released := base
 	released.mouse_released[0] = true
-	testing.expect(t, Test_Driver_Frame(&driver, released, fit_test_readme_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, released, fit_test_readme_draw, &state))
 	testing.expect(t, state.continued && !state.confirmation_visible)
 	testing.expect_value(t, state.action_calls, i32(1))
-	testing.expect(t, Test_Driver_Redraw_Requested(&driver))
-	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_readme_draw, &state))
+	testing.expect(t, test_driver_redraw_requested(&driver))
+	testing.expect(t, test_driver_frame(&driver, base, fit_test_readme_draw, &state))
 	testing.expect(t, state.confirmation_visible)
 	testing.expect_value(t, state.action_calls, i32(1))
-	testing.expect(t, !Test_Driver_Redraw_Requested(&driver))
+	testing.expect(t, !test_driver_redraw_requested(&driver))
 }
 
 @(test)
 fit_signal_is_zero_value_and_one_shot :: proc(t: ^testing.T) {
 	signal: Signal
-	testing.expect(t, !Signal_Peek(&signal))
+	testing.expect(t, !signal_peek(&signal))
 	signal.pending = true
-	testing.expect(t, Signal_Peek(&signal))
-	testing.expect(t, Signal_Take(&signal))
-	testing.expect(t, !Signal_Take(&signal))
+	testing.expect(t, signal_peek(&signal))
+	testing.expect(t, signal_take(&signal))
+	testing.expect(t, !signal_take(&signal))
 	signal.pending = true
-	Signal_Reset(&signal)
-	testing.expect(t, !Signal_Peek(&signal))
+	signal_reset(&signal)
+	testing.expect(t, !signal_peek(&signal))
 }
 
 Fit_Test_Delayed_State :: struct {
@@ -582,33 +582,33 @@ Fit_Test_Delayed_State :: struct {
 fit_test_delayed_draw :: proc(builder: ^Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil, "fit delayed test: invalid argument")
 	state := cast(^Fit_Test_Delayed_State)user_data
-	root := Center(builder)
-	if Button_Delayed(root, "delayed", "Delayed", &state.signal) do state.consumed += 1
+	root := center(builder)
+	if button_delayed(root, "delayed", "Delayed", &state.signal) do state.consumed += 1
 }
 
 @(test)
 fit_button_delayed_consumes_activation_on_later_build :: proc(t: ^testing.T) {
 	driver: Test_Driver
-	Test_Driver_Init(&driver)
-	defer Test_Driver_Destroy(&driver)
+	test_driver_init(&driver)
+	defer test_driver_destroy(&driver)
 	state: Fit_Test_Delayed_State
 	base := Test_Input {
 		mouse_position = {400, 300},
 		screen_size    = {800, 600},
 		dpi_scale      = 1,
 	}
-	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_delayed_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, base, fit_test_delayed_draw, &state))
 	pressed := base
 	pressed.mouse_pressed[0] = true
 	pressed.mouse_down[0] = true
-	testing.expect(t, Test_Driver_Frame(&driver, pressed, fit_test_delayed_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, pressed, fit_test_delayed_draw, &state))
 	released := base
 	released.mouse_released[0] = true
-	testing.expect(t, Test_Driver_Frame(&driver, released, fit_test_delayed_draw, &state))
-	testing.expect(t, Signal_Peek(&state.signal) && state.consumed == 0)
-	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_delayed_draw, &state))
-	testing.expect(t, !Signal_Peek(&state.signal) && state.consumed == 1)
-	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_delayed_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, released, fit_test_delayed_draw, &state))
+	testing.expect(t, signal_peek(&state.signal) && state.consumed == 0)
+	testing.expect(t, test_driver_frame(&driver, base, fit_test_delayed_draw, &state))
+	testing.expect(t, !signal_peek(&state.signal) && state.consumed == 1)
+	testing.expect(t, test_driver_frame(&driver, base, fit_test_delayed_draw, &state))
 	testing.expect_value(t, state.consumed, i32(1))
 }
 
@@ -617,34 +617,34 @@ fit_test_legacy_button_draw :: proc(builder: ^Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil, "fit legacy button test: invalid argument")
 	state := cast(^Fit_Test_Legacy_Button_State)user_data
 	if state.clicked do state.consumed = true
-	root := Center(builder)
-	Button(root, "legacy", "Legacy", &state.clicked)
+	root := center(builder)
+	button(root, "legacy", "Legacy", &state.clicked)
 }
 
 @(test)
 fit_button_legacy_bool_output_remains_compatible :: proc(t: ^testing.T) {
 	driver: Test_Driver
-	Test_Driver_Init(&driver)
-	defer Test_Driver_Destroy(&driver)
+	test_driver_init(&driver)
+	defer test_driver_destroy(&driver)
 	nodes: [STORAGE_NODE_DEFAULT + 64]Storage_Node
 	outputs: [STORAGE_NODE_DEFAULT + 64]^bool
-	Test_Driver_Set_Storage(&driver, {nodes = nodes[:], outputs = outputs[:]})
+	test_driver_set_storage(&driver, {nodes = nodes[:], outputs = outputs[:]})
 	state: Fit_Test_Legacy_Button_State
 	base := Test_Input {
 		mouse_position = {480, 320},
 		screen_size    = {960, 640},
 		dpi_scale      = 1,
 	}
-	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_legacy_button_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, base, fit_test_legacy_button_draw, &state))
 	pressed := base
 	pressed.mouse_pressed[0] = true
 	pressed.mouse_down[0] = true
-	testing.expect(t, Test_Driver_Frame(&driver, pressed, fit_test_legacy_button_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, pressed, fit_test_legacy_button_draw, &state))
 	released := base
 	released.mouse_released[0] = true
-	testing.expect(t, Test_Driver_Frame(&driver, released, fit_test_legacy_button_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, released, fit_test_legacy_button_draw, &state))
 	testing.expect(t, state.clicked && !state.consumed)
-	testing.expect(t, Test_Driver_Frame(&driver, base, fit_test_legacy_button_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, base, fit_test_legacy_button_draw, &state))
 	testing.expect(t, state.consumed && !state.clicked)
 }
 
@@ -663,15 +663,21 @@ fit_builder_nested_layout_renders_once :: proc(t: ^testing.T) {
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
 	counts: Fit_Test_Counts
-	root := Column(&builder, {gap = .SM})
-	row := Row(root, {gap = .XS})
-	Custom(row, {measure = fit_test_measure, render = fit_test_render, user_data = &counts})
-	flow := Flow(root, {gap_x = .XS, gap_y = .SM})
-	Custom(flow, {measure = fit_test_measure, render = fit_test_render, user_data = &counts})
-	grid := Grid(root, {columns = 1})
-	attachment := Attachment(grid, {target_kind = .Viewport, z = Z_Order(200)})
-	Custom(attachment, {measure = fit_test_measure, render = fit_test_render, user_data = &counts})
-	_ = Render(&builder)
+	root := column(&builder, {gap = .SM})
+	row_parent := row(root, {gap = .XS})
+	custom(row_parent, {measure = fit_test_measure, render = fit_test_render, user_data = &counts})
+	flow_parent := flow(root, {gap_x = .XS, gap_y = .SM})
+	custom(
+		flow_parent,
+		{measure = fit_test_measure, render = fit_test_render, user_data = &counts},
+	)
+	grid_parent := grid(root, {columns = 1})
+	attachment_parent := attachment(grid_parent, {target_kind = .Viewport, z = Z_Order(200)})
+	custom(
+		attachment_parent,
+		{measure = fit_test_measure, render = fit_test_render, user_data = &counts},
+	)
+	_ = render(&builder)
 	builder_close(&builder)
 	testing.expect_value(t, counts.render, i32(3))
 	testing.expect(t, counts.measure >= 3, "custom leaves were not measured")
@@ -680,10 +686,10 @@ fit_builder_nested_layout_renders_once :: proc(t: ^testing.T) {
 @(private = "file")
 fit_test_controls :: proc(parent: Parent, state: ^Fit_Test_Control_State) {
 	assert(parent.builder != nil && state != nil, "fit test controls: invalid argument")
-	Checkbox(parent, "checked", "Checked", &state.checked, {changed = &state.changed})
-	Toggle(parent, "toggle", "Toggle", &state.checked, {changed = &state.changed})
-	Radio(parent, u64(7), "Choice", &state.selected, 7, {changed = &state.changed})
-	Slider(parent, "value", &state.value, 0, 10, 1, "Value", {changed = &state.changed})
+	checkbox(parent, "checked", "Checked", &state.checked, {changed = &state.changed})
+	toggle(parent, "toggle", "toggle", &state.checked, {changed = &state.changed})
+	radio(parent, u64(7), "Choice", &state.selected, 7, {changed = &state.changed})
+	slider(parent, "value", &state.value, 0, 10, 1, "Value", {changed = &state.changed})
 }
 
 @(test)
@@ -700,19 +706,19 @@ fit_parent_handles_support_ancestor_reuse_and_scopes :: proc(t: ^testing.T) {
 	defer ui.ui_frame_end(&frame)
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
-	root := Column(&builder)
-	child := Row(root)
-	Label(child, "Child")
-	Label(root, "After child")
-	first := Id(Scope(root, "first"), "control")
-	second := Id(Scope(root, "second"), "control")
+	root := column(&builder)
+	child := row(root)
+	label(child, "Child")
+	label(root, "After child")
+	first := id(scope(root, "first"), "control")
+	second := id(scope(root, "second"), "control")
 	testing.expect(t, first != second, "scoped IDs collided")
 	nodes := builder.inner.prepared.nodes[:]
 	testing.expect_value(t, nodes[1].parent, i32(0))
 	testing.expect_value(t, nodes[2].parent, i32(1))
 	testing.expect_value(t, nodes[3].parent, i32(0))
 	testing.expect_value(t, nodes[0].child_count, i32(2))
-	_ = Render(&builder)
+	_ = render(&builder)
 	builder_close(&builder)
 }
 @(test)
@@ -721,7 +727,7 @@ fit_controls_forward_caller_owned_motion :: proc(t: ^testing.T) {
 	backend := i32(1)
 	fit_test_runtime(&runtime, &backend)
 	defer ui.ui_runtime_destroy(&runtime)
-	theme := Theme_Dark()
+	theme := theme_dark()
 	ui.ui_runtime_set_theme(&runtime, theme.inner)
 	output := new(ui.Ui_Output)
 	defer free(output)
@@ -745,24 +751,24 @@ fit_controls_forward_caller_owned_motion :: proc(t: ^testing.T) {
 		ui.ui_frame_begin(&frame, &runtime, &input)
 		builder: Builder
 		builder_open(&builder, &frame, {0, 0, 600, 300})
-		root := Column(&builder)
+		root := column(&builder)
 		before := [4]Control_Motion_State{button_motion, toggle_motion, slider_motion, tabs_motion}
-		Button(root, "button", "Button", Button_Options{motion = &button_motion})
-		Toggle(root, "toggle", "Toggle", &checked, {motion = &toggle_motion})
-		Slider(root, "slider", &value, 0, 100, 5, "Value", {motion = &slider_motion})
-		Tabs(root, "tabs", labels, &active, options = {motion = &tabs_motion})
+		button(root, "button", "button", Button_Options{motion = &button_motion})
+		toggle(root, "toggle", "toggle", &checked, {motion = &toggle_motion})
+		slider(root, "slider", &value, 0, 100, 5, "Value", {motion = &slider_motion})
+		tabs(root, "tabs", labels, &active, options = {motion = &tabs_motion})
 		testing.expect_value(
 			t,
 			[4]Control_Motion_State{button_motion, toggle_motion, slider_motion, tabs_motion},
 			before,
 		)
-		_ = Measure(&builder)
+		_ = measure(&builder)
 		testing.expect_value(
 			t,
 			[4]Control_Motion_State{button_motion, toggle_motion, slider_motion, tabs_motion},
 			before,
 		)
-		_ = Render(&builder)
+		_ = render(&builder)
 		builder_close(&builder)
 		testing.expect(t, button_motion.hover.initialized && slider_motion.hover.initialized)
 		testing.expect(t, toggle_motion.value.initialized && tabs_motion.indicator.initialized)
@@ -787,7 +793,7 @@ fit_regions_forward_caller_owned_motion :: proc(t: ^testing.T) {
 	backend := i32(1)
 	fit_test_runtime(&runtime, &backend)
 	defer ui.ui_runtime_destroy(&runtime)
-	theme := Theme_Dark()
+	theme := theme_dark()
 	ui.ui_runtime_set_theme(&runtime, theme.inner)
 	output := new(ui.Ui_Output)
 	defer free(output)
@@ -811,12 +817,12 @@ fit_regions_forward_caller_owned_motion :: proc(t: ^testing.T) {
 		}
 		ui.ui_frame_begin(&frame, &runtime, &input)
 		ui.begin(&region.inner, &frame, {0, 0, 600, 300})
-		_ = Region_Button(&region, "button", "Button", motion = &button_motion)
-		_ = Region_Toggle(&region, "toggle", "Toggle", &checked, &toggle_motion)
+		_ = region_button(&region, "button", "button", motion = &button_motion)
+		_ = region_toggle(&region, "toggle", "toggle", &checked, &toggle_motion)
 		numeric_motion: Control_Motion_State
-		_ = Region_Toggle(&region, u64(77), "Numeric", &checked, &numeric_motion)
+		_ = region_toggle(&region, u64(77), "Numeric", &checked, &numeric_motion)
 		testing.expect(t, numeric_motion.value.initialized)
-		_ = Region_Slider(
+		_ = region_slider(
 			&region,
 			"slider",
 			&slider,
@@ -828,8 +834,8 @@ fit_regions_forward_caller_owned_motion :: proc(t: ^testing.T) {
 			"Value",
 			&slider_motion,
 		)
-		_ = Region_Tab_Bar(&region, "tabs", []string{"First", "Second"}, &active, &tabs_motion)
-		_ = Region_Collapsible_Header(
+		_ = region_tab_bar(&region, "tabs", []string{"First", "Second"}, &active, &tabs_motion)
+		_ = region_collapsible_header(
 			&region,
 			"header",
 			"Details",
@@ -868,11 +874,11 @@ fit_native_controls_measure_and_render_once :: proc(t: ^testing.T) {
 		value    = 5,
 		changed  = true,
 	}
-	root := Column(&builder)
+	root := column(&builder)
 	fit_test_controls(root, &state)
-	size := Measure(&builder)
+	size := measure(&builder)
 	testing.expect(t, size.w > 0 && size.h > 0, "native controls did not measure")
-	Render_At(&builder, {0, 0, size.w, size.h})
+	render_at(&builder, {0, 0, size.w, size.h})
 	testing.expect(t, !state.changed, "unchanged controls did not reset output")
 	testing.expect_value(t, builder.root.focus_seq, 4)
 	builder_close(&builder)
@@ -880,19 +886,19 @@ fit_native_controls_measure_and_render_once :: proc(t: ^testing.T) {
 
 @(test)
 fit_parent_public_contract_compiles :: proc(t: ^testing.T) {
-	center: proc(_: ^Builder, _: Container_Options) -> Parent = Center
-	row: proc(_: Parent, _: Container_Options) -> Parent = Row
-	label: proc(_: Parent, _: string, _: Label_Options) = Label
-	button: proc(_: Parent, _: string, _: string, _: Action) = Button
-	delayed: proc(_: Parent, _: string, _: string, _: ^Signal) -> bool = Button_Delayed
-	scope: proc(_: Parent, _: string) -> Parent = Scope
-	id: proc(_: Parent, _: string) -> Widget_Id = Id
-	section: proc(_: Parent, _: string, _: Section_Options) -> Parent = Section
-	card: proc(_: Parent, _: Card_Options) -> Parent = Card
-	grid: proc(_: Parent, _: Grid_Options) -> Parent = Grid
-	grid_cell: proc(_: Parent, _: Grid_Cell_Options) -> Parent = Grid_Cell
-	toggle: proc(_: Parent, _: string, _: string, _: ^bool, _: Control_Options) = Toggle
-	dropdown: proc(
+	center_proc: proc(_: ^Builder, _: Container_Options) -> Parent = center
+	row_proc: proc(_: Parent, _: Container_Options) -> Parent = row
+	label_proc: proc(_: Parent, _: string, _: Label_Options) = label
+	button_proc: proc(_: Parent, _: string, _: string, _: Action) = button
+	delayed: proc(_: Parent, _: string, _: string, _: ^Signal) -> bool = button_delayed
+	scope_proc: proc(_: Parent, _: string) -> Parent = scope
+	id_proc: proc(_: Parent, _: string) -> Widget_Id = id
+	section_proc: proc(_: Parent, _: string, _: Section_Options) -> Parent = section
+	card_proc: proc(_: Parent, _: Card_Options) -> Parent = card
+	grid_proc: proc(_: Parent, _: Grid_Options) -> Parent = grid
+	grid_cell_proc: proc(_: Parent, _: Grid_Cell_Options) -> Parent = grid_cell
+	toggle_proc: proc(_: Parent, _: string, _: string, _: ^bool, _: Control_Options) = toggle
+	dropdown_proc: proc(
 			_: Parent,
 			_: string,
 			_: []string,
@@ -901,8 +907,8 @@ fit_parent_public_contract_compiles :: proc(t: ^testing.T) {
 			_: string,
 			_: Control_Options,
 		) =
-		Dropdown
-	combobox: proc(
+		dropdown
+	combobox_proc: proc(
 			_: Parent,
 			_: string,
 			_: ^Combobox_State,
@@ -912,22 +918,25 @@ fit_parent_public_contract_compiles :: proc(t: ^testing.T) {
 			_: string,
 			_: Control_Options,
 		) =
-		Combobox
-	testing.expect(t, center != nil && row != nil && label != nil)
-	testing.expect(t, button != nil && delayed != nil && scope != nil && id != nil)
-	testing.expect(t, section != nil && card != nil && grid != nil && grid_cell != nil)
-	testing.expect(t, toggle != nil && dropdown != nil && combobox != nil)
+		combobox
+	testing.expect(t, center_proc != nil && row_proc != nil && label_proc != nil)
+	testing.expect(t, button_proc != nil && delayed != nil && scope_proc != nil && id_proc != nil)
+	testing.expect(
+		t,
+		section_proc != nil && card_proc != nil && grid_proc != nil && grid_cell_proc != nil,
+	)
+	testing.expect(t, toggle_proc != nil && dropdown_proc != nil && combobox_proc != nil)
 }
 
 @(test)
 fit_track_public_contract_compiles :: proc(t: ^testing.T) {
-	fixed: proc(_: i32) -> Track = Fixed
-	grow: proc(_: i32, _: i32, _: i32) -> Track = Grow
-	percent: proc(_: f32, _: i32, _: i32) -> Track = Percent
-	fit: proc(_: i32, _: i32, _: i32) -> Track = Fit
-	hug: proc(_: i32, _: i32) -> Track = Hug
-	testing.expect(t, fixed != nil && grow != nil && percent != nil)
-	testing.expect(t, fit != nil && hug != nil)
+	fixed_proc: proc(_: i32) -> Track = fixed
+	grow_proc: proc(_: i32, _: i32, _: i32) -> Track = grow
+	percent_proc: proc(_: f32, _: i32, _: i32) -> Track = percent
+	fit_proc: proc(_: i32, _: i32, _: i32) -> Track = fit
+	hug_proc: proc(_: i32, _: i32) -> Track = hug
+	testing.expect(t, fixed_proc != nil && grow_proc != nil && percent_proc != nil)
+	testing.expect(t, fit_proc != nil && hug_proc != nil)
 }
 
 @(test)
@@ -945,15 +954,15 @@ fit_default_intrinsic_child_hugs_before_explicit_fit :: proc(t: ^testing.T) {
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 140, 24})
 	first, second: Fit_Test_Counts
-	root := Row(&builder, {size = {width = Fixed(140), height = Fixed(24)}})
-	Custom(root, {measure = fit_test_measure_wide, render = fit_test_render, user_data = &first})
-	Custom(
+	root := row(&builder, {size = {width = fixed(140), height = fixed(24)}})
+	custom(root, {measure = fit_test_measure_wide, render = fit_test_render, user_data = &first})
+	custom(
 		root,
 		{measure = fit_test_measure_wide, render = fit_test_render, user_data = &second},
-		{track = Fit(100)},
+		{track = fit(100)},
 	)
-	_ = Measure(&builder)
-	Render_At(&builder, {0, 0, 140, 24})
+	_ = measure(&builder)
+	render_at(&builder, {0, 0, 140, 24})
 	builder_close(&builder)
 	testing.expect_value(t, first.rect.w, i32(100))
 	testing.expect_value(t, second.rect.w, i32(40))
@@ -975,23 +984,23 @@ fit_builder_native_leaves_and_table_render :: proc(t: ^testing.T) {
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
 	box: Input_Box
-	defer Input_Box_Destroy(&box)
-	root := Column(&builder, {gap = .XS})
-	Text_Input(root, "name", &box, "Name", {semantics = {name = "Name"}})
-	Progress(root, 0.5, {label = "Progress"})
-	Separator(root)
-	Spacer(root, .SM)
-	columns := [?]Table_Column{{"Name", Grow(), false}, {"Value", Fixed(80), true}}
+	defer input_box_destroy(&box)
+	root := column(&builder, {gap = .XS})
+	text_input(root, "name", &box, "Name", {semantics = {name = "Name"}})
+	progress(root, 0.5, {label = "progress"})
+	separator(root)
+	spacer(root, .SM)
+	columns := [?]Table_Column{{"Name", grow(), false}, {"Value", fixed(80), true}}
 	table: Table_State
-	Table_Begin(root, &table, columns[:])
-	Table_Row(&table, 24)
-	Table_Cell(&table, "Alpha")
-	Table_Cell(&table, "42")
-	Table_Row_End(&table)
-	Table_End(&table)
-	size := Measure(&builder)
+	table_begin(root, &table, columns[:])
+	table_row(&table, 24)
+	table_cell(&table, "Alpha")
+	table_cell(&table, "42")
+	table_row_end(&table)
+	table_end(&table)
+	size := measure(&builder)
 	testing.expect(t, size.w > 0 && size.h > 0, "native leaves did not measure")
-	Render_At(&builder, {0, 0, 320, size.h})
+	render_at(&builder, {0, 0, 320, size.h})
 	testing.expect_value(t, builder.root.focus_seq, 1)
 	testing.expect(t, !table.open && table.row.builder == nil, "table retained lifecycle state")
 	testing.expect(t, ui.sem_frame(&frame).count >= 4, "native leaves omitted semantics")
@@ -1015,18 +1024,18 @@ fit_native_scroll_clamps_and_translates_child :: proc(t: ^testing.T) {
 	state := Scroll_State {
 		inner = {offset = 99.5},
 	}
-	root := Column(&builder)
-	scroll := Scroll(
+	root := column(&builder)
+	scroll_parent := scroll(
 		root,
 		"content",
 		&state,
-		{keyboard = true, bar = true, size = {width = Grow(), height = Fixed(100)}},
+		{keyboard = true, bar = true, size = {width = grow(), height = fixed(100)}},
 	)
-	content := Column(scroll)
-	Spacer(content, .XL, {size = {height = Fixed(200)}})
-	size := Measure(&builder)
+	content := column(scroll_parent)
+	spacer(content, .XL, {size = {height = fixed(200)}})
+	size := measure(&builder)
 	testing.expect_value(t, size.h, i32(100))
-	Render_At(&builder, {0, 0, 200, 100})
+	render_at(&builder, {0, 0, 200, 100})
 	testing.expect_value(t, state.inner.content_h, i32(200))
 	testing.expect_value(t, state.inner.viewport_h, i32(100))
 	testing.expect_value(t, state.inner.offset, f32(99.5))
@@ -1051,8 +1060,8 @@ fit_native_horizontal_scroll_clamps_wide_row :: proc(t: ^testing.T) {
 	state := Scroll_State {
 		inner = {offset = 150},
 	}
-	root := Column(&builder)
-	scroll := Scroll(
+	root := column(&builder)
+	scroll_parent := scroll(
 		root,
 		"cards",
 		&state,
@@ -1060,13 +1069,13 @@ fit_native_horizontal_scroll_clamps_wide_row :: proc(t: ^testing.T) {
 			axis = .Horizontal,
 			keyboard = true,
 			bar = true,
-			size = {width = Grow(), height = Fixed(100)},
+			size = {width = grow(), height = fixed(100)},
 		},
 	)
-	content := Row(scroll, {size = {width = Fixed(320), height = Fixed(80)}})
-	Spacer(content, .XL, {size = {width = Fixed(320), height = Fixed(80)}})
-	_ = Measure(&builder)
-	Render_At(&builder, {0, 0, 200, 100})
+	content := row(scroll_parent, {size = {width = fixed(320), height = fixed(80)}})
+	spacer(content, .XL, {size = {width = fixed(320), height = fixed(80)}})
+	_ = measure(&builder)
+	render_at(&builder, {0, 0, 200, 100})
 	testing.expect_value(t, state.inner.content_w, i32(320))
 	testing.expect_value(t, state.inner.viewport_w, i32(200))
 	testing.expect_value(t, state.inner.offset, f32(120))
@@ -1090,12 +1099,12 @@ fit_native_scroll_preserves_offset_until_final_placement :: proc(t: ^testing.T) 
 	state := Scroll_State {
 		inner = {offset = 72},
 	}
-	root := Column(&builder, {track = Grow()})
-	scroll := Scroll(root, "content", &state, {track = Grow()})
-	content := Column(scroll)
-	Spacer(content, .XL, {size = {height = Fixed(240)}})
-	_ = Measure(&builder)
-	Render_At(&builder, {0, 0, 200, 100})
+	root := column(&builder, {track = grow()})
+	scroll_parent := scroll(root, "content", &state, {track = grow()})
+	content := column(scroll_parent)
+	spacer(content, .XL, {size = {height = fixed(240)}})
+	_ = measure(&builder)
+	render_at(&builder, {0, 0, 200, 100})
 	testing.expect_value(t, state.inner.content_h, i32(240))
 	testing.expect_value(t, state.inner.viewport_h, i32(100))
 	testing.expect_value(t, state.inner.offset, f32(72))
@@ -1118,8 +1127,8 @@ fit_canvas_declares_full_root_and_renders_once :: proc(t: ^testing.T) {
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
 	counts: Fit_Test_Counts
-	Canvas(&builder, fit_test_render, &counts)
-	_ = Render(&builder)
+	canvas(&builder, fit_test_render, &counts)
+	_ = render(&builder)
 	testing.expect_value(t, counts.measure, i32(0))
 	testing.expect_value(t, counts.render, i32(1))
 	testing.expect_value(t, counts.rect, Rect{0, 0, 320, 240})
@@ -1141,19 +1150,19 @@ fit_declarative_helpers_measure_and_render :: proc(t: ^testing.T) {
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
 	counts: Fit_Test_Counts
-	root := Column(&builder)
-	_ = Section(root, "Section", {container = {gap = .SM}})
-	card := Card(root)
-	Canvas_Leaf(
-		card,
-		{intrinsic = {w = 48, h = 24}, size = {width = Fixed(48), height = Fixed(24)}},
+	root := column(&builder)
+	_ = section(root, "section", {container = {gap = .SM}})
+	card_parent := card(root)
+	canvas_leaf(
+		card_parent,
+		{intrinsic = {w = 48, h = 24}, size = {width = fixed(48), height = fixed(24)}},
 		fit_test_render,
 		&counts,
 	)
-	testing.expect(t, Compact(&builder, 640), "compact branch did not use builder bounds")
-	size := Measure(&builder)
+	testing.expect(t, compact(&builder, 640), "compact branch did not use builder bounds")
+	size := measure(&builder)
 	testing.expect(t, size.w > 0 && size.h > 24, "declarative tree did not measure")
-	Render_At(&builder, {0, 0, size.w, size.h})
+	render_at(&builder, {0, 0, size.w, size.h})
 	testing.expect_value(t, counts.render, i32(1))
 	testing.expect_value(t, counts.rect.w, i32(56))
 	testing.expect_value(t, counts.rect.h, i32(24))
@@ -1165,7 +1174,7 @@ fit_test_region_body :: proc(region: ^Region, user_data: rawptr) {
 	assert(region != nil && region.inner.open && user_data != nil)
 	calls := cast(^i32)user_data
 	calls^ += 1
-	Region_Label(region, "Scoped")
+	region_label(region, "Scoped")
 }
 
 @(private = "file")
@@ -1180,8 +1189,8 @@ fit_test_reserved_layer_body :: proc(surface: ^Surface, user_data: rawptr) {
 	assert(surface != nil && user_data != nil)
 	calls := cast(^i32)user_data
 	calls^ += 1
-	Surface_Fill_Rect(surface, {0, 0, 10, 10}, {255, 0, 0, 255})
-	Surface_Fill_Rect(surface, {10, 0, 10, 10}, {0, 255, 0, 255})
+	surface_fill_rect(surface, {0, 0, 10, 10}, {255, 0, 0, 255})
+	surface_fill_rect(surface, {10, 0, 10, 10}, {0, 255, 0, 255})
 }
 
 @(private = "file")
@@ -1210,10 +1219,10 @@ fit_scoped_surface_helpers_restore_depth :: proc(t: ^testing.T) {
 		inner = &root,
 	}
 	calls: i32
-	_ = Region_With(&surface, {0, 0, 120, 40}, fit_test_region_body, &calls, {scope = "scope"})
-	Layer_With(&surface, Z_Order(100), fit_test_layer_body, &calls)
+	_ = region_with(&surface, {0, 0, 120, 40}, fit_test_region_body, &calls, {scope = "scope"})
+	layer_with(&surface, Z_Order(100), fit_test_layer_body, &calls)
 	pane: Pane_State
-	Pane_With(&surface, &pane, {0, 40, 120, 80}, fit_test_pane_body, &calls)
+	pane_with(&surface, &pane, {0, 40, 120, 80}, fit_test_pane_body, &calls)
 	testing.expect_value(t, calls, i32(3))
 	testing.expect_value(t, frame.z_count, 0)
 	testing.expect_value(t, frame.pane_count, 0)
@@ -1239,7 +1248,7 @@ fit_reserved_layer_retains_exact_paint_and_restores_depth :: proc(t: ^testing.T)
 		inner = &root,
 	}
 	calls: i32
-	accepted := Layer_With_Reserved_Paint(
+	accepted := layer_with_reserved_paint(
 		&surface,
 		Z_Order(600),
 		2,
@@ -1278,7 +1287,7 @@ fit_reserved_layer_rejects_atomically_when_overlay_is_saturated :: proc(t: ^test
 	ui.layer_end(&frame)
 	before := output.overlay.count
 	calls: i32
-	accepted := Layer_With_Reserved_Paint(
+	accepted := layer_with_reserved_paint(
 		&surface,
 		Z_Order(600),
 		2,
@@ -1313,19 +1322,19 @@ fit_region_managed_scope_balances_and_composes_ids :: proc(t: ^testing.T) {
 		inner = &root,
 	}
 	first, second: Region
-	first_region := Region_Open(&surface, &first, {0, 0, 160, 120}, {scope = "first"})
-	first_id := Region_Id(first_region, "control")
-	first_u64 := Region_Id(first_region, u64(7))
-	_ = Region_Close(first_region)
-	second_region := Region_Open(&surface, &second, {160, 0, 160, 120}, {scope = "second"})
-	second_id := Region_Id(second_region, "control")
-	_ = Region_Close(second_region)
+	first_region := region_open(&surface, &first, {0, 0, 160, 120}, {scope = "first"})
+	first_id := region_id(first_region, "control")
+	first_u64 := region_id(first_region, u64(7))
+	_ = region_close(first_region)
+	second_region := region_open(&surface, &second, {160, 0, 160, 120}, {scope = "second"})
+	second_id := region_id(second_region, "control")
+	_ = region_close(second_region)
 	testing.expect(t, first_id != second_id, "managed scopes did not compose identity")
 	testing.expect(t, first_id != first_u64, "string and integer identities collided")
 	testing.expect_value(t, first.inner.ids.depth, 0)
 	testing.expect_value(t, second.inner.ids.depth, 0)
-	testing.expect_value(t, Px(&surface, i32(8)), i32(12))
-	testing.expect_value(t, Px(&surface, f32(8)), f32(12))
+	testing.expect_value(t, px(&surface, i32(8)), i32(12))
+	testing.expect_value(t, px(&surface, f32(8)), f32(12))
 	_ = ui.end(&root)
 }
 
@@ -1346,16 +1355,16 @@ fit_concise_layout_state_reuses_after_end :: proc(t: ^testing.T) {
 		inner = &root,
 	}
 	layout: Layout_State
-	Layout_Begin(&surface, &layout, {10, 20, 100, 40})
-	first := Layout_Next(&layout, 30)
-	second := Layout_Remaining(&layout)
-	Layout_End(&layout)
+	layout_begin(&surface, &layout, {10, 20, 100, 40})
+	first := layout_next(&layout, 30)
+	second := layout_remaining(&layout)
+	layout_end(&layout)
 	testing.expect_value(t, first, Rect{10, 20, 100, 30})
 	testing.expect_value(t, second, Rect{10, 50, 100, 10})
 	testing.expect(t, !layout.open && layout.surface == nil, "layout retained borrowed surface")
-	Layout_Begin(&surface, &layout, {0, 0, 50, 20})
-	compat := Surface_Layout_Next(&surface, &layout, 10)
-	Surface_Layout_End(&surface, &layout)
+	layout_begin(&surface, &layout, {0, 0, 50, 20})
+	compat := surface_layout_next(&surface, &layout, 10)
+	surface_layout_end(&surface, &layout)
 	testing.expect_value(t, compat, Rect{0, 0, 50, 10})
 	_ = ui.end(&root)
 }
@@ -1377,17 +1386,17 @@ fit_concise_grid_flow_and_fit_column_balance :: proc(t: ^testing.T) {
 		inner = &root,
 	}
 	grid: Grid_State
-	Grid_Begin(&surface, &grid, {0, 0, 100, 0}, 2, 20)
-	testing.expect_value(t, Grid_Next(&grid), Rect{0, 0, 50, 20})
-	_ = Grid_End(&grid)
+	grid_begin(&surface, &grid, {0, 0, 100, 0}, 2, 20)
+	testing.expect_value(t, grid_next(&grid), Rect{0, 0, 50, 20})
+	_ = grid_end(&grid)
 	flow: Flow_State
-	Flow_Begin(&surface, &flow, {0, 0, 100, 0}, 4, 4)
-	testing.expect_value(t, Flow_Next(&flow, 30, 20), Rect{0, 0, 30, 20})
-	_ = Flow_End(&flow)
+	flow_begin(&surface, &flow, {0, 0, 100, 0}, 4, 4)
+	testing.expect_value(t, flow_next(&flow, 30, 20), Rect{0, 0, 30, 20})
+	_ = flow_end(&flow)
 	column: Fit_Column_State
-	Fit_Column_Begin(&surface, &column, 0, 0, 100)
-	testing.expect_value(t, Fit_Column_Next(&column, 20), Rect{0, 0, 100, 20})
-	_ = Fit_Column_End(&column)
+	fit_column_begin(&surface, &column, 0, 0, 100)
+	testing.expect_value(t, fit_column_next(&column, 20), Rect{0, 0, 100, 20})
+	_ = fit_column_end(&column)
 	testing.expect(t, !grid.open && !flow.open && !column.open, "explicit state remained open")
 	_ = ui.end(&root)
 }
@@ -1410,31 +1419,31 @@ fit_vertical_cursor_composes_and_reuses_caller_state :: proc(t: ^testing.T) {
 		inner = &root,
 	}
 	cursor: Vertical_Cursor_State
-	Vertical_Cursor_Begin(&surface, &cursor, 10, 20, 180, gap = 6)
-	line := Vertical_Cursor_Text(&cursor, "Summary", .Label, .Secondary)
-	header := Vertical_Cursor_Section_Header(&cursor, "DETAILS")
-	bounds := Vertical_Cursor_End(&cursor)
+	vertical_cursor_begin(&surface, &cursor, 10, 20, 180, gap = 6)
+	line := vertical_cursor_text(&cursor, "Summary", .Label, .Secondary)
+	header := vertical_cursor_section_header(&cursor, "DETAILS")
+	bounds := vertical_cursor_end(&cursor)
 	testing.expect_value(t, header.y, line.y + line.h + 6)
 	testing.expect_value(t, bounds.h, line.h + 6 + header.h)
 	testing.expect(t, !cursor.open && cursor.surface == nil, "cursor retained borrowed surface")
 	paint_count := output.main.count
-	Vertical_Cursor_Begin_Bounded(&surface, &cursor, {0, 0, 100, 10})
-	clamped := Vertical_Cursor_Section_Header(&cursor, "CLAMPED")
-	_ = Vertical_Cursor_End(&cursor)
+	vertical_cursor_begin_bounded(&surface, &cursor, {0, 0, 100, 10})
+	clamped := vertical_cursor_section_header(&cursor, "CLAMPED")
+	_ = vertical_cursor_end(&cursor)
 	testing.expect_value(t, clamped, Rect{0, 0, 100, 10})
 	testing.expect_value(t, output.main.count, paint_count)
-	testing.expect_value(t, Vertical_Cursor_Overflow(&cursor), header.h - 10)
+	testing.expect_value(t, vertical_cursor_overflow(&cursor), header.h - 10)
 	_ = ui.end(&root)
 }
 
 @(test)
 fit_surface_input_focus_paint_contract_compiles :: proc(t: ^testing.T) {
-	key_down: proc(_: ^Surface, _: Key) -> bool = Surface_Key_Down
-	key_repeat: proc(_: ^Surface, _: Key) -> bool = Surface_Key_Pressed_Or_Repeat
-	characters: proc(_: ^Surface) -> []rune = Surface_Characters
-	clipboard: proc(_: ^Surface) -> string = Surface_Clipboard
-	focus_id: proc(_: string) -> Focus_Id = Focus_Id_String
-	focus_link: proc(_: ^Focus_State, _: Focus_Id) -> Focus_Link = Focus_Link_To
+	key_down: proc(_: ^Surface, _: Key) -> bool = surface_key_down
+	key_repeat: proc(_: ^Surface, _: Key) -> bool = surface_key_pressed_or_repeat
+	characters: proc(_: ^Surface) -> []rune = surface_characters
+	clipboard: proc(_: ^Surface) -> string = surface_clipboard
+	focus_id: proc(_: string) -> Focus_Id = focus_id_string
+	focus_link: proc(_: ^Focus_State, _: Focus_Id) -> Focus_Link = focus_link_to
 	semantic: proc(
 			_: ^Surface,
 			_: Semantic_Role,
@@ -1447,9 +1456,9 @@ fit_surface_input_focus_paint_contract_compiles :: proc(t: ^testing.T) {
 			_: int,
 			_: int,
 		) =
-		Surface_Semantic
-	circle: proc(_: ^Surface, _: Point, _: f32, _: Color) = Surface_Fill_Circle
-	clip: proc(_: ^Surface, _: Rect) = Surface_Clip_Begin
+		surface_semantic
+	circle: proc(_: ^Surface, _: Point, _: f32, _: Color) = surface_fill_circle
+	clip: proc(_: ^Surface, _: Rect) = surface_clip_begin
 	reserved: proc(
 			_: ^Surface,
 			_: Z_Order,
@@ -1458,7 +1467,7 @@ fit_surface_input_focus_paint_contract_compiles :: proc(t: ^testing.T) {
 			_: rawptr,
 			_: Float_Rect,
 		) -> bool =
-		Layer_With_Reserved_Paint
+		layer_with_reserved_paint
 	testing.expect(t, key_down != nil && key_repeat != nil)
 	testing.expect(t, characters != nil && clipboard != nil)
 	testing.expect(t, focus_id != nil && focus_link != nil && semantic != nil)
@@ -1467,34 +1476,34 @@ fit_surface_input_focus_paint_contract_compiles :: proc(t: ^testing.T) {
 
 @(test)
 fit_caret_policy_preserves_canonical_behavior :: proc(t: ^testing.T) {
-	at_epoch := Caret_Blink_Phase(5, 5, 0.5, false)
+	at_epoch := caret_blink_phase(5, 5, 0.5, false)
 	testing.expect(t, at_epoch.visible && at_epoch.animate)
 	testing.expect_value(t, at_epoch.seconds_until_toggle, f64(0.5))
-	before_epoch := Caret_Blink_Phase(4, 5, 0.5, false)
+	before_epoch := caret_blink_phase(4, 5, 0.5, false)
 	testing.expect(t, before_epoch.visible && before_epoch.animate)
-	hidden := Caret_Blink_Phase(5.5, 5, 0.5, false)
+	hidden := caret_blink_phase(5.5, 5, 0.5, false)
 	testing.expect(t, !hidden.visible && hidden.animate)
-	visible := Caret_Blink_Phase(6, 5, 0.5, false)
+	visible := caret_blink_phase(6, 5, 0.5, false)
 	testing.expect(t, visible.visible && visible.animate)
-	reduced := Caret_Blink_Phase(100, 5, 0.5, true)
+	reduced := caret_blink_phase(100, 5, 0.5, true)
 	testing.expect(t, reduced.visible && !reduced.animate)
 	testing.expect_value(t, reduced.seconds_until_toggle, f64(0))
 	metrics := Text_Metrics{12, 4, 3, 19}
-	resolved := Caret_Metrics_Or_Fallback(metrics, true, 16, 20)
+	resolved := caret_metrics_or_fallback(metrics, true, 16, 20)
 	testing.expect_value(t, resolved, metrics)
-	fallback := Caret_Metrics_Or_Fallback({}, false, 16, 20)
+	fallback := caret_metrics_or_fallback({}, false, 16, 20)
 	testing.expect_value(t, fallback, Text_Metrics{16, 0, 0, 20})
-	rect := Caret_Rect({10, 20}, 34, metrics, 2)
+	rect := caret_rect({10, 20}, 34, metrics, 2)
 	testing.expect_value(t, rect, Float_Rect{34, 20, 2, 16})
 }
 
 @(test)
 fit_caret_surface_contract_compiles :: proc(t: ^testing.T) {
-	timestamp: proc(_: ^Surface) -> f64 = Surface_Timestamp
-	metrics: proc(_: ^Surface, _: i32) -> (Text_Metrics, bool) = Surface_Text_Metrics
-	hit: proc(_: ^Surface, _: string, _: i32, _: i32) -> int = Surface_Text_Sized_Byte_At_X
-	redraw: proc(_: ^Surface, _: f64) = Request_Redraw_In
-	reduced: proc(_: ^Surface) -> bool = Surface_Reduced_Motion
+	timestamp: proc(_: ^Surface) -> f64 = surface_timestamp
+	metrics: proc(_: ^Surface, _: i32) -> (Text_Metrics, bool) = surface_text_metrics
+	hit: proc(_: ^Surface, _: string, _: i32, _: i32) -> int = surface_text_sized_byte_at_x
+	redraw: proc(_: ^Surface, _: f64) = request_redraw_in
+	reduced: proc(_: ^Surface) -> bool = surface_reduced_motion
 	testing.expect(t, timestamp != nil && metrics != nil && hit != nil)
 	testing.expect(t, redraw != nil && reduced != nil)
 }
@@ -1508,7 +1517,7 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 			_: ^Chart_State,
 			_: Chart_Options,
 		) -> int =
-		Surface_Line_Chart
+		surface_line_chart
 	bar_chart: proc(
 			_: ^Surface,
 			_: Rect,
@@ -1516,28 +1525,28 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 			_: ^Chart_State,
 			_: Chart_Options,
 		) -> int =
-		Surface_Bar_Chart
-	markdown: proc(_: ^Surface, _: Rect, _: string, _: Color) -> Markdown_Result = Surface_Markdown
+		surface_bar_chart
+	markdown: proc(_: ^Surface, _: Rect, _: string, _: Color) -> Markdown_Result = surface_markdown
 	markdown_context: proc(
 			_: ^Surface,
 			_: []string,
 			_: Markdown_Reference_Resolver,
 			_: rawptr,
 		) -> Markdown_Context =
-		Markdown_Context_Create
+		markdown_context_create
 	markdown_prepare: proc(_: ^Markdown_Context, _: i32, _: string) -> Markdown_Prepared =
-		Markdown_Prepare
+		markdown_prepare
 	markdown_measure: proc(_: ^Markdown_Context, _: ^Markdown_Prepared, _: ^i32) -> i32 =
-		Markdown_Prepared_Measure
+		markdown_prepared_measure
 	markdown_hit: proc(_: ^Markdown_Context, _: ^Markdown_Prepared, _, _, _, _: i32) -> int =
-		Markdown_Prepared_Hit_Test
+		markdown_prepared_hit_test
 	markdown_source_y: proc(_: ^Markdown_Context, _: ^Markdown_Prepared, _: int) -> i32 =
-		Markdown_Prepared_Source_Y
-	toasts: proc(_: ^Surface, _: ^Toast_State) = Surface_Toasts
-	grid_end: proc(_: ^Surface, _: ^Grid_State) -> Rect = Surface_Grid_End
-	chart_reset: proc(_: ^Chart_State) = Chart_Reset
-	modal_open: proc(_: ^Modal_State) = Modal_Open
-	modal_is_open: proc(_: ^Modal_State) -> bool = Modal_Is_Open
+		markdown_prepared_source_y
+	toasts: proc(_: ^Surface, _: ^Toast_State) = surface_toasts
+	grid_end: proc(_: ^Surface, _: ^Grid_State) -> Rect = surface_grid_end
+	chart_reset_proc: proc(_: ^Chart_State) = chart_reset
+	modal_open_proc: proc(_: ^Modal_State) = modal_open
+	modal_is_open_proc: proc(_: ^Modal_State) -> bool = modal_is_open
 	modal_builder: proc(
 			_: ^Surface,
 			_: ^Modal_State,
@@ -1549,9 +1558,9 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 			_: Modal_Options,
 			_: i32,
 		) -> Modal_Close_Reason =
-		Surface_Modal_Builder_With
-	menu_is_open: proc(_: ^Context_Menu_State) -> bool = Context_Menu_Is_Open
-	confirm_is_open: proc(_: ^Confirm_Dialog_State) -> bool = Confirm_Dialog_Is_Open
+		surface_modal_builder_with
+	menu_is_open: proc(_: ^Context_Menu_State) -> bool = context_menu_is_open
+	confirm_is_open: proc(_: ^Confirm_Dialog_State) -> bool = confirm_dialog_is_open
 	testing.expect(t, line_chart != nil && bar_chart != nil)
 	testing.expect(t, markdown_context != nil)
 	testing.expect(t, markdown != nil && markdown_prepare != nil && markdown_measure != nil)
@@ -1559,7 +1568,10 @@ fit_gallery_surface_contract_compiles :: proc(t: ^testing.T) {
 		t,
 		markdown_hit != nil && markdown_source_y != nil && toasts != nil && grid_end != nil,
 	)
-	testing.expect(t, chart_reset != nil && modal_open != nil && modal_is_open != nil)
+	testing.expect(
+		t,
+		chart_reset_proc != nil && modal_open_proc != nil && modal_is_open_proc != nil,
+	)
 	testing.expect(t, modal_builder != nil)
 	testing.expect(t, menu_is_open != nil && confirm_is_open != nil)
 }
@@ -1570,17 +1582,17 @@ fit_gallery_state_helpers_round_trip :: proc(t: ^testing.T) {
 		enter_anim  = 1,
 		hover_index = 3,
 	}
-	Chart_Reset(&chart)
+	chart_reset(&chart)
 	testing.expect_value(t, chart.enter_anim, f32(0))
 	testing.expect_value(t, chart.hover_index, -1)
 	modal: Modal_State
-	testing.expect(t, !Modal_Is_Open(&modal))
-	Modal_Open(&modal)
-	testing.expect(t, Modal_Is_Open(&modal))
+	testing.expect(t, !modal_is_open(&modal))
+	modal_open(&modal)
+	testing.expect(t, modal_is_open(&modal))
 	menu: Context_Menu_State
-	testing.expect(t, !Context_Menu_Is_Open(&menu))
+	testing.expect(t, !context_menu_is_open(&menu))
 	confirm: Confirm_Dialog_State
-	testing.expect(t, !Confirm_Dialog_Is_Open(&confirm))
+	testing.expect(t, !confirm_dialog_is_open(&confirm))
 }
 
 @(test)
@@ -1589,12 +1601,12 @@ fit_caller_storage_selects_and_resets_capacity :: proc(t: ^testing.T) {
 	nodes: [STORAGE_NODE_DEFAULT + 64]Storage_Node
 	outputs: [STORAGE_NODE_DEFAULT + 64]^bool
 	customs: [STORAGE_NODE_DEFAULT + 64]Custom_Spec
-	Set_Storage(&builder, {nodes = nodes[:], outputs = outputs[:], customs = customs[:]})
-	testing.expect_value(t, Storage_Capacity(&builder), len(nodes))
-	testing.expect_value(t, Custom_Capacity(&builder), len(customs))
-	Reset_Storage(&builder)
-	testing.expect_value(t, Storage_Capacity(&builder), int(STORAGE_NODE_DEFAULT))
-	testing.expect_value(t, Custom_Capacity(&builder), int(STORAGE_NODE_DEFAULT))
+	set_storage(&builder, {nodes = nodes[:], outputs = outputs[:], customs = customs[:]})
+	testing.expect_value(t, storage_capacity(&builder), len(nodes))
+	testing.expect_value(t, custom_capacity(&builder), len(customs))
+	reset_storage(&builder)
+	testing.expect_value(t, storage_capacity(&builder), int(STORAGE_NODE_DEFAULT))
+	testing.expect_value(t, custom_capacity(&builder), int(STORAGE_NODE_DEFAULT))
 }
 
 @(test)
@@ -1611,22 +1623,22 @@ fit_button_public_overloads_preserve_explicit_size :: proc(t: ^testing.T) {
 	defer ui.ui_frame_end(&frame)
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
-	root := Column(&builder)
+	root := column(&builder)
 	string_options := Button_Options {
-		size = {width = Fixed(40), height = Fixed(16)},
+		size = {width = fixed(40), height = fixed(16)},
 	}
-	Button(root, "string", "String", string_options)
+	button(root, "string", "String", string_options)
 	integer_options := Button_Options {
-		size = {width = Fixed(50), height = Fixed(18)},
+		size = {width = fixed(50), height = fixed(18)},
 	}
-	Button(root, u64(7), "Integer", integer_options)
-	widget := Id(root, "widget")
+	button(root, u64(7), "Integer", integer_options)
+	widget := id(root, "widget")
 	widget_options := Button_Options {
-		size = {width = Fixed(60), height = Fixed(20)},
+		size = {width = fixed(60), height = fixed(20)},
 	}
-	Button(root, widget, "Widget", widget_options)
-	size := Measure(&builder)
-	Render_At(&builder, {0, 0, size.w, size.h})
+	button(root, widget, "Widget", widget_options)
+	size := measure(&builder)
+	render_at(&builder, {0, 0, size.w, size.h})
 	builder_close(&builder)
 	testing.expect_value(t, size.w, i32(60))
 	testing.expect_value(t, size.h, i32(54))
@@ -1635,14 +1647,14 @@ fit_button_public_overloads_preserve_explicit_size :: proc(t: ^testing.T) {
 @(test)
 fit_test_driver_exposes_bounded_frame_results :: proc(t: ^testing.T) {
 	driver: Test_Driver
-	Test_Driver_Init(&driver)
-	defer Test_Driver_Destroy(&driver)
+	test_driver_init(&driver)
+	defer test_driver_destroy(&driver)
 	nodes: [STORAGE_NODE_DEFAULT + 64]Storage_Node
 	outputs: [STORAGE_NODE_DEFAULT + 64]^bool
-	Test_Driver_Set_Storage(&driver, {nodes = nodes[:], outputs = outputs[:]})
-	Test_Driver_Set_Semantics(&driver, true)
+	test_driver_set_storage(&driver, {nodes = nodes[:], outputs = outputs[:]})
+	test_driver_set_semantics(&driver, true)
 	active := false
-	timing, ok := Test_Driver_Frame_Timed(
+	timing, ok := test_driver_frame_timed(
 		&driver,
 		{screen_size = {320, 240}, dpi_scale = 1},
 		fit_test_draw,
@@ -1653,12 +1665,12 @@ fit_test_driver_exposes_bounded_frame_results :: proc(t: ^testing.T) {
 	testing.expect(t, timing.layout_render_ns >= 0 && timing.frame_finalize_ns >= 0)
 	testing.expect(t, timing.finalize_ns >= timing.measure_ns, "finalize timing excluded measure")
 	testing.expect(t, timing.frame_ns >= timing.build_ns, "frame timing excluded build")
-	summary := Test_Driver_Paint_Summary(&driver)
+	summary := test_driver_paint_summary(&driver)
 	testing.expect(t, summary.main_commands > 0 && summary.semantic_nodes > 0)
-	diagnostics := Test_Driver_Diagnostics(&driver)
+	diagnostics := test_driver_diagnostics(&driver)
 	testing.expect_value(t, diagnostics.main_commands_dropped, i32(0))
 	when ui.UI_TELEMETRY_ENABLED {
-		telemetry := Test_Driver_Telemetry(&driver)
+		telemetry := test_driver_telemetry(&driver)
 		testing.expect(t, telemetry.main.command_appends > 0)
 	}
 }
@@ -1667,12 +1679,12 @@ fit_test_driver_exposes_bounded_frame_results :: proc(t: ^testing.T) {
 fit_test_draw :: proc(builder: ^Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil, "fit test draw: invalid argument")
 	active := cast(^bool)user_data
-	root := Column(builder)
-	Label(root, "Hello")
-	Button(root, "save", "Save", active)
-	Button(root, u64(7), "Seven", active)
+	root := column(builder)
+	label(root, "Hello")
+	button(root, "save", "Save", active)
+	button(root, u64(7), "Seven", active)
 }
-// Fit's submit modes are mapped explicitly because the façade declaration
+// fit's submit modes are mapped explicitly because the façade declaration
 // order remains independent from ui's implementation enum.
 @(test)
 test_text_input_submit_mapping :: proc(t: ^testing.T) {
@@ -1689,34 +1701,20 @@ fit_failed_init_binding_is_retryable :: proc(t: ^testing.T) {
 	defer free(app)
 	nodes: [STORAGE_NODE_DEFAULT + 1]Storage_Node
 	outputs: [STORAGE_NODE_DEFAULT + 1]^bool
-	Set_Storage(&app.builder, {nodes = nodes[:], outputs = outputs[:]})
+	set_storage(&app.builder, {nodes = nodes[:], outputs = outputs[:]})
 	first := i32(1)
 	second := i32(2)
 	callbacks := Callbacks {
 		draw = fit_test_draw,
 	}
 	testing.expect(t, !app_init_finish(app, callbacks, &first, false))
-	testing.expect_value(t, Get_State(app), State.Empty)
+	testing.expect_value(t, get_state(app), State.Empty)
 	testing.expect(t, app.draw == nil && app.shutdown == nil && app.user_data == nil)
-	testing.expect_value(t, Storage_Capacity(&app.builder), len(nodes))
+	testing.expect_value(t, storage_capacity(&app.builder), len(nodes))
 	testing.expect(t, !app_init_finish(app, callbacks, &second, false))
 	testing.expect(t, app.draw == nil && app.shutdown == nil && app.user_data == nil)
 }
 
-@(test)
-fit_app_state_and_pacing_mappings_are_semantic :: proc(t: ^testing.T) {
-	testing.expect_value(t, to_frame_pacing(.Fixed), ui_gfx.App_Frame_Pacing.Fixed)
-	testing.expect_value(t, to_frame_pacing(.Uncapped), ui_gfx.App_Frame_Pacing.Uncapped)
-	testing.expect_value(
-		t,
-		to_frame_pacing(.Monitor_Refresh),
-		ui_gfx.App_Frame_Pacing.Monitor_Refresh,
-	)
-	testing.expect_value(t, from_app_state(.Empty), State.Empty)
-	testing.expect_value(t, from_app_state(.Ready), State.Ready)
-	testing.expect_value(t, from_app_state(.Running), State.Running)
-	testing.expect_value(t, from_app_state(.Stopped), State.Stopped)
-}
 
 @(test)
 fit_window_flag_mapping_is_semantic :: proc(t: ^testing.T) {
@@ -1774,9 +1772,4 @@ fit_input_and_semantic_mappings_are_semantic :: proc(t: ^testing.T) {
 	testing.expect_value(t, to_cursor(.Not_Allowed), ui.Cursor.NOT_ALLOWED)
 	testing.expect_value(t, to_semantic_role(.None), ui.Sem_Role.None)
 	testing.expect_value(t, to_semantic_role(.List_Box), ui.Sem_Role.List_Box)
-	state := Semantic_State{.Checked, .Disabled, .Focused, .Expanded}
-	state += {.Selected, .Read_Only, .Password, .Multiline}
-	expected := ui.Sem_State{.Checked, .Disabled, .Focused, .Expanded}
-	expected += {.Selected, .Read_Only, .Password, .Multiline}
-	testing.expect_value(t, to_semantic_state(state), expected)
 }

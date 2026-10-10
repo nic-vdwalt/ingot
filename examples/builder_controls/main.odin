@@ -36,7 +36,7 @@ state := State {
 main :: proc() {
 	flags: fit.Window_Flags = {.Resizable, .Vsync}
 	when ODIN_OS == .Darwin do flags += {.High_Dpi}
-	_ = fit.Run(
+	_ = fit.run(
 		&app,
 		{
 			width = 760,
@@ -56,31 +56,31 @@ main :: proc() {
 
 destroy_state :: proc(data: ^State) {
 	assert(data != nil, "builder controls destroy: nil state")
-	fit.Combobox_State_Destroy(&data.workspace_combobox)
+	fit.combobox_state_destroy(&data.workspace_combobox)
 }
 
 draw_preference :: proc(parent: fit.Parent, stable_key: u64, data: ^Workspace_Preference) {
 	assert(data != nil, "builder controls preference: nil state")
 	assert(stable_key != 0, "builder controls preference: zero key")
-	scoped := fit.Scope(parent, stable_key)
-	fit.Checkbox(scoped, "enabled", "Enable local settings", &data.enabled)
+	scoped := fit.scope(parent, stable_key)
+	fit.checkbox(scoped, "enabled", "Enable local settings", &data.enabled)
 }
 
 draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil, "builder controls draw: invalid argument")
 	data := cast(^State)user_data
-	root := fit.Column(
+	root := fit.column(
 		builder,
-		{gap = .MD, padding = .XL, size = {width = fit.Grow(), height = fit.Grow()}},
+		{gap = .MD, padding = .XL, size = {width = fit.grow(), height = fit.grow()}},
 	)
-	fit.Label(root, "Workspace settings", {role = .Title})
-	fit.Label(
+	fit.label(root, "Workspace settings", {role = .Title})
+	fit.label(
 		root,
 		"Caller-owned state rebuilt through the recommended Fit Builder API.",
 		{ink = .Secondary},
 	)
-	fit.Tabs(root, "settings.tabs", TAB_LABELS[:], &data.active_tab)
-	content := fit.Card(root, {container = {padding = .LG, size = {width = fit.Grow()}}})
+	fit.tabs(root, "settings.tabs", TAB_LABELS[:], &data.active_tab)
+	content := fit.card(root, {container = {padding = .LG, size = {width = fit.grow()}}})
 	switch data.active_tab {
 	case 0:
 		draw_general(content, data)
@@ -89,14 +89,14 @@ draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	case 2:
 		draw_account(content, data)
 	}
-	fit.Label(root, status_text(data), {ink = .Secondary})
+	fit.label(root, status_text(data), {ink = .Secondary})
 }
 
 draw_general :: proc(parent: fit.Parent, data: ^State) {
 	assert(data != nil, "builder controls general: nil state")
-	fit.Label(parent, "General", {role = .Title})
-	fit.Toggle(parent, "notifications", "Enable notifications", &data.notifications_enabled)
-	fit.Dropdown(
+	fit.label(parent, "General", {role = .Title})
+	fit.toggle(parent, "notifications", "Enable notifications", &data.notifications_enabled)
+	fit.dropdown(
 		parent,
 		"quality",
 		QUALITY_LABELS[:],
@@ -108,8 +108,8 @@ draw_general :: proc(parent: fit.Parent, data: ^State) {
 
 draw_editor :: proc(parent: fit.Parent, data: ^State) {
 	assert(data != nil, "builder controls editor: nil state")
-	fit.Label(parent, "Editor", {role = .Title})
-	fit.Combobox(
+	fit.label(parent, "Editor", {role = .Title})
+	fit.combobox(
 		parent,
 		"workspace",
 		&data.workspace_combobox,
@@ -118,15 +118,15 @@ draw_editor :: proc(parent: fit.Parent, data: ^State) {
 		"Choose workspace...",
 		"Workspace",
 	)
-	fit.Checkbox(parent, "telemetry", "Share diagnostics", &data.telemetry_enabled)
+	fit.checkbox(parent, "telemetry", "Share diagnostics", &data.telemetry_enabled)
 }
 
 draw_account :: proc(parent: fit.Parent, data: ^State) {
 	assert(data != nil, "builder controls account: nil state")
-	fit.Label(parent, "Account", {role = .Title})
-	fit.Label(parent, "Account settings are synchronized with the selected workspace.")
-	fit.Progress(parent, 0.75)
-	fit.Canvas_Leaf(parent, {intrinsic = {w = 160, h = 48}}, preview_render)
+	fit.label(parent, "Account", {role = .Title})
+	fit.label(parent, "Account settings are synchronized with the selected workspace.")
+	fit.progress(parent, 0.75)
+	fit.canvas_leaf(parent, {intrinsic = {w = 160, h = 48}}, preview_render)
 	draw_preference(parent, 101, &data.local_preferences[0])
 	draw_preference(parent, 205, &data.local_preferences[1])
 }

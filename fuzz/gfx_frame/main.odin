@@ -172,19 +172,19 @@ mutate_resources :: proc(p: ^Prng, fit_session: ^fit.Session) {
 		// The original crash: rescale mid-frame unloads every font atlas
 		// referenced by draws already recorded this frame.
 		scale := f32(fuzzx.int_range(p, 50, 301)) / 100.0
-		fit.Session_Set_Scale(fit_session, scale)
+		fit.session_set_scale(fit_session, scale)
 	case 8:
 		switch fuzzx.int_range(p, 0, 3) {
 		case 0:
-			fit.Session_Set_Theme(fit_session, fit.Theme_Dark())
+			fit.session_set_theme(fit_session, fit.theme_dark())
 		case 1:
-			fit.Session_Set_Theme(fit_session, fit.Theme_Light())
+			fit.session_set_theme(fit_session, fit.theme_light())
 		case 2:
-			fit.Session_Set_Theme(fit_session, fit.Theme_High_Contrast())
+			fit.session_set_theme(fit_session, fit.theme_high_contrast())
 		}
 	case 9:
 		font_dpi := f32(fuzzx.int_range(p, 100, 301)) / 100.0
-		fit.Session_Set_Scale(fit_session, font_dpi)
+		fit.session_set_scale(fit_session, font_dpi)
 		rl.UnloadFont(fuzz_font)
 		fuzz_font = load_font(max(i32(16 * font_dpi), 1))
 	case 10, 11:
@@ -201,7 +201,7 @@ mutate_resources :: proc(p: ^Prng, fit_session: ^fit.Session) {
 		// Compound case: resize immediately followed by UI rescale - the
 		// swapchain reconfigure + atlas churn interleaving.
 		rl.SetWindowSize(i32(fuzzx.int_range(p, 300, 1601)), i32(fuzzx.int_range(p, 200, 1201)))
-		fit.Session_Set_Scale(fit_session, f32(fuzzx.int_range(p, 50, 301)) / 100.0)
+		fit.session_set_scale(fit_session, f32(fuzzx.int_range(p, 50, 301)) / 100.0)
 	}
 
 }
@@ -210,10 +210,10 @@ fuzz_frame :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil, "fuzz_frame: invalid argument")
 	p := cast(^Prng)user_data
 	rl.ClearBackground(rl.BLACK)
-	root := fit.Column(builder, {gap = .XS, padding = .SM})
-	fit.Label(root, "FIT lifecycle fuzz", {role = .Title})
-	fit.Button(root, "lifecycle", "Lifecycle button", &button_active)
-	_ = fit.Render(builder)
+	root := fit.column(builder, {gap = .XS, padding = .SM})
+	fit.label(root, "FIT lifecycle fuzz", {role = .Title})
+	fit.button(root, "lifecycle", "Lifecycle button", &button_active)
+	_ = fit.render(builder)
 	draw_some(p)
 	ops := fuzzx.int_range(p, 0, 5)
 	for _ in 0 ..< ops {
@@ -233,7 +233,7 @@ main :: proc() {
 
 	rl.InitWindow(480, 320, "gfx frame lifecycle fuzz")
 	rl.SetTargetFPS(0) // uncapped: iterations bound the run, not wall time
-	fit.Session_Init(&session, {semantics_enabled = true})
+	fit.session_init(&session, {semantics_enabled = true})
 	fuzz_font = load_font(16)
 
 	for round in 0 ..< rounds {
@@ -242,7 +242,7 @@ main :: proc() {
 		p := fuzzx.prng_make(round_seed)
 		for _ in 0 ..< iterations {
 			if rl.WindowShouldClose() do break
-			_ = fit.Session_Draw(&session, fuzz_frame, &p)
+			_ = fit.session_draw(&session, fuzz_frame, &p)
 		}
 	}
 
@@ -252,7 +252,7 @@ main :: proc() {
 	for &mesh in live_gpu_meshes do if mesh.id != 0 do rl.destroy_gpu_mesh(&mesh)
 	if gpu_target.texture.texture.id != 0 do rl.destroy_gpu_3d_target(&gpu_target)
 	rl.UnloadFont(fuzz_font)
-	fit.Session_Destroy(&session)
+	fit.session_destroy(&session)
 	rl.CloseWindow()
 
 	fmt.printfln("fuzz_gfx_frame ok")

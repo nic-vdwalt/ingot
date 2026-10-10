@@ -53,13 +53,13 @@ Save :: proc(user_data: rawptr) {
 }
 
 main :: proc() {
-	_ = fit.Run(&app, {width = 720, height = 480, title = "App"}, Draw)
+	_ = fit.run(&app, {width = 720, height = 480, title = "App"}, Draw)
 }
 
 Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
-	root := fit.Center(builder, {gap = .SM, padding = .LG})
-	fit.Label(root, "Settings", {role = .Title})
-	fit.Button(root, "save", "Save", fit.action(Save))
+	root := fit.center(builder, {gap = .SM, padding = .LG})
+	fit.label(root, "Settings", {role = .Title})
+	fit.button(root, "save", "Save", fit.action(Save))
 }
 ```
 
@@ -67,7 +67,7 @@ Custom themes use the same value-owned path. Every interaction swatch is
 explicit; Ingot does not synthesize colors:
 
 ```odin
-theme := fit.Theme_From_Palette({
+theme := fit.theme_from_palette({
 	basis = .Dark,
 	ground = {18, 20, 24, 255},
 	surface = {28, 31, 36, 255},
@@ -85,7 +85,7 @@ theme := fit.Theme_From_Palette({
 	border = {104, 115, 126, 255},
 	focus = {126, 200, 255, 230},
 })
-fit.Set_Theme(&app, theme)
+fit.set_theme(&app, theme)
 ```
 
 Use `Theme_Set_Color` for an advanced single-role override. Validate editable
@@ -129,32 +129,32 @@ call. Begun layout helpers instead bind that Surface to caller-owned state until
 ```odin
 canvas :: proc(surface: ^fit.Surface, root: fit.Rect, user_data: rawptr) -> bool {
 	layout: fit.Layout_State
-	fit.Layout_Begin(surface, &layout, root, gap = fit.Px(surface, 8))
-	fit.Layout_Row(&layout, fit.Px(surface, 40))
-	cell := fit.Layout_Remaining(&layout)
-	fit.Layout_Pop(&layout)
-	fit.Layout_End(&layout)
+	fit.layout_begin(surface, &layout, root, gap = fit.px(surface, 8))
+	fit.layout_row(&layout, fit.px(surface, 40))
+	cell := fit.layout_remaining(&layout)
+	fit.layout_pop(&layout)
+	fit.layout_end(&layout)
 
-	theme := fit.Get_Theme_Tokens(surface)
-	fit.Fill_Rect(surface, cell, theme.background_panel)
-	fit.Text(surface, "Explicit surface", cell.x, cell.y)
+	theme := fit.get_theme_tokens(surface)
+	fit.fill_rect(surface, cell, theme.background_panel)
+	fit.text(surface, "Explicit surface", cell.x, cell.y)
 	return false
 }
 ```
 
 ### Modal Builder composition
 
-Open with `fit.Surface_Modal_Open` before ordinary input processing, then render
-with `fit.Surface_Modal_Builder_With`. The modal owns pointer, keyboard, focus,
+Open with `fit.surface_modal_open` before ordinary input processing, then render
+with `fit.surface_modal_builder_with`. The modal owns pointer, keyboard, focus,
 paint tier, clipping, and semantics until closed. Outside dismissal is opt-in.
-Use `fit.Modal_Take_Close` when the close source matters. Set `Modal_Options.scope`
+Use `fit.modal_take_close` when the close source matters. Set `Modal_Options.scope`
 to `.Host` with a positive `host` rectangle for a pane-bounded modal; viewport
 scope remains the default.
 
-Custom-content anchored surfaces use `fit.Surface_Popup_Open` followed by
-`fit.Surface_Popup_Builder_With`. Popup options provide anchor, viewport,
+Custom-content anchored surfaces use `fit.surface_popup_open` followed by
+`fit.surface_popup_builder_with`. Popup options provide anchor, viewport,
 preferred size, placement, focus, and dismissal policy. Consume a child-handled
-key with `fit.Key_Pressed_Consume` before the owning modal or popup ends.
+key with `fit.key_pressed_consume` before the owning modal or popup ends.
 
 `Layout_State`, `Grid_State`, `Flow_State`, `Fit_Column_State`, and
 `Vertical_Cursor_State` are zero-value ready, must be balanced, and may be reused
@@ -166,13 +166,13 @@ For caller-owned scheduling, use the `fit.App` lifecycle explicitly:
 
 ```odin
 main :: proc() {
-	if !fit.Init(&app, {width = 720, height = 480, title = "App"}, {draw = Draw}) do return
-	defer fit.Destroy(&app)
-	if !fit.Start(&app) do return
-	for fit.Get_State(&app) == .Running {
-		if !fit.Tick(&app) do break
+	if !fit.init(&app, {width = 720, height = 480, title = "App"}, {draw = Draw}) do return
+	defer fit.destroy(&app)
+	if !fit.start(&app) do return
+	for fit.get_state(&app) == .Running {
+		if !fit.tick(&app) do break
 	}
-	if fit.Get_State(&app) == .Running do _ = fit.Stop(&app)
+	if fit.get_state(&app) == .Running do _ = fit.stop(&app)
 }
 ```
 

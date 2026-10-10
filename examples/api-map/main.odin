@@ -275,7 +275,7 @@ main :: proc() {
 	} else {
 		flags: fit.Window_Flags = {.Resizable, .Vsync}
 		when ODIN_OS == .Darwin do flags += {.High_Dpi}
-		_ = fit.Run(
+		_ = fit.run(
 			&app,
 			{
 				width = 1280,
@@ -295,7 +295,7 @@ main :: proc() {
 toggle_theme_action :: proc(user_data: rawptr) {
 	_ = user_data
 	map_state.dark = !map_state.dark
-	fit.Set_Theme(&app, fit.Theme_Dark() if map_state.dark else fit.Theme_Light())
+	fit.set_theme(&app, fit.theme_dark() if map_state.dark else fit.theme_light())
 }
 
 select_stage_action :: proc(user_data: rawptr, tag: u64) {
@@ -321,10 +321,10 @@ reset_action :: proc(user_data: rawptr) {
 
 map_build :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	_ = user_data
-	root := fit.Column(builder, {gap = .SM, padding = .LG})
-	header := fit.Row(root, {gap = .SM, align = .Center})
-	fit.Label(header, "INGOT API MAP", {role = .Title, track = fit.Grow()})
-	fit.Button(
+	root := fit.column(builder, {gap = .SM, padding = .LG})
+	header := fit.row(root, {gap = .SM, align = .Center})
+	fit.label(header, "INGOT API MAP", {role = .Title, track = fit.grow()})
+	fit.button(
 		header,
 		"theme",
 		"Light" if map_state.dark else "Dark",
@@ -332,19 +332,19 @@ map_build :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	)
 	map_stage_controls(root)
 	map_playback_controls(root)
-	fit.Custom(
+	fit.custom(
 		root,
 		{measure = map_measure, render = map_render},
-		{size = {width = fit.Grow(), height = fit.Grow()}},
+		{size = {width = fit.grow(), height = fit.grow()}},
 	)
 }
 
 map_stage_controls :: proc(parent: fit.Parent) {
 	assert(map_state.target_stage >= 0 && map_state.target_stage <= STAGE_COUNT)
-	controls := fit.Flow(parent, {gap_x = .XS, gap_y = .XS})
+	controls := fit.flow(parent, {gap_x = .XS, gap_y = .XS})
 	for stage in 0 ..< STAGE_COUNT {
 		value := i32(stage + 1)
-		fit.Button(
+		fit.button(
 			controls,
 			u64(value),
 			STAGE_LABELS[stage],
@@ -358,15 +358,15 @@ map_stage_controls :: proc(parent: fit.Parent) {
 
 map_playback_controls :: proc(parent: fit.Parent) {
 	assert(map_state.target_stage >= 0 && map_state.target_stage <= STAGE_COUNT)
-	controls := fit.Flow(parent, {gap_x = .XS, gap_y = .XS})
-	fit.Button(
+	controls := fit.flow(parent, {gap_x = .XS, gap_y = .XS})
+	fit.button(
 		controls,
 		"play",
 		"Pause" if map_state.playing else "Play path",
 		fit.action(play_action),
 	)
-	fit.Button(controls, "reset", "Reset", fit.action(reset_action))
-	fit.Checkbox(controls, "motion", "Reduced motion", &map_state.reduced_motion)
+	fit.button(controls, "reset", "Reset", fit.action(reset_action))
+	fit.checkbox(controls, "motion", "Reduced motion", &map_state.reduced_motion)
 }
 
 map_select_stage :: proc(stage: i32) {
@@ -389,15 +389,15 @@ map_measure :: proc(constraints: fit.Constraints, user_data: rawptr) -> fit.Size
 
 map_metrics :: proc(surface: ^fit.Surface) -> Map_Metrics {
 	assert(surface != nil, "api map metrics: nil surface")
-	title_h := fit.Surface_Text_Line_Height(surface, .Title)
+	title_h := fit.surface_text_line_height(surface, .Title)
 	metrics := Map_Metrics {
-		gap        = fit.Surface_Space(surface, .SM),
-		margin     = fit.Px(surface, 26),
-		gutter_w   = fit.Px(surface, 104),
-		strip_h    = title_h + fit.Surface_Space(surface, .XS) * 2 + fit.Px(surface, 6),
-		card_h     = fit.Px(surface, 80),
-		narrow_max = fit.Px(surface, NARROW_WIDTH_MAX),
-		wide_min   = fit.Px(surface, WIDE_WIDTH_MIN),
+		gap        = fit.surface_space(surface, .SM),
+		margin     = fit.px(surface, 26),
+		gutter_w   = fit.px(surface, 104),
+		strip_h    = title_h + fit.surface_space(surface, .XS) * 2 + fit.px(surface, 6),
+		card_h     = fit.px(surface, 80),
+		narrow_max = fit.px(surface, NARROW_WIDTH_MAX),
+		wide_min   = fit.px(surface, WIDE_WIDTH_MIN),
 	}
 	assert(metrics.gap > 0 && metrics.margin > 0 && metrics.gutter_w > 0)
 	assert(metrics.strip_h > 0 && metrics.card_h > 0)
@@ -638,12 +638,12 @@ point_distance :: proc(from, to: fit.Point) -> f32 {
 map_render :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: rawptr) -> bool {
 	_ = user_data
 	assert(surface != nil && rect.w > 0 && rect.h > 0, "api map render: invalid argument")
-	if fit.Surface_Key_Pressed(surface, .F12) do map_state.debug_on = !map_state.debug_on
+	if fit.surface_key_pressed(surface, .F12) do map_state.debug_on = !map_state.debug_on
 	map_animate(surface)
 	metrics := map_metrics(surface)
 	layout := map_layout(rect, metrics)
-	theme := fit.Surface_Theme_Tokens(surface)
-	fit.Surface_Fill_Rect(surface, rect, theme.background_app)
+	theme := fit.surface_theme_tokens(surface)
+	fit.surface_fill_rect(surface, rect, theme.background_app)
 	// Submission order paints back-to-front: lanes, connectors, cards, then
 	// the active overlay. Claimed layers would occlude Surface_Interact.
 	map_render_strip(surface, &layout)
@@ -652,7 +652,7 @@ map_render :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: rawptr) -> 
 	map_render_nodes(surface, &layout)
 	map_render_active(surface, &layout)
 	if map_state.debug_on {
-		_ = fit.Surface_Debug_Overlay(surface, rect.x + rect.w - 290, rect.y + 10)
+		_ = fit.surface_debug_overlay(surface, rect.x + rect.w - 290, rect.y + 10)
 	}
 	return false
 }
@@ -660,7 +660,7 @@ map_render :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: rawptr) -> 
 map_animate :: proc(surface: ^fit.Surface) {
 	assert(surface != nil, "api map animation: nil surface")
 	assert(map_state.progress >= 0 && map_state.progress <= 1)
-	delta := clamp(fit.Surface_Frame_Time(surface), 0, 0.1)
+	delta := clamp(fit.surface_frame_time(surface), 0, 0.1)
 	if map_state.reduced_motion && map_state.progress < 1 do map_state.progress = 1
 	if map_state.progress < 1 {
 		map_state.progress = map_advance_progress(map_state.progress, delta)
@@ -673,7 +673,7 @@ map_animate :: proc(surface: ^fit.Surface) {
 			map_select_stage(next)
 		}
 	}
-	if map_state.progress < 1 || map_state.playing do fit.Request_Redraw(surface)
+	if map_state.progress < 1 || map_state.playing do fit.request_redraw(surface)
 }
 
 // map_render_strip is the in-map status readout: stage title, caption, and a
@@ -682,16 +682,16 @@ map_animate :: proc(surface: ^fit.Surface) {
 map_render_strip :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(surface != nil && layout != nil, "api map strip: invalid argument")
 	assert(layout.strip.w > 0 && layout.strip.h > 0, "api map strip: invalid rect")
-	theme := fit.Surface_Theme_Tokens(surface)
+	theme := fit.surface_theme_tokens(surface)
 	strip := layout.strip
 	stage := map_state.target_stage
 	title_ink := fit.Ink.Accent if stage > 0 else fit.Ink.Secondary
-	fit.Surface_Text(surface, STAGE_TITLES[stage], strip.x, strip.y, .Title, title_ink)
-	title_h := fit.Surface_Text_Line_Height(surface, .Title)
-	caption_x := strip.x + fit.Px(surface, 130)
-	caption_y := strip.y + (title_h - fit.Surface_Text_Line_Height(surface, .Body)) / 2
-	caption_w := max(strip.w - fit.Px(surface, 130), 1)
-	fit.Surface_Text_Truncated(
+	fit.surface_text(surface, STAGE_TITLES[stage], strip.x, strip.y, .Title, title_ink)
+	title_h := fit.surface_text_line_height(surface, .Title)
+	caption_x := strip.x + fit.px(surface, 130)
+	caption_y := strip.y + (title_h - fit.surface_text_line_height(surface, .Body)) / 2
+	caption_w := max(strip.w - fit.px(surface, 130), 1)
+	fit.surface_text_truncated(
 		surface,
 		STAGE_CAPTIONS[stage],
 		caption_x,
@@ -700,30 +700,30 @@ map_render_strip :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 		.Body,
 		.Secondary,
 	)
-	bar_h := fit.Px(surface, 6)
+	bar_h := fit.px(surface, 6)
 	bar_y := strip.y + strip.h - bar_h
-	seg_gap := fit.Surface_Space(surface, .XS)
+	seg_gap := fit.surface_space(surface, .XS)
 	seg_w := max((strip.w - (PROGRESS_SEGMENTS - 1) * seg_gap) / PROGRESS_SEGMENTS, 1)
 	for segment in 0 ..< i32(PROGRESS_SEGMENTS) {
 		seg_x := strip.x + segment * (seg_w + seg_gap)
-		fit.Surface_Fill_Rect(surface, {seg_x, bar_y, seg_w, bar_h}, theme.border)
+		fit.surface_fill_rect(surface, {seg_x, bar_y, seg_w, bar_h}, theme.border)
 		amount := map_edge_amount(segment + 1)
 		if amount <= 0 do continue
 		fill_w := i32(f32(seg_w) * amount)
 		if fill_w <= 0 do continue
-		fit.Surface_Fill_Rect(surface, {seg_x, bar_y, fill_w, bar_h}, theme.foreground_accent)
+		fit.surface_fill_rect(surface, {seg_x, bar_y, fill_w, bar_h}, theme.foreground_accent)
 	}
 }
 
 map_render_lanes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(surface != nil && layout != nil, "api map lanes: invalid argument")
 	assert(layout.columns > 1, "api map lanes: narrow layout has no lanes")
-	note_h := fit.Surface_Text_Line_Height(surface, .Note)
-	inset := fit.Surface_Space(surface, .SM)
+	note_h := fit.surface_text_line_height(surface, .Note)
+	inset := fit.surface_space(surface, .SM)
 	for lane in 0 ..< i32(LANE_COUNT) {
 		bounds := layout.lane_bounds[lane]
-		fit.Surface_Draw_Surface(surface, rect_float(bounds), .Panel, .Rest, .MD)
-		fit.Surface_Text(
+		fit.surface_draw_surface(surface, rect_float(bounds), .Panel, .Rest, .MD)
+		fit.surface_text(
 			surface,
 			LANE_LABELS[lane],
 			bounds.x + inset,
@@ -745,13 +745,13 @@ map_render_edges :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 map_draw_edge :: proc(surface: ^fit.Surface, path: ^Edge_Path, amount: f32) {
 	assert(surface != nil && path != nil, "api map draw edge: invalid argument")
 	assert(amount >= 0 && amount <= 1, "api map draw edge: invalid amount")
-	theme := fit.Surface_Theme_Tokens(surface)
+	theme := fit.surface_theme_tokens(surface)
 	for index in 0 ..< path.count - 1 {
-		fit.Surface_Line(
+		fit.surface_line(
 			surface,
 			path.points[index],
 			path.points[index + 1],
-			fit.Px(surface, 2.0),
+			fit.px(surface, 2.0),
 			theme.border,
 		)
 	}
@@ -768,11 +768,11 @@ map_draw_edge :: proc(surface: ^fit.Surface, path: ^Edge_Path, amount: f32) {
 			fraction := clamp((target - walked) / segment, 0, 1)
 			finish = point_lerp(path.points[index], path.points[index + 1], fraction)
 		}
-		fit.Surface_Line(
+		fit.surface_line(
 			surface,
 			path.points[index],
 			finish,
-			fit.Px(surface, 3.0),
+			fit.px(surface, 3.0),
 			theme.foreground_accent,
 		)
 		if partial do break
@@ -789,22 +789,22 @@ map_draw_arrowhead :: proc(surface: ^fit.Surface, path: ^Edge_Path, color: fit.C
 	length := point_distance(tail, tip)
 	if length <= 0 do return
 	direction := fit.Point{(tip.x - tail.x) / length, (tip.y - tail.y) / length}
-	size := fit.Px(surface, 7.0)
+	size := fit.px(surface, 7.0)
 	spread: f32 = 0.45
 	sin_s := math.sin(spread)
 	cos_s := math.cos(spread)
 	back := fit.Point{-direction.x, -direction.y}
 	left := fit.Point{back.x * cos_s - back.y * sin_s, back.x * sin_s + back.y * cos_s}
 	right := fit.Point{back.x * cos_s + back.y * sin_s, -back.x * sin_s + back.y * cos_s}
-	thickness := fit.Px(surface, 2.0)
-	fit.Surface_Line(
+	thickness := fit.px(surface, 2.0)
+	fit.surface_line(
 		surface,
 		tip,
 		{tip.x + left.x * size, tip.y + left.y * size},
 		thickness,
 		color,
 	)
-	fit.Surface_Line(
+	fit.surface_line(
 		surface,
 		tip,
 		{tip.x + right.x * size, tip.y + right.y * size},
@@ -839,11 +839,11 @@ map_tier_ink :: proc(tier: Api_Tier) -> fit.Ink {
 map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	assert(surface != nil && layout != nil, "api map nodes: invalid argument")
 	map_state.hovered_node = -1
-	inset := fit.Surface_Space(surface, .SM)
-	theme := fit.Surface_Theme_Tokens(surface)
+	inset := fit.surface_space(surface, .SM)
+	theme := fit.surface_theme_tokens(surface)
 	for node, index in MAP_NODES {
 		rect := layout.nodes[index]
-		interaction := fit.Surface_Interact(surface, rect_float(rect))
+		interaction := fit.surface_interact(surface, rect_float(rect))
 		phase := map_node_phase(node.stage)
 		state := fit.Visual_State.Rest
 		border := fit.Border.Hairline
@@ -867,16 +867,16 @@ map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 		if interaction.hovered {
 			map_state.hovered_node = i32(index)
 			state = .Hover
-			if node.tier != .Internal do fit.Surface_Request_Cursor(surface, .Pointing_Hand)
+			if node.tier != .Internal do fit.surface_request_cursor(surface, .Pointing_Hand)
 		}
-		fit.Surface_Draw_Surface(surface, rect_float(rect), .Card, state, .MD, border, .Lifted)
+		fit.surface_draw_surface(surface, rect_float(rect), .Card, state, .MD, border, .Lifted)
 		if phase == .Done || phase == .Active {
-			bar := fit.Rect{rect.x + 1, rect.y + 2, fit.Px(surface, 3), rect.h - 4}
-			fit.Surface_Fill_Rect(surface, bar, theme.foreground_accent)
+			bar := fit.Rect{rect.x + 1, rect.y + 2, fit.px(surface, 3), rect.h - 4}
+			fit.surface_fill_rect(surface, bar, theme.foreground_accent)
 		}
-		badge_w := fit.Px(surface, 74)
+		badge_w := fit.px(surface, 74)
 		title_w := max(rect.w - inset * 3 - badge_w, 1)
-		fit.Surface_Text_Truncated(
+		fit.surface_text_truncated(
 			surface,
 			node.title,
 			rect.x + inset,
@@ -886,7 +886,7 @@ map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 			title_ink,
 		)
 		if layout.columns > 1 {
-			fit.Surface_Text(
+			fit.surface_text(
 				surface,
 				TIER_LABELS[node.tier],
 				rect.x + rect.w - badge_w,
@@ -895,11 +895,11 @@ map_render_nodes :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 				map_tier_ink(node.tier),
 			)
 		}
-		fit.Surface_Text_Truncated(
+		fit.surface_text_truncated(
 			surface,
 			node.contract if interaction.hovered else node.detail,
 			rect.x + inset,
-			rect.y + inset + fit.Surface_Text_Line_Height(surface, .Title),
+			rect.y + inset + fit.surface_text_line_height(surface, .Title),
 			max(rect.w - inset * 2, 1),
 			.Note,
 			detail_ink,
@@ -918,9 +918,9 @@ map_render_tier_chip :: proc(surface: ^fit.Surface, layout: ^Map_Layout, index: 
 	assert(index >= 0 && index < NODE_COUNT, "api map chip: invalid index")
 	node := MAP_NODES[index]
 	rect := layout.nodes[index]
-	inset := fit.Surface_Space(surface, .SM)
-	chip_w := fit.Px(surface, 92)
-	fit.Surface_Text(
+	inset := fit.surface_space(surface, .SM)
+	chip_w := fit.px(surface, 92)
+	fit.surface_text(
 		surface,
 		TIER_LABELS[node.tier],
 		rect.x + rect.w - chip_w,
@@ -960,14 +960,14 @@ map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 	drawn_nodes: i32
 	for node, index in MAP_NODES {
 		if node.stage != stage do continue
-		ring := rect_expand(layout.nodes[index], fit.Surface_Space(surface, .XS) / 2)
-		fit.Surface_Stroke_Rounded_Rect(
+		ring := rect_expand(layout.nodes[index], fit.surface_space(surface, .XS) / 2)
+		fit.surface_stroke_rounded_rect(
 			surface,
 			rect_float(ring),
 			0.12,
 			8,
-			fit.Px(surface, 3.0),
-			fit.Surface_Theme_Tokens(surface).foreground_accent,
+			fit.px(surface, 3.0),
+			fit.surface_theme_tokens(surface).foreground_accent,
 		)
 		drawn_nodes += 1
 	}
@@ -980,11 +980,11 @@ map_render_active :: proc(surface: ^fit.Surface, layout: ^Map_Layout) {
 		if edge.stage != stage do continue
 		path := map_edge_path(layout, i32(index))
 		pulse := path_point(&path, map_ease(map_state.progress))
-		fit.Surface_Fill_Circle(
+		fit.surface_fill_circle(
 			surface,
 			pulse,
-			fit.Px(surface, 6.0),
-			fit.Surface_Theme_Tokens(surface).foreground_accent,
+			fit.px(surface, 6.0),
+			fit.surface_theme_tokens(surface).foreground_accent,
 		)
 		drawn_edges += 1
 	}

@@ -155,7 +155,7 @@ main :: proc() {
 	}
 	flags: fit.Window_Flags = {.Resizable, .Vsync}
 	when ODIN_OS == .Darwin do flags += {.High_Dpi}
-	_ = fit.Run(
+	_ = fit.run(
 		&host.app,
 		{
 			width = 720,

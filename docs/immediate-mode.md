@@ -189,7 +189,7 @@ frame that accepts activation. They may mutate caller-owned state or enqueue
 work, but cannot revise the bounded description being consumed. State-dependent
 additions, removals, and ordering are evaluated by a later build.
 
-`fit.Button_Delayed` with caller-owned `fit.Signal` is the advanced delayed
+`fit.button_delayed` with caller-owned `fit.Signal` is the advanced delayed
 alternative. Render records activation and a later build consumes it, allowing
 Builder-time structural branching without a retained result map or second build.
 

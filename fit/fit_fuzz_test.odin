@@ -64,21 +64,21 @@ fit_fuzz_action :: proc(user_data: rawptr) {
 
 @(private = "file")
 fit_fuzz_track :: proc(p: ^fuzzx.Prng) -> Track {
-	if fuzzx.int_range(p, 0, 2) == 0 do return Fixed(i32(fuzzx.int_range(p, 0, 65)))
-	return Fit(i32(fuzzx.int_range(p, 0, 65)))
+	if fuzzx.int_range(p, 0, 2) == 0 do return fixed(i32(fuzzx.int_range(p, 0, 65)))
+	return fit(i32(fuzzx.int_range(p, 0, 65)))
 }
 
 @(private = "file")
 fit_fuzz_root :: proc(builder: ^Builder, p: ^fuzzx.Prng) -> Parent {
 	switch fuzzx.int_range(p, 0, 4) {
 	case 0:
-		return Row(builder, {gap = .XS, padding = .XS, track = fit_fuzz_track(p)})
+		return row(builder, {gap = .XS, padding = .XS, track = fit_fuzz_track(p)})
 	case 1:
-		return Column(builder, {gap = .SM, padding = .XS, track = fit_fuzz_track(p)})
+		return column(builder, {gap = .SM, padding = .XS, track = fit_fuzz_track(p)})
 	case 2:
-		return Flow(builder, {gap_x = .XS, gap_y = .SM, padding = .XS, track = fit_fuzz_track(p)})
+		return flow(builder, {gap_x = .XS, gap_y = .SM, padding = .XS, track = fit_fuzz_track(p)})
 	case 3:
-		return Grid(builder, {columns = 2, gap_x = .XS, gap_y = .SM, padding = .XS})
+		return grid(builder, {columns = 2, gap_x = .XS, gap_y = .SM, padding = .XS})
 	}
 	unreachable()
 }
@@ -88,13 +88,13 @@ fit_fuzz_container :: proc(parent: Parent, p: ^fuzzx.Prng) -> Parent {
 	assert(parent.builder != nil && p != nil, "fit fuzz container: invalid argument")
 	switch fuzzx.int_range(p, 0, 4) {
 	case 0:
-		return Row(parent, {gap = .XS, padding = .XS, track = fit_fuzz_track(p)})
+		return row(parent, {gap = .XS, padding = .XS, track = fit_fuzz_track(p)})
 	case 1:
-		return Column(parent, {gap = .SM, padding = .XS, track = fit_fuzz_track(p)})
+		return column(parent, {gap = .SM, padding = .XS, track = fit_fuzz_track(p)})
 	case 2:
-		return Flow(parent, {gap_x = .XS, gap_y = .SM, padding = .XS, track = fit_fuzz_track(p)})
+		return flow(parent, {gap_x = .XS, gap_y = .SM, padding = .XS, track = fit_fuzz_track(p)})
 	case 3:
-		return Grid(
+		return grid(
 			parent,
 			{
 				columns = i32(fuzzx.int_range(p, 1, 5)),
@@ -128,7 +128,7 @@ fit_fuzz_leaf :: proc(
 	index := int(key % FIT_FUZZ_NODE_LIMIT)
 	switch fuzzx.int_range(p, 0, 7) {
 	case 0:
-		Label(
+		label(
 			parent,
 			"fuzz label alpha beta",
 			{role = .Body, wrap = fuzzx.int_range(p, 0, 2) == 0, track = fit_fuzz_track(p)},
@@ -136,17 +136,17 @@ fit_fuzz_leaf :: proc(
 	case 1:
 		switch fuzzx.int_range(p, 0, 4) {
 		case 0:
-			Button(parent, key + 1, "Fuzz button", &activations[index])
+			button(parent, key + 1, "Fuzz button", &activations[index])
 		case 1:
-			_ = Button_Delayed(parent, key + 1, "Fuzz button", &signals[index])
+			_ = button_delayed(parent, key + 1, "Fuzz button", &signals[index])
 		case 2:
-			Button(parent, key + 1, "Fuzz button", action(fit_fuzz_action, counts))
+			button(parent, key + 1, "Fuzz button", action(fit_fuzz_action, counts))
 		case 3:
-			Button(parent, key + 1, "Fuzz button")
+			button(parent, key + 1, "Fuzz button")
 		}
 	case 2:
 		counts.customs += 1
-		Custom(
+		custom(
 			parent,
 			{
 				measure = fit_fuzz_custom_measure,
@@ -156,13 +156,13 @@ fit_fuzz_leaf :: proc(
 			{track = fit_fuzz_track(p), activated = &activations[index]},
 		)
 	case 3:
-		Checkbox(parent, key + 1, "Fuzz checkbox", &activations[index])
+		checkbox(parent, key + 1, "Fuzz checkbox", &activations[index])
 	case 4:
-		Radio(parent, key + 1, "Fuzz radio", &selections[index], i32(index))
+		radio(parent, key + 1, "Fuzz radio", &selections[index], i32(index))
 	case 5:
-		Slider(parent, key + 1, &values[index], 0, f32(FIT_FUZZ_NODE_LIMIT), 1, "Fuzz slider")
+		slider(parent, key + 1, &values[index], 0, f32(FIT_FUZZ_NODE_LIMIT), 1, "Fuzz slider")
 	case 6:
-		Toggle(parent, key + 1, "Fuzz toggle", &activations[index])
+		toggle(parent, key + 1, "Fuzz toggle", &activations[index])
 	}
 }
 
@@ -194,8 +194,17 @@ fit_fuzz_description :: proc(
 			parent = child
 		}
 		if nodes + 2 <= target && fuzzx.int_range(p, 0, 8) == 0 {
-			attachment := Attachment(parent, {target_kind = .Viewport, z = Z_Order(200)})
-			fit_fuzz_leaf(attachment, p, counts, activations, signals, selections, values, key)
+			attachment_parent := attachment(parent, {target_kind = .Viewport, z = Z_Order(200)})
+			fit_fuzz_leaf(
+				attachment_parent,
+				p,
+				counts,
+				activations,
+				signals,
+				selections,
+				values,
+				key,
+			)
 			nodes += 2
 		} else {
 			fit_fuzz_leaf(parent, p, counts, activations, signals, selections, values, key)
@@ -217,10 +226,10 @@ fit_fuzz_select_storage :: proc(
 	external := fuzzx.int_range(p, 0, 2) == 0
 	if external {
 		capacity := fuzzx.int_range(p, FIT_FUZZ_NODE_LIMIT, len(nodes) + 1)
-		Set_Storage(builder, {nodes = nodes[:capacity], outputs = outputs[:capacity]})
+		set_storage(builder, {nodes = nodes[:capacity], outputs = outputs[:capacity]})
 		testing.expectf(
 			t,
-			Storage_Capacity(builder) == capacity,
+			storage_capacity(builder) == capacity,
 			"seed %d iteration %d: external storage capacity mismatch",
 			seed,
 			iteration,
@@ -228,7 +237,7 @@ fit_fuzz_select_storage :: proc(
 	} else {
 		testing.expectf(
 			t,
-			Storage_Capacity(builder) == int(STORAGE_NODE_DEFAULT),
+			storage_capacity(builder) == int(STORAGE_NODE_DEFAULT),
 			"seed %d iteration %d: inline storage capacity mismatch",
 			seed,
 			iteration,
@@ -268,7 +277,7 @@ fit_fuzz_iteration :: proc(t: ^testing.T, p: ^fuzzx.Prng, seed: u64, iteration: 
 	selections: [FIT_FUZZ_NODE_LIMIT]i32
 	values: [FIT_FUZZ_NODE_LIMIT]f32
 	fit_fuzz_description(&builder, p, &counts, &activations, &signals, &selections, &values)
-	size := Measure(&builder)
+	size := measure(&builder)
 	testing.expectf(
 		t,
 		size.w >= 0 && size.h >= 0,
@@ -277,9 +286,9 @@ fit_fuzz_iteration :: proc(t: ^testing.T, p: ^fuzzx.Prng, seed: u64, iteration: 
 		iteration,
 	)
 	if iteration % 2 == 0 {
-		Render_At(&builder, {0, 0, max(size.w, 1), max(size.h, 1)})
+		render_at(&builder, {0, 0, max(size.w, 1), max(size.h, 1)})
 	} else {
-		rect := Render(&builder)
+		rect := render(&builder)
 		testing.expectf(
 			t,
 			rect.w >= 0 && rect.h >= 0,
@@ -308,10 +317,10 @@ fit_fuzz_iteration :: proc(t: ^testing.T, p: ^fuzzx.Prng, seed: u64, iteration: 
 	)
 	builder_close(&builder)
 	if external {
-		Reset_Storage(&builder)
+		reset_storage(&builder)
 		testing.expectf(
 			t,
-			Storage_Capacity(&builder) == int(STORAGE_NODE_DEFAULT),
+			storage_capacity(&builder) == int(STORAGE_NODE_DEFAULT),
 			"seed %d iteration %d: storage reset failed",
 			seed,
 			iteration,

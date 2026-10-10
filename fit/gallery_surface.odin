@@ -22,17 +22,17 @@ Settings_Panel_Result :: struct {
 	dismissed: bool,
 }
 
-Surface_App_Header :: proc(surface: ^Surface, title: cstring, width: i32) -> i32 {
+surface_app_header :: proc(surface: ^Surface, title: cstring, width: i32) -> i32 {
 	u := surface_ui(surface)
 	return ui.draw_app_header(u.frame, title, width)
 }
 
-Surface_Debug_Overlay :: proc(surface: ^Surface, x, y: i32) -> i32 {
+surface_debug_overlay :: proc(surface: ^Surface, x, y: i32) -> i32 {
 	u := surface_ui(surface)
 	return ui.draw_debug_overlay(u.frame, x, y)
 }
 
-Surface_Scale_Settings :: proc(
+surface_scale_settings :: proc(
 	surface: ^Surface,
 	selected: ^int,
 	current: f32,
@@ -43,17 +43,17 @@ Surface_Scale_Settings :: proc(
 	return {result.applied, result.ui_scale, result.dismissed}
 }
 
-Surface_Section_Header :: proc(surface: ^Surface, rect: Rect, label: string) -> i32 {
+surface_section_header :: proc(surface: ^Surface, rect: Rect, label: string) -> i32 {
 	u := surface_ui(surface)
-	return ui.section_header_at(u.frame, to_rect(rect), label)
+	return ui.section_header_at(u.frame, rect, label)
 }
 
-Surface_Section_Header_Height :: proc(surface: ^Surface) -> i32 {
+surface_section_header_height :: proc(surface: ^Surface) -> i32 {
 	u := surface_ui(surface)
 	return ui.section_header_height(u.frame)
 }
 
-Surface_Card_Background :: proc(
+surface_card_background :: proc(
 	surface: ^Surface,
 	rect: Rect,
 	background: Color,
@@ -61,73 +61,42 @@ Surface_Card_Background :: proc(
 	accent_width: i32 = 0,
 ) {
 	u := surface_ui(surface)
-	ui.card_bg_at(u.frame, to_rect(rect), ui.Color(background), ui.Color(accent), accent_width)
+	ui.card_bg_at(u.frame, rect, ui.Color(background), ui.Color(accent), accent_width)
 }
 
-Surface_List_Row_Background :: proc(surface: ^Surface, rect: Rect, selected, hovered: bool) {
+surface_list_row_background :: proc(surface: ^Surface, rect: Rect, selected, hovered: bool) {
 	u := surface_ui(surface)
-	ui.list_row_bg_at(u.frame, to_rect(rect), selected, hovered)
+	ui.list_row_bg_at(u.frame, rect, selected, hovered)
 }
 
-Surface_Listbox_Begin :: proc(
+surface_listbox_begin :: proc(
 	surface: ^Surface,
 	state: ^Listbox_State,
 	config: Listbox_Config,
 ) -> Listbox_Result {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Listbox_Begin: nil state")
-	inner := ui.Listbox_Config {
-		rect         = to_rect(config.rect),
-		label        = config.label,
-		stable_id    = config.stable_id,
-		count        = config.count,
-		selected     = config.selected,
-		wrap         = config.wrap,
-		hover_select = config.hover_select,
-		keys         = config.keys,
-		page_rows    = config.page_rows,
-	}
-	return from_listbox_result(ui.listbox_begin(u.frame, &state.inner, inner))
+	assert(state != nil, "fit.surface_listbox_begin: nil state")
+	return ui.listbox_begin(u.frame, &state.inner, config)
 }
 
-Surface_Selectable_Row :: proc(
+surface_selectable_row :: proc(
 	surface: ^Surface,
 	state: ^Listbox_State,
 	config: Listbox_Config,
 	row: Selectable_Row_Config,
 ) -> Selectable_Row_Result {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Selectable_Row: nil state")
-	inner_config := ui.Listbox_Config {
-		rect         = to_rect(config.rect),
-		label        = config.label,
-		stable_id    = config.stable_id,
-		count        = config.count,
-		selected     = config.selected,
-		wrap         = config.wrap,
-		hover_select = config.hover_select,
-		keys         = config.keys,
-		page_rows    = config.page_rows,
-	}
-	inner_row := ui.Selectable_Row_Config {
-		rect        = to_rect(row.rect),
-		label       = row.label,
-		stable_id   = row.stable_id,
-		index       = row.index,
-		disabled    = row.disabled,
-		description = row.description,
-	}
-	return from_selectable_row_result(
-		ui.selectable_row(u.frame, &state.inner, inner_config, inner_row),
-	)
+	assert(state != nil, "fit.surface_selectable_row: nil state")
+	return ui.selectable_row(u.frame, &state.inner, config, row)
 }
 
-Surface_Listbox_End :: proc(surface: ^Surface, state: ^Listbox_State) {
+surface_listbox_end :: proc(surface: ^Surface, state: ^Listbox_State) {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Listbox_End: nil state")
+	assert(state != nil, "fit.surface_listbox_end: nil state")
 	ui.listbox_end(u.frame, &state.inner)
 }
 
+@(private = "file")
 modal_config :: proc(surface: ^Surface, size: [2]i32, options: Modal_Options) -> ui.Modal_Config {
 	u := surface_ui(surface)
 	dismiss: ui.Modal_Dismiss_Policy
@@ -135,11 +104,11 @@ modal_config :: proc(surface: ^Surface, size: [2]i32, options: Modal_Options) ->
 	if options.dismiss_outside do dismiss += {.Outside_Click}
 	host := ui.frame_viewport(u.frame)
 	if options.scope == .Host {
-		assert(options.host.w > 0 && options.host.h > 0, "Fit modal: empty host")
-		host = to_rect(options.host)
+		assert(options.host.w > 0 && options.host.h > 0, "fit modal: empty host")
+		host = options.host
 	}
 	return {
-		placement = ui.Modal_Placement(options.placement),
+		placement = options.placement,
 		size = size,
 		screen = host,
 		dismiss = dismiss,
@@ -150,23 +119,18 @@ modal_config :: proc(surface: ^Surface, size: [2]i32, options: Modal_Options) ->
 	}
 }
 
-Surface_Modal_Open :: proc(
+surface_modal_open :: proc(
 	surface: ^Surface,
 	state: ^Modal_State,
 	id: Modal_Id,
 	options: Modal_Options = {dismiss_escape = true},
 ) -> bool {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Modal_Open: nil state")
-	return ui.modal_open(
-		u.frame,
-		&state.inner,
-		ui.Modal_Id(id),
-		modal_config(surface, {1, 1}, options),
-	)
+	assert(state != nil, "fit.surface_modal_open: nil state")
+	return ui.modal_open(u.frame, &state.inner, id, modal_config(surface, {1, 1}, options))
 }
 
-Surface_Modal_Begin :: proc(
+surface_modal_begin :: proc(
 	surface: ^Surface,
 	state: ^Modal_State,
 	title: string,
@@ -174,19 +138,17 @@ Surface_Modal_Begin :: proc(
 	options: Modal_Options = {dismiss_escape = true},
 ) -> Rect {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Modal_Begin: nil state")
-	return from_rect(
-		ui.modal_begin(u.frame, &state.inner, title, modal_config(surface, size, options)),
-	)
+	assert(state != nil, "fit.surface_modal_begin: nil state")
+	return ui.modal_begin(u.frame, &state.inner, title, modal_config(surface, size, options))
 }
 
-Surface_Modal_End :: proc(surface: ^Surface, state: ^Modal_State) {
+surface_modal_end :: proc(surface: ^Surface, state: ^Modal_State) {
 	_ = surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Modal_End: nil state")
+	assert(state != nil, "fit.surface_modal_end: nil state")
 	ui.modal_end(&state.inner)
 }
 
-Surface_Modal_Builder_With :: proc(
+surface_modal_builder_with :: proc(
 	surface: ^Surface,
 	state: ^Modal_State,
 	title: string,
@@ -197,58 +159,44 @@ Surface_Modal_Builder_With :: proc(
 	options: Modal_Options = {dismiss_escape = true},
 	padding: i32 = 8,
 ) -> Modal_Close_Reason {
-	assert(surface != nil && state != nil, "Fit modal builder: invalid state")
-	assert(builder != nil && draw != nil, "Fit modal builder: invalid body")
-	assert(padding >= 0, "Fit modal builder: negative padding")
-	body := Surface_Modal_Begin(surface, state, title, size, options)
-	content := from_rect(ui.rect_inset(to_rect(body), ui.insets(padding)))
-	Surface_Builder_With(surface, builder, content, draw, user_data)
-	Surface_Modal_End(surface, state)
-	return Modal_Take_Close(state)
+	assert(surface != nil && state != nil, "fit modal builder: invalid state")
+	assert(builder != nil && draw != nil, "fit modal builder: invalid body")
+	assert(padding >= 0, "fit modal builder: negative padding")
+	body := surface_modal_begin(surface, state, title, size, options)
+	content := ui.rect_inset(body, ui.insets(padding))
+	surface_builder_with(surface, builder, content, draw, user_data)
+	surface_modal_end(surface, state)
+	return modal_take_close(state)
 }
 
-popup_config :: proc(options: Popup_Options) -> ui.Popup_Config {
-	return {
-		anchor = to_rect(options.anchor),
-		viewport = to_rect(options.viewport),
-		preferred_size = options.preferred_size,
-		placement = ui.Popup_Placement(options.placement),
-		dismiss_escape = options.dismiss_escape,
-		dismiss_outside = options.dismiss_outside,
-		focus_scope = options.focus_scope,
-		initial_focus = options.initial_focus,
-		restore_focus = options.restore_focus,
-	}
-}
-
-Surface_Popup_Open :: proc(
+surface_popup_open :: proc(
 	surface: ^Surface,
 	state: ^Popup_State,
 	id: Popup_Id,
 	options: Popup_Options,
 ) {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Popup_Open: nil state")
-	ui.popup_open(u.frame, &state.inner, ui.Popup_Id(id), popup_config(options))
+	assert(state != nil, "fit.surface_popup_open: nil state")
+	ui.popup_open(u.frame, &state.inner, id, options)
 }
 
-Surface_Popup_Begin :: proc(
+surface_popup_begin :: proc(
 	surface: ^Surface,
 	state: ^Popup_State,
 	options: Popup_Options,
 ) -> Rect {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Popup_Begin: nil state")
-	return from_rect(ui.popup_begin(u.frame, &state.inner, popup_config(options)))
+	assert(state != nil, "fit.surface_popup_begin: nil state")
+	return ui.popup_begin(u.frame, &state.inner, options)
 }
 
-Surface_Popup_End :: proc(surface: ^Surface, state: ^Popup_State) {
+surface_popup_end :: proc(surface: ^Surface, state: ^Popup_State) {
 	_ = surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Popup_End: nil state")
+	assert(state != nil, "fit.surface_popup_end: nil state")
 	ui.popup_end(&state.inner)
 }
 
-Surface_Popup_Builder_With :: proc(
+surface_popup_builder_with :: proc(
 	surface: ^Surface,
 	state: ^Popup_State,
 	builder: ^Builder,
@@ -256,65 +204,65 @@ Surface_Popup_Builder_With :: proc(
 	user_data: rawptr = nil,
 	options: Popup_Options,
 ) -> Popup_Close_Reason {
-	assert(surface != nil && state != nil, "Fit popup builder: invalid state")
-	assert(builder != nil && draw != nil, "Fit popup builder: invalid body")
-	body := Surface_Popup_Begin(surface, state, options)
-	Surface_Builder_With(surface, builder, body, draw, user_data)
-	Surface_Popup_End(surface, state)
-	return Popup_Take_Close(state)
+	assert(surface != nil && state != nil, "fit popup builder: invalid state")
+	assert(builder != nil && draw != nil, "fit popup builder: invalid body")
+	body := surface_popup_begin(surface, state, options)
+	surface_builder_with(surface, builder, body, draw, user_data)
+	surface_popup_end(surface, state)
+	return popup_take_close(state)
 }
 
-Region_Id_String :: proc(region: ^Region, key: string) -> Widget_Id {
-	assert(region != nil && region.inner.open, "Fit.Region_Id: region not open")
+region_id_string :: proc(region: ^Region, key: string) -> Widget_Id {
+	assert(region != nil && region.inner.open, "fit.region_id: region not open")
 	return Widget_Id(ui.id(&region.inner, key))
 }
 
-Region_Id_U64 :: proc(region: ^Region, key: u64) -> Widget_Id {
-	assert(region != nil && region.inner.open, "Fit.Region_Id: region not open")
+region_id_u64 :: proc(region: ^Region, key: u64) -> Widget_Id {
+	assert(region != nil && region.inner.open, "fit.region_id: region not open")
 	return Widget_Id(ui.id(&region.inner, key))
 }
 
-Region_Id :: proc {
-	Region_Id_String,
-	Region_Id_U64,
+region_id :: proc {
+	region_id_string,
+	region_id_u64,
 }
 
-Region_Scope_Begin :: proc(region: ^Region, key: string) {
-	assert(region != nil && region.inner.open, "Fit.Region_Scope_Begin: region not open")
+region_scope_begin :: proc(region: ^Region, key: string) {
+	assert(region != nil && region.inner.open, "fit.region_scope_begin: region not open")
 	ui.scope_begin(&region.inner, key)
 }
 
-Region_Scope_End :: proc(region: ^Region) {
-	assert(region != nil && region.inner.open, "Fit.Region_Scope_End: region not open")
+region_scope_end :: proc(region: ^Region) {
+	assert(region != nil && region.inner.open, "fit.region_scope_end: region not open")
 	ui.scope_end(&region.inner)
 }
 
-Region_Padding :: proc(region: ^Region, space: Space) {
-	assert(region != nil && region.inner.open, "Fit.Region_Padding: region not open")
+region_padding :: proc(region: ^Region, space: Space) {
+	assert(region != nil && region.inner.open, "fit.region_padding: region not open")
 	ui.padding(&region.inner, space)
 }
 
-Region_Separator :: proc(region: ^Region) {
-	assert(region != nil && region.inner.open, "Fit.Region_Separator: region not open")
+region_separator :: proc(region: ^Region) {
+	assert(region != nil && region.inner.open, "fit.region_separator: region not open")
 	ui.separator(&region.inner)
 }
 
-Region_Row_Begin :: proc(
+region_row_begin :: proc(
 	region: ^Region,
 	height: i32,
 	gap: Space = .None,
 	align: Cross_Align = .Stretch,
 ) {
-	assert(region != nil && region.inner.open, "Fit.Region_Row_Begin: region not open")
+	assert(region != nil && region.inner.open, "fit.region_row_begin: region not open")
 	ui.row_begin(&region.inner, height, gap, align)
 }
 
-Region_Row_End :: proc(region: ^Region) {
-	assert(region != nil && region.inner.open, "Fit.Region_Row_End: region not open")
+region_row_end :: proc(region: ^Region) {
+	assert(region != nil && region.inner.open, "fit.region_row_end: region not open")
 	ui.row_end(&region.inner)
 }
 
-Region_Flex_Row_Begin :: proc(
+region_flex_row_begin :: proc(
 	region: ^Region,
 	height: i32,
 	tracks: []Track,
@@ -322,69 +270,69 @@ Region_Flex_Row_Begin :: proc(
 	align: Cross_Align = .Stretch,
 	justify: Main_Align = .Start,
 ) {
-	assert(region != nil && region.inner.open, "Fit.Region_Flex_Row_Begin: region not open")
-	assert(len(tracks) <= ui.MAX_LAYOUT_FLEX, "Fit.Region_Flex_Row_Begin: too many tracks")
+	assert(region != nil && region.inner.open, "fit.region_flex_row_begin: region not open")
+	assert(len(tracks) <= ui.MAX_LAYOUT_FLEX, "fit.region_flex_row_begin: too many tracks")
 	inner: [ui.MAX_LAYOUT_FLEX]ui.Track
-	for track, index in tracks do inner[index] = to_track(track)
+	for track, index in tracks do inner[index] = track
 	ui.flex_row_begin(&region.inner, height, inner[:len(tracks)], gap, align, justify)
 }
 
-Region_Flex_Slot_Next :: proc(region: ^Region, cross_size: i32) -> Rect {
-	assert(region != nil && region.inner.open, "Fit.Region_Flex_Slot_Next: region not open")
-	return from_rect(ui.flex_slot_next(&region.inner, cross_size))
+region_flex_slot_next :: proc(region: ^Region, cross_size: i32) -> Rect {
+	assert(region != nil && region.inner.open, "fit.region_flex_slot_next: region not open")
+	return ui.flex_slot_next(&region.inner, cross_size)
 }
 
-Region_Flex_Row_End :: proc(region: ^Region) {
-	assert(region != nil && region.inner.open, "Fit.Region_Flex_Row_End: region not open")
+region_flex_row_end :: proc(region: ^Region) {
+	assert(region != nil && region.inner.open, "fit.region_flex_row_end: region not open")
 	ui.flex_row_end(&region.inner)
 }
 
-Region_Icon_Button_Id :: proc(region: ^Region, widget: Widget_Id, label: string) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Icon_Button: region not open")
+region_icon_button_id :: proc(region: ^Region, widget: Widget_Id, label: string) -> bool {
+	assert(region != nil && region.inner.open, "fit.region_icon_button: region not open")
 	return ui.icon_btn(&region.inner, ui.Widget_Id(widget), label)
 }
 
-Region_Icon_Button_String :: proc(region: ^Region, key, label: string) -> bool {
-	return Region_Icon_Button_Id(region, Region_Id(region, key), label)
+region_icon_button_string :: proc(region: ^Region, key, label: string) -> bool {
+	return region_icon_button_id(region, region_id(region, key), label)
 }
 
-Region_Icon_Button_U64 :: proc(region: ^Region, key: u64, label: string) -> bool {
-	return Region_Icon_Button_Id(region, Region_Id(region, key), label)
+region_icon_button_u64 :: proc(region: ^Region, key: u64, label: string) -> bool {
+	return region_icon_button_id(region, region_id(region, key), label)
 }
 
-Region_Icon_Button :: proc {
-	Region_Icon_Button_String,
-	Region_Icon_Button_U64,
-	Region_Icon_Button_Id,
+region_icon_button :: proc {
+	region_icon_button_string,
+	region_icon_button_u64,
+	region_icon_button_id,
 }
 
-Region_Back_Button_Id :: proc(region: ^Region, widget: Widget_Id, label: string) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Back_Button: region not open")
+region_back_button_id :: proc(region: ^Region, widget: Widget_Id, label: string) -> bool {
+	assert(region != nil && region.inner.open, "fit.region_back_button: region not open")
 	return ui.back_btn(&region.inner, ui.Widget_Id(widget), label)
 }
 
-Region_Back_Button_String :: proc(region: ^Region, key, label: string) -> bool {
-	return Region_Back_Button_Id(region, Region_Id(region, key), label)
+region_back_button_string :: proc(region: ^Region, key, label: string) -> bool {
+	return region_back_button_id(region, region_id(region, key), label)
 }
 
-Region_Back_Button_U64 :: proc(region: ^Region, key: u64, label: string) -> bool {
-	return Region_Back_Button_Id(region, Region_Id(region, key), label)
+region_back_button_u64 :: proc(region: ^Region, key: u64, label: string) -> bool {
+	return region_back_button_id(region, region_id(region, key), label)
 }
 
-Region_Back_Button :: proc {
-	Region_Back_Button_String,
-	Region_Back_Button_U64,
-	Region_Back_Button_Id,
+region_back_button :: proc {
+	region_back_button_string,
+	region_back_button_u64,
+	region_back_button_id,
 }
 
-Region_Collapsible_Header_Id :: proc(
+region_collapsible_header_id :: proc(
 	region: ^Region,
 	widget: Widget_Id,
 	label: string,
 	open: ^bool,
 	options: Collapsible_Options = {},
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Collapsible_Header: region not open")
+	assert(region != nil && region.inner.open, "fit.region_collapsible_header: region not open")
 	return ui.collapsible_header(
 		&region.inner,
 		ui.Widget_Id(widget),
@@ -394,32 +342,32 @@ Region_Collapsible_Header_Id :: proc(
 	)
 }
 
-Region_Collapsible_Header_String :: proc(
+region_collapsible_header_string :: proc(
 	region: ^Region,
 	key, label: string,
 	open: ^bool,
 	options: Collapsible_Options = {},
 ) -> bool {
-	return Region_Collapsible_Header_Id(region, Region_Id(region, key), label, open, options)
+	return region_collapsible_header_id(region, region_id(region, key), label, open, options)
 }
 
-Region_Collapsible_Header_U64 :: proc(
+region_collapsible_header_u64 :: proc(
 	region: ^Region,
 	key: u64,
 	label: string,
 	open: ^bool,
 	options: Collapsible_Options = {},
 ) -> bool {
-	return Region_Collapsible_Header_Id(region, Region_Id(region, key), label, open, options)
+	return region_collapsible_header_id(region, region_id(region, key), label, open, options)
 }
 
-Region_Collapsible_Header :: proc {
-	Region_Collapsible_Header_String,
-	Region_Collapsible_Header_U64,
-	Region_Collapsible_Header_Id,
+region_collapsible_header :: proc {
+	region_collapsible_header_string,
+	region_collapsible_header_u64,
+	region_collapsible_header_id,
 }
 
-Region_Slider_Id :: proc(
+region_slider_id :: proc(
 	region: ^Region,
 	widget: Widget_Id,
 	state: ^Slider_State,
@@ -429,7 +377,7 @@ Region_Slider_Id :: proc(
 	label: string,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
-	assert(region != nil && region.inner.open && state != nil, "Fit.Region_Slider: invalid state")
+	assert(region != nil && region.inner.open && state != nil, "fit.region_slider: invalid state")
 	return ui.slider_state(
 		&region.inner,
 		ui.Widget_Id(widget),
@@ -444,7 +392,7 @@ Region_Slider_Id :: proc(
 	)
 }
 
-Region_Slider_String :: proc(
+region_slider_string :: proc(
 	region: ^Region,
 	key: string,
 	state: ^Slider_State,
@@ -454,9 +402,9 @@ Region_Slider_String :: proc(
 	label: string,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
-	return Region_Slider_Id(
+	return region_slider_id(
 		region,
-		Region_Id(region, key),
+		region_id(region, key),
 		state,
 		value,
 		minimum,
@@ -468,7 +416,7 @@ Region_Slider_String :: proc(
 	)
 }
 
-Region_Slider_U64 :: proc(
+region_slider_u64 :: proc(
 	region: ^Region,
 	key: u64,
 	state: ^Slider_State,
@@ -478,9 +426,9 @@ Region_Slider_U64 :: proc(
 	label: string,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
-	return Region_Slider_Id(
+	return region_slider_id(
 		region,
-		Region_Id(region, key),
+		region_id(region, key),
 		state,
 		value,
 		minimum,
@@ -492,23 +440,23 @@ Region_Slider_U64 :: proc(
 	)
 }
 
-Region_Slider :: proc {
-	Region_Slider_String,
-	Region_Slider_U64,
-	Region_Slider_Id,
+region_slider :: proc {
+	region_slider_string,
+	region_slider_u64,
+	region_slider_id,
 }
 
-Region_Dropdown_Id :: proc(
+region_dropdown_id :: proc(
 	region: ^Region,
 	widget: Widget_Id,
 	items: []string,
 	selected: ^i32,
 	state: ^Dropdown_State,
-	a11y_label: string = "Dropdown",
+	a11y_label: string = "dropdown",
 ) -> bool {
 	assert(
 		region != nil && region.inner.open && state != nil,
-		"Fit.Region_Dropdown: invalid state",
+		"fit.region_dropdown: invalid state",
 	)
 	return ui.dropdown(
 		&region.inner,
@@ -520,35 +468,35 @@ Region_Dropdown_Id :: proc(
 	)
 }
 
-Region_Dropdown_String :: proc(
+region_dropdown_string :: proc(
 	region: ^Region,
 	key: string,
 	items: []string,
 	selected: ^i32,
 	state: ^Dropdown_State,
-	a11y_label: string = "Dropdown",
+	a11y_label: string = "dropdown",
 ) -> bool {
-	return Region_Dropdown_Id(region, Region_Id(region, key), items, selected, state, a11y_label)
+	return region_dropdown_id(region, region_id(region, key), items, selected, state, a11y_label)
 }
 
-Region_Dropdown_U64 :: proc(
+region_dropdown_u64 :: proc(
 	region: ^Region,
 	key: u64,
 	items: []string,
 	selected: ^i32,
 	state: ^Dropdown_State,
-	a11y_label: string = "Dropdown",
+	a11y_label: string = "dropdown",
 ) -> bool {
-	return Region_Dropdown_Id(region, Region_Id(region, key), items, selected, state, a11y_label)
+	return region_dropdown_id(region, region_id(region, key), items, selected, state, a11y_label)
 }
 
-Region_Dropdown :: proc {
-	Region_Dropdown_String,
-	Region_Dropdown_U64,
-	Region_Dropdown_Id,
+region_dropdown :: proc {
+	region_dropdown_string,
+	region_dropdown_u64,
+	region_dropdown_id,
 }
 
-Region_Combobox :: proc(
+region_combobox :: proc(
 	region: ^Region,
 	key: string,
 	state: ^Combobox_State,
@@ -558,12 +506,12 @@ Region_Combobox :: proc(
 ) -> bool {
 	assert(
 		region != nil && region.inner.open && state != nil,
-		"Fit.Region_Combobox: invalid state",
+		"fit.region_combobox: invalid state",
 	)
 	return ui.combobox(&region.inner, key, &state.inner, items, selected, placeholder, a11y_label)
 }
 
-Region_Date_Picker :: proc(
+region_date_picker :: proc(
 	region: ^Region,
 	key: string,
 	state: ^Date_Picker_State,
@@ -572,7 +520,7 @@ Region_Date_Picker :: proc(
 ) -> bool {
 	assert(
 		region != nil && region.inner.open && state != nil,
-		"Fit.Region_Date_Picker: invalid state",
+		"fit.region_date_picker: invalid state",
 	)
 	inner := ui.Calendar_Date{value.year, value.month, value.day}
 	changed := ui.date_picker(&region.inner, key, &state.inner, &inner, placeholder, a11y_label)
@@ -580,8 +528,8 @@ Region_Date_Picker :: proc(
 	return changed
 }
 
-Region_Spinner :: proc(region: ^Region, diameter: i32, options: Spinner_Options = {}) {
-	assert(region != nil && region.inner.open, "Fit.Region_Spinner: region not open")
+region_spinner :: proc(region: ^Region, diameter: i32, options: Spinner_Options = {}) {
+	assert(region != nil && region.inner.open, "fit.region_spinner: region not open")
 	ui.spinner(
 		&region.inner,
 		diameter,
@@ -589,27 +537,27 @@ Region_Spinner :: proc(region: ^Region, diameter: i32, options: Spinner_Options 
 	)
 }
 
-Region_Status_Pill :: proc(region: ^Region, text: string, ink: Ink) -> i32 {
-	assert(region != nil && region.inner.open, "Fit.Region_Status_Pill: region not open")
+region_status_pill :: proc(region: ^Region, text: string, ink: Ink) -> i32 {
+	assert(region != nil && region.inner.open, "fit.region_status_pill: region not open")
 	return ui.status_pill(&region.inner, text, ink)
 }
 
-Region_Progress_Bar :: proc(region: ^Region, fraction: f32) {
-	assert(region != nil && region.inner.open, "Fit.Region_Progress_Bar: region not open")
+region_progress_bar :: proc(region: ^Region, fraction: f32) {
+	assert(region != nil && region.inner.open, "fit.region_progress_bar: region not open")
 	ui.progress_bar(&region.inner, fraction)
 }
 
-Region_Progress_Bar_Animated :: proc(region: ^Region, fraction: f32, animation: ^f32, ink: Ink) {
-	assert(region != nil && region.inner.open, "Fit.Region_Progress_Bar_Animated: region not open")
+region_progress_bar_animated :: proc(region: ^Region, fraction: f32, animation: ^f32, ink: Ink) {
+	assert(region != nil && region.inner.open, "fit.region_progress_bar_animated: region not open")
 	ui.progress_bar_animated(&region.inner, fraction, animation, ink)
 }
 
-Region_Key_Value :: proc(region: ^Region, key, value: string) {
-	assert(region != nil && region.inner.open, "Fit.Region_Key_Value: region not open")
+region_key_value :: proc(region: ^Region, key, value: string) {
+	assert(region != nil && region.inner.open, "fit.region_key_value: region not open")
 	ui.kv_row(&region.inner, key, value)
 }
 
-Region_Table_Header :: proc(
+region_table_header :: proc(
 	region: ^Region,
 	key: string,
 	columns: []Table_Column,
@@ -617,12 +565,12 @@ Region_Table_Header :: proc(
 ) -> bool {
 	assert(
 		region != nil && region.inner.open && sort != nil,
-		"Fit.Region_Table_Header: invalid state",
+		"fit.region_table_header: invalid state",
 	)
-	assert(len(columns) <= TABLE_COLUMN_COUNT_MAX, "Fit.Region_Table_Header: too many columns")
+	assert(len(columns) <= TABLE_COLUMN_COUNT_MAX, "fit.region_table_header: too many columns")
 	inner_columns: [TABLE_COLUMN_COUNT_MAX]ui.Table_Column
 	for column, index in columns {
-		inner_columns[index] = {column.label, to_track(column.track), column.numeric}
+		inner_columns[index] = {column.label, column.track, column.numeric}
 	}
 	inner_sort := ui.Table_Sort{sort.column, sort.descending}
 	changed := ui.table_header(&region.inner, key, inner_columns[:len(columns)], &inner_sort)
@@ -630,8 +578,8 @@ Region_Table_Header :: proc(
 	return changed
 }
 
-Table_Tracks :: proc(columns: []Table_Column, buffer: []Track) -> []Track {
-	assert(len(columns) > 0 && len(buffer) >= len(columns), "Fit.Table_Tracks: invalid buffer")
+table_tracks :: proc(columns: []Table_Column, buffer: []Track) -> []Track {
+	assert(len(columns) > 0 && len(buffer) >= len(columns), "fit.table_tracks: invalid buffer")
 	for column, index in columns do buffer[index] = column.track
 	return buffer[:len(columns)]
 }

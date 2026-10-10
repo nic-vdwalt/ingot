@@ -4,7 +4,6 @@ package fit
 import "core:testing"
 import "ingot:gfx"
 import "ingot:ui"
-import "ingot:ui_gfx"
 
 @(private = "file")
 Contract_Key_Pair :: struct {
@@ -233,80 +232,4 @@ fit_window_bits_contract_complete :: proc(t: ^testing.T) {
 	testing.expect_value(t, all, ~Window_Flags{})
 	testing.expect_value(t, to_window_flags({}), gfx.ConfigFlags{})
 	testing.expect_value(t, to_window_flags(all), expected)
-}
-
-@(test)
-fit_semantic_bits_contract_complete :: proc(t: ^testing.T) {
-	cases := [?]struct {
-		source: Semantic_State,
-		target: ui.Sem_State,
-	} {
-		{{.Checked}, {.Checked}},
-		{{.Disabled}, {.Disabled}},
-		{{.Focused}, {.Focused}},
-		{{.Expanded}, {.Expanded}},
-		{{.Selected}, {.Selected}},
-		{{.Read_Only}, {.Read_Only}},
-		{{.Password}, {.Password}},
-		{{.Multiline}, {.Multiline}},
-	}
-	all: Semantic_State
-	expected: ui.Sem_State
-	for entry in cases {
-		testing.expect(t, all & entry.source == {})
-		all += entry.source
-		expected += entry.target
-		testing.expect_value(t, to_semantic_state(entry.source), entry.target)
-	}
-	testing.expect_value(t, all, ~Semantic_State{})
-	testing.expect_value(t, to_semantic_state({}), ui.Sem_State{})
-	testing.expect_value(t, to_semantic_state(all), expected)
-}
-
-@(test)
-fit_substrate_contract_complete :: proc(t: ^testing.T) {
-	cases := [?]struct {
-		source: Substrate_Kind,
-		target: ui.Substrate_Kind,
-	}{{.None, .None}, {.Ruled, .Ruled}, {.Grid, .Grid}, {.Dots, .Dots}, {.Tooth, .Tooth}}
-	for value in Substrate_Kind {
-		matches := 0
-		for entry in cases {
-			if entry.source != value do continue
-			matches += 1
-			testing.expect_value(t, to_substrate(value), entry.target)
-			testing.expect_value(t, from_substrate(entry.target), value)
-		}
-		testing.expect_value(t, matches, 1)
-	}
-}
-
-@(test)
-fit_state_pacing_contract_complete :: proc(t: ^testing.T) {
-	states := [?]struct {
-		source: State,
-		target: ui_gfx.App_State,
-	}{{.Empty, .Empty}, {.Ready, .Ready}, {.Running, .Running}, {.Stopped, .Stopped}}
-	for value in State {
-		matches := 0
-		for entry in states {
-			if entry.source != value do continue
-			matches += 1
-			testing.expect_value(t, from_app_state(entry.target), value)
-		}
-		testing.expect_value(t, matches, 1)
-	}
-	pacing := [?]struct {
-		source: Frame_Pacing,
-		target: ui_gfx.App_Frame_Pacing,
-	}{{.Fixed, .Fixed}, {.Uncapped, .Uncapped}, {.Monitor_Refresh, .Monitor_Refresh}}
-	for value in Frame_Pacing {
-		matches := 0
-		for entry in pacing {
-			if entry.source != value do continue
-			matches += 1
-			testing.expect_value(t, to_frame_pacing(value), entry.target)
-		}
-		testing.expect_value(t, matches, 1)
-	}
 }

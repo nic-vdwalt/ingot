@@ -11,6 +11,23 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Changed
 
+- **Breaking:** every public `ingot:fit` procedure is renamed from PascalCase
+  to snake_case with no deprecated forwarders, matching `docs/TIGER_STYLE.md`
+  and the `0.3.0` `ingot:gfx` rename. The mapping is mechanical: lowercase the
+  name (`fit.Run` → `fit.run`, `fit.Virtual_List_Begin` →
+  `fit.virtual_list_begin`, `fit.Fixed` → `fit.fixed`). Types, constants, and
+  argument lists are unchanged. `scripts/check_ui_api_layers.py` now inspects
+  snake_case public declarations in `fit` for leaked `ui` types as well.
+- `ingot:fit` value types with the same shape as their `ingot:ui`/`ingot:ui_gfx`
+  counterpart are now aliases (`fit.Rect :: ui.Rect_I32`, `fit.State ::
+  ui_gfx.App_State`, `fit.Button_Options :: ui.Fit_Button_Options`, …); field
+  and member names are unchanged, so consumer literals compile as before. Enum
+  boundaries (`Key`, `Mouse_Button`, `Cursor`, `Window_Flags`,
+  `Semantic_Role`) convert by `transmute`, pinned by `#assert` beside each
+  declaration and by `fit/boundary_contract_test.odin`. `fit/convert.odin` and
+  `fit/convert_boundary.odin` shrink from 745 lines to 151.
+- `ui.Fit_Action.userdata` is renamed `user_data`, matching the `fit.Action`
+  field it now aliases.
 - Pin Odin to `dev-2026-10:93f71c2`, upstream commit
   `93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d` (PR #7842), fixing the October
   release's macOS Objective-C compiler assertion (#7793). CI rebuilds this

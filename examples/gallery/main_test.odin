@@ -14,14 +14,14 @@ Gallery_Pilot_Test_State :: struct {
 }
 
 gallery_pilot_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
-	fit.Canvas(builder, gallery_pilot_render, user_data)
+	fit.canvas(builder, gallery_pilot_render, user_data)
 }
 
 gallery_pilot_render :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: rawptr) -> bool {
 	state := cast(^Gallery_Pilot_Test_State)user_data
-	region := fit.Region_Open(surface, &state.region, rect, {scope = "pilot"})
-	if fit.Region_Button(region, "button", "Button", motion = &state.button) do state.clicks += 1
-	_ = fit.Region_Toggle(
+	region := fit.region_open(surface, &state.region, rect, {scope = "pilot"})
+	if fit.region_button(region, "button", "Button", motion = &state.button) do state.clicks += 1
+	_ = fit.region_toggle(
 		region,
 		"toggle",
 		"Preview",
@@ -29,31 +29,31 @@ gallery_pilot_render :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: r
 		&state.widgets.toggle_motion,
 	)
 	draw_widget_volume(region, surface, &state.widgets)
-	_ = fit.Region_Tab_Bar(
+	_ = fit.region_tab_bar(
 		region,
 		"tabs",
 		[]string{"First", "Second"},
 		&state.widgets.tab_active,
 		&state.widgets.tabs_motion,
 	)
-	_ = fit.Region_Collapsible_Header(
+	_ = fit.region_collapsible_header(
 		region,
 		"header",
 		"Details",
 		&state.open,
 		{motion = &state.header},
 	)
-	_ = fit.Region_Close(region)
+	_ = fit.region_close(region)
 	return false
 }
 
 @(test)
 gallery_pilot_keeps_values_caller_owned :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
-	fit.Test_Driver_Init(&driver)
-	defer fit.Test_Driver_Destroy(&driver)
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
 	theme := palette_theme(.Ingot)
-	fit.Test_Driver_Set_Theme(&driver, theme)
+	fit.test_driver_set_theme(&driver, theme)
 	state := Gallery_Pilot_Test_State {
 		widgets = {volume = 40},
 	}
@@ -62,10 +62,10 @@ gallery_pilot_keeps_values_caller_owned :: proc(t: ^testing.T) {
 		dpi_scale   = 1,
 		frame_time  = 1.0 / 60.0,
 	}
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, gallery_pilot_draw, &state))
+	testing.expect(t, fit.test_driver_frame(&driver, input, gallery_pilot_draw, &state))
 	state.widgets.toggle, state.open = true, true
 	state.widgets.tab_active = 1
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, gallery_pilot_draw, &state))
+	testing.expect(t, fit.test_driver_frame(&driver, input, gallery_pilot_draw, &state))
 	testing.expect_value(t, state.widgets.toggle_motion.value.current, f32(1))
 	testing.expect_value(t, state.header.value.current, f32(1))
 	testing.expect(
@@ -75,28 +75,28 @@ gallery_pilot_keeps_values_caller_owned :: proc(t: ^testing.T) {
 	testing.expect_value(t, state.widgets.volume, f32(40))
 	input.mouse_position = {10, 10}
 	input.mouse_pressed[0], input.mouse_down[0] = true, true
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, gallery_pilot_draw, &state))
+	testing.expect(t, fit.test_driver_frame(&driver, input, gallery_pilot_draw, &state))
 	input.mouse_pressed[0], input.mouse_down[0], input.mouse_released[0] = false, false, true
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, gallery_pilot_draw, &state))
+	testing.expect(t, fit.test_driver_frame(&driver, input, gallery_pilot_draw, &state))
 	testing.expect_value(t, state.clicks, 1)
 	input.mouse_released[0] = false
 	input.mouse_position = {10, 40}
 	input.mouse_pressed[0], input.mouse_down[0] = true, true
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, gallery_pilot_draw, &state))
+	testing.expect(t, fit.test_driver_frame(&driver, input, gallery_pilot_draw, &state))
 	input.mouse_pressed[0], input.mouse_down[0], input.mouse_released[0] = false, false, true
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, gallery_pilot_draw, &state))
+	testing.expect(t, fit.test_driver_frame(&driver, input, gallery_pilot_draw, &state))
 	testing.expect(t, !state.widgets.toggle)
 	state.widgets.toggle = true
-	fit.Theme_Set_Reduced_Motion(&theme, true)
-	fit.Test_Driver_Set_Theme(&driver, theme)
+	fit.theme_set_reduced_motion(&theme, true)
+	fit.test_driver_set_theme(&driver, theme)
 	input.mouse_released[0] = false
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, gallery_pilot_draw, &state))
+	testing.expect(t, fit.test_driver_frame(&driver, input, gallery_pilot_draw, &state))
 	testing.expect_value(t, state.widgets.toggle_motion.value.current, f32(1))
 	testing.expect_value(t, state.header.value.current, f32(1))
-	fit.Theme_Set_Reduced_Motion(&theme, false)
-	fit.Test_Driver_Set_Theme(&driver, theme)
+	fit.theme_set_reduced_motion(&theme, false)
+	fit.test_driver_set_theme(&driver, theme)
 	state.widgets.toggle, state.open = false, false
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, gallery_pilot_draw, &state))
+	testing.expect(t, fit.test_driver_frame(&driver, input, gallery_pilot_draw, &state))
 	testing.expect_value(t, state.widgets.toggle_motion.value.current, f32(0))
 	testing.expect_value(t, state.header.value.current, f32(0))
 }
@@ -108,7 +108,7 @@ Gallery_Input_Test_State :: struct {
 
 @(private = "file")
 gallery_input_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
-	fit.Canvas(builder, gallery_input_test_render, user_data)
+	fit.canvas(builder, gallery_input_test_render, user_data)
 }
 
 @(private = "file")
@@ -118,30 +118,30 @@ gallery_input_test_render :: proc(
 	user_data: rawptr,
 ) -> bool {
 	state := cast(^Gallery_Input_Test_State)user_data
-	region := fit.Region_Open(surface, &state.region, rect, {scope = "inputs"})
-	_ = fit.Region_Text_Input(region, "name", &state.box, "Name", {semantics = {name = "Name"}})
-	_ = fit.Region_Close(region)
+	region := fit.region_open(surface, &state.region, rect, {scope = "inputs"})
+	_ = fit.region_text_input(region, "name", &state.box, "Name", {semantics = {name = "Name"}})
+	_ = fit.region_close(region)
 	return false
 }
 
 @(test)
 gallery_input_region_retains_focus_between_frames :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
-	fit.Test_Driver_Init(&driver)
-	defer fit.Test_Driver_Destroy(&driver)
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
 	state: Gallery_Input_Test_State
-	defer fit.Input_Box_Destroy(&state.box)
+	defer fit.input_box_destroy(&state.box)
 
 	pressed: fit.Test_Input
 	pressed.mouse_position = {10, 10}
 	pressed.mouse_pressed[0] = true
-	_ = fit.Test_Driver_Frame(&driver, pressed, gallery_input_test_draw, &state)
+	_ = fit.test_driver_frame(&driver, pressed, gallery_input_test_draw, &state)
 
 	typed: fit.Test_Input
 	typed.characters[0] = 'x'
 	typed.character_count = 1
-	_ = fit.Test_Driver_Frame(&driver, typed, gallery_input_test_draw, &state)
-	testing.expect_value(t, fit.Input_Box_Text(&state.box), "x")
+	_ = fit.test_driver_frame(&driver, typed, gallery_input_test_draw, &state)
+	testing.expect_value(t, fit.input_box_text(&state.box), "x")
 }
 
 Gallery_Buttons_Test_State :: struct {
@@ -151,7 +151,7 @@ Gallery_Buttons_Test_State :: struct {
 
 @(private = "file")
 gallery_buttons_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
-	fit.Canvas(builder, gallery_buttons_test_render, user_data)
+	fit.canvas(builder, gallery_buttons_test_render, user_data)
 }
 
 @(private = "file")
@@ -161,45 +161,45 @@ gallery_buttons_test_render :: proc(
 	user_data: rawptr,
 ) -> bool {
 	state := cast(^Gallery_Buttons_Test_State)user_data
-	region := fit.Region_Open(surface, &state.region, rect, {scope = "buttons"})
+	region := fit.region_open(surface, &state.region, rect, {scope = "buttons"})
 	for index in 0 ..< 3 {
-		if fit.Region_Button(region, u64(index + 1), "Focusable") do state.clicks += 1
+		if fit.region_button(region, u64(index + 1), "Focusable") do state.clicks += 1
 	}
-	_ = fit.Region_Close(region)
+	_ = fit.region_close(region)
 	return false
 }
 
 @(test)
 gallery_buttons_region_retains_tab_focus_between_frames :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
-	fit.Test_Driver_Init(&driver)
-	defer fit.Test_Driver_Destroy(&driver)
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
 	state: Gallery_Buttons_Test_State
-	_ = fit.Test_Driver_Frame(&driver, {}, gallery_buttons_test_draw, &state)
+	_ = fit.test_driver_frame(&driver, {}, gallery_buttons_test_draw, &state)
 
 	activate: fit.Test_Input
 	activate.keys_pressed[int(fit.Key.Tab)] = true
 	activate.keys_pressed[int(fit.Key.Enter)] = true
-	_ = fit.Test_Driver_Frame(&driver, activate, gallery_buttons_test_draw, &state)
+	_ = fit.test_driver_frame(&driver, activate, gallery_buttons_test_draw, &state)
 	testing.expect_value(t, state.clicks, 1)
 }
 
 @(test)
 gallery_buttons_click_before_keyboard_focus :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
-	fit.Test_Driver_Init(&driver)
-	defer fit.Test_Driver_Destroy(&driver)
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
 	state: Gallery_Buttons_Test_State
 
 	pressed: fit.Test_Input
 	pressed.mouse_position = {10, 10}
 	pressed.mouse_pressed[0] = true
 	pressed.mouse_down[0] = true
-	_ = fit.Test_Driver_Frame(&driver, pressed, gallery_buttons_test_draw, &state)
+	_ = fit.test_driver_frame(&driver, pressed, gallery_buttons_test_draw, &state)
 	resolved: fit.Test_Input
 	resolved.mouse_position = pressed.mouse_position
 	resolved.mouse_released[0] = true
-	_ = fit.Test_Driver_Frame(&driver, resolved, gallery_buttons_test_draw, &state)
+	_ = fit.test_driver_frame(&driver, resolved, gallery_buttons_test_draw, &state)
 	testing.expect_value(t, state.clicks, 1)
 }
 

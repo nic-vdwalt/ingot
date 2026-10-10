@@ -146,8 +146,8 @@ when MAP_CAPTURE {
 
 	capture_apply_theme :: proc() {
 		assert(capture_session.inner.initialized, "capture theme: session not ready")
-		theme := fit.Theme_Dark() if map_state.dark else fit.Theme_Light()
-		fit.Session_Set_Theme(&capture_session, theme)
+		theme := fit.theme_dark() if map_state.dark else fit.theme_light()
+		fit.session_set_theme(&capture_session, theme)
 	}
 
 	// capture_write saves the settled target and advances the script; the
@@ -185,7 +185,7 @@ when MAP_CAPTURE {
 	capture_finish :: proc() {
 		assert(capture_dir != "", "capture_finish: no output directory")
 		if capture_target.texture.id != 0 do rl.UnloadRenderTexture(capture_target)
-		fit.Session_Destroy(&capture_session)
+		fit.session_destroy(&capture_session)
 		rl.CloseWindow()
 		fmt.printfln("capture: ok (%d files)", capture_written)
 		os.exit(0)
@@ -193,15 +193,15 @@ when MAP_CAPTURE {
 
 	capture_frame :: proc() {
 		capture_apply()
-		if !fit.Session_Draw(&capture_session, capture_draw) do return
+		if !fit.session_draw(&capture_session, capture_draw) do return
 		capture_write()
 	}
 
 	capture_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 		assert(builder != nil, "capture_draw: nil builder")
 		_ = user_data
-		theme := fit.Theme_Dark() if map_state.dark else fit.Theme_Light()
-		background := rl.Color(fit.Theme_Background(theme))
+		theme := fit.theme_dark() if map_state.dark else fit.theme_light()
+		background := rl.Color(fit.theme_background(theme))
 		background.a = 255
 		rl.ClearBackground(background)
 
@@ -209,8 +209,8 @@ when MAP_CAPTURE {
 		rl.BeginTextureMode(capture_target)
 		rl.ClearBackground(background)
 		map_build(builder, nil)
-		_ = fit.Measure(builder)
-		fit.Render_At(builder, {0, 0, width, CAPTURE_HEIGHT})
+		_ = fit.measure(builder)
+		fit.render_at(builder, {0, 0, width, CAPTURE_HEIGHT})
 		rl.EndTextureMode()
 
 		// Negative source height blits the bottom-left-origin target upright
@@ -225,7 +225,7 @@ when MAP_CAPTURE {
 		)
 	}
 
-	// map_capture_main replaces the fit.Run entry point under -define, exactly
+	// map_capture_main replaces the fit.run entry point under -define, exactly
 	// like the gallery harness, so captures never depend on a human closing
 	// the window.
 	map_capture_main :: proc() {
@@ -240,7 +240,7 @@ when MAP_CAPTURE {
 		rl.SetConfigFlags(flags)
 		rl.InitWindow(CAPTURE_WINDOW_WIDTH, CAPTURE_WINDOW_HEIGHT, "ingot API map (capture)")
 		rl.SetTargetFPS(60)
-		fit.Session_Init(&capture_session, {user_scale = 1.0, semantics_enabled = true})
+		fit.session_init(&capture_session, {user_scale = 1.0, semantics_enabled = true})
 		capture_target = rl.LoadRenderTexture(CAPTURE_WIDTH, CAPTURE_HEIGHT)
 		if capture_target.texture.id == 0 {
 			fmt.eprintln("capture: render target allocation failed")

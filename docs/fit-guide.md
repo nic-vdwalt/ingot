@@ -8,9 +8,9 @@ See the [minimal application](../README.md#quick-start).
 ```odin
 Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	data := cast(^State)user_data
-	root := fit.Center(builder, {gap = .SM, padding = .LG})
-	fit.Label(root, "Settings")
-	fit.Button(root, "save", "Save", fit.action(Save, data))
+	root := fit.center(builder, {gap = .SM, padding = .LG})
+	fit.label(root, "Settings")
+	fit.button(root, "save", "Save", fit.action(Save, data))
 }
 ```
 
@@ -68,8 +68,8 @@ The runnable `examples/builder_controls` uses this recipe:
 draw_preference :: proc(parent: fit.Parent, stable_key: u64, data: ^Workspace_Preference) {
 	assert(data != nil, "builder controls preference: nil state")
 	assert(stable_key != 0, "builder controls preference: zero key")
-	scoped := fit.Scope(parent, stable_key)
-	fit.Checkbox(scoped, "enabled", "Enable local settings", &data.enabled)
+	scoped := fit.scope(parent, stable_key)
+	fit.checkbox(scoped, "enabled", "Enable local settings", &data.enabled)
 }
 ```
 

@@ -2,192 +2,192 @@ package fit
 
 import "ingot:ui"
 
-Fit_Column_Begin :: proc(
+fit_column_begin :: proc(
 	surface: ^Surface,
 	state: ^Fit_Column_State,
 	x, y, width: i32,
 	gap: i32 = 0,
 ) {
 	_ = surface_ui(surface)
-	assert(state != nil, "Fit.Fit_Column_Begin: nil state")
-	assert(!state.open, "Fit.Fit_Column_Begin: state already open")
+	assert(state != nil, "fit.fit_column_begin: nil state")
+	assert(!state.open, "fit.fit_column_begin: state already open")
 	state.surface = surface
 	state.open = true
 	ui.fit_column_begin(&state.inner, x, y, width, gap)
 }
 
-Fit_Column_Next :: proc(state: ^Fit_Column_State, height: i32) -> Rect {
-	assert(state != nil && state.open, "Fit.Fit_Column_Next: state not open")
+fit_column_next :: proc(state: ^Fit_Column_State, height: i32) -> Rect {
+	assert(state != nil && state.open, "fit.fit_column_next: state not open")
 	_ = surface_ui(state.surface)
-	return from_rect(ui.fit_column_next(&state.inner, height))
+	return ui.fit_column_next(&state.inner, height)
 }
 
-Fit_Column_End :: proc(state: ^Fit_Column_State) -> Rect {
-	assert(state != nil && state.open, "Fit.Fit_Column_End: state not open")
+fit_column_end :: proc(state: ^Fit_Column_State) -> Rect {
+	assert(state != nil && state.open, "fit.fit_column_end: state not open")
 	_ = surface_ui(state.surface)
-	result := from_rect(ui.fit_column_end(&state.inner))
+	result := ui.fit_column_end(&state.inner)
 	state.surface = nil
 	state.open = false
 	return result
 }
 
-Surface_Fit_Column_Begin :: proc(
+surface_fit_column_begin :: proc(
 	surface: ^Surface,
 	state: ^Fit_Column_State,
 	x, y, width: i32,
 	gap: i32 = 0,
 ) {
-	Fit_Column_Begin(surface, state, x, y, width, gap)
+	fit_column_begin(surface, state, x, y, width, gap)
 }
 
-Surface_Fit_Column_Next :: proc(surface: ^Surface, state: ^Fit_Column_State, height: i32) -> Rect {
+surface_fit_column_next :: proc(surface: ^Surface, state: ^Fit_Column_State, height: i32) -> Rect {
 	assert(
 		state != nil && state.surface == surface,
-		"Fit.Surface_Fit_Column_Next: surface mismatch",
+		"fit.surface_fit_column_next: surface mismatch",
 	)
-	return Fit_Column_Next(state, height)
+	return fit_column_next(state, height)
 }
 
-Surface_Fit_Column_End :: proc(surface: ^Surface, state: ^Fit_Column_State) -> Rect {
+surface_fit_column_end :: proc(surface: ^Surface, state: ^Fit_Column_State) -> Rect {
 	assert(
 		state != nil && state.surface == surface,
-		"Fit.Surface_Fit_Column_End: surface mismatch",
+		"fit.surface_fit_column_end: surface mismatch",
 	)
-	return Fit_Column_End(state)
+	return fit_column_end(state)
 }
 
-Flow_Begin :: proc(surface: ^Surface, state: ^Flow_State, rect: Rect, gap_x, gap_y: i32) {
+flow_begin :: proc(surface: ^Surface, state: ^Flow_State, rect: Rect, gap_x, gap_y: i32) {
 	_ = surface_ui(surface)
-	assert(state != nil, "Fit.Flow_Begin: nil state")
-	assert(!state.open, "Fit.Flow_Begin: state already open")
+	assert(state != nil, "fit.flow_begin: nil state")
+	assert(!state.open, "fit.flow_begin: state already open")
 	state.surface = surface
 	state.open = true
-	ui.flow_begin(&state.inner, to_rect(rect), gap_x, gap_y)
+	ui.flow_begin(&state.inner, rect, gap_x, gap_y)
 }
 
-Flow_Next :: proc(state: ^Flow_State, width, height: i32) -> Rect {
-	assert(state != nil && state.open, "Fit.Flow_Next: state not open")
+flow_next :: proc(state: ^Flow_State, width, height: i32) -> Rect {
+	assert(state != nil && state.open, "fit.flow_next: state not open")
 	_ = surface_ui(state.surface)
-	return from_rect(ui.flow_next(&state.inner, width, height))
+	return ui.flow_next(&state.inner, width, height)
 }
 
-Flow_End :: proc(state: ^Flow_State) -> Rect {
-	assert(state != nil && state.open, "Fit.Flow_End: state not open")
+flow_end :: proc(state: ^Flow_State) -> Rect {
+	assert(state != nil && state.open, "fit.flow_end: state not open")
 	_ = surface_ui(state.surface)
-	result := from_rect(ui.flow_end(&state.inner))
+	result := ui.flow_end(&state.inner)
 	state.surface = nil
 	state.open = false
 	return result
 }
 
-Surface_Flow_Begin :: proc(surface: ^Surface, state: ^Flow_State, rect: Rect, gap_x, gap_y: i32) {
-	Flow_Begin(surface, state, rect, gap_x, gap_y)
+surface_flow_begin :: proc(surface: ^Surface, state: ^Flow_State, rect: Rect, gap_x, gap_y: i32) {
+	flow_begin(surface, state, rect, gap_x, gap_y)
 }
 
-Surface_Flow_Next :: proc(surface: ^Surface, state: ^Flow_State, width, height: i32) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Flow_Next: surface mismatch")
-	return Flow_Next(state, width, height)
+surface_flow_next :: proc(surface: ^Surface, state: ^Flow_State, width, height: i32) -> Rect {
+	assert(state != nil && state.surface == surface, "fit.surface_flow_next: surface mismatch")
+	return flow_next(state, width, height)
 }
 
-Surface_Flow_End :: proc(surface: ^Surface, state: ^Flow_State) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Flow_End: surface mismatch")
-	return Flow_End(state)
+surface_flow_end :: proc(surface: ^Surface, state: ^Flow_State) -> Rect {
+	assert(state != nil && state.surface == surface, "fit.surface_flow_end: surface mismatch")
+	return flow_end(state)
 }
 
-Layout_Begin :: proc(surface: ^Surface, state: ^Layout_State, rect: Rect, gap: i32 = 0) {
+layout_begin :: proc(surface: ^Surface, state: ^Layout_State, rect: Rect, gap: i32 = 0) {
 	_ = surface_ui(surface)
-	assert(state != nil, "Fit.Layout_Begin: nil state")
-	assert(!state.open, "Fit.Layout_Begin: state already open")
+	assert(state != nil, "fit.layout_begin: nil state")
+	assert(!state.open, "fit.layout_begin: state already open")
 	state.surface = surface
 	state.open = true
 	ui.layout_begin(&state.inner, rect.x, rect.y, rect.w, rect.h, gap)
 }
 
-Layout_End :: proc(state: ^Layout_State) {
-	assert(state != nil && state.open, "Fit.Layout_End: state not open")
+layout_end :: proc(state: ^Layout_State) {
+	assert(state != nil && state.open, "fit.layout_end: state not open")
 	_ = surface_ui(state.surface)
 	ui.layout_end(&state.inner)
 	state.surface = nil
 	state.open = false
 }
 
-Layout_Row :: proc(
+layout_row :: proc(
 	state: ^Layout_State,
 	height: i32,
 	gap: i32 = 0,
 	align: Cross_Align = .Stretch,
 ) {
-	assert(state != nil && state.open, "Fit.Layout_Row: state not open")
+	assert(state != nil && state.open, "fit.layout_row: state not open")
 	_ = surface_ui(state.surface)
 	ui.push_row(&state.inner, height, gap, align)
 }
 
-Layout_Pop :: proc(state: ^Layout_State) {
-	assert(state != nil && state.open, "Fit.Layout_Pop: state not open")
+layout_pop :: proc(state: ^Layout_State) {
+	assert(state != nil && state.open, "fit.layout_pop: state not open")
 	_ = surface_ui(state.surface)
 	ui.layout_pop(&state.inner)
 }
 
-Layout_Weights :: proc(state: ^Layout_State, weights: []i32) {
-	assert(state != nil && state.open, "Fit.Layout_Weights: state not open")
+layout_weights :: proc(state: ^Layout_State, weights: []i32) {
+	assert(state != nil && state.open, "fit.layout_weights: state not open")
 	_ = surface_ui(state.surface)
 	ui.row_weights(&state.inner, weights)
 }
 
-Layout_Weighted :: proc(state: ^Layout_State, weight: i32) -> Rect {
-	assert(state != nil && state.open, "Fit.Layout_Weighted: state not open")
+layout_weighted :: proc(state: ^Layout_State, weight: i32) -> Rect {
+	assert(state != nil && state.open, "fit.layout_weighted: state not open")
 	_ = surface_ui(state.surface)
-	return from_rect(ui.next_weighted(&state.inner, weight))
+	return ui.next_weighted(&state.inner, weight)
 }
 
-Layout_Next :: proc(state: ^Layout_State, size: i32) -> Rect {
-	assert(state != nil && state.open, "Fit.Layout_Next: state not open")
+layout_next :: proc(state: ^Layout_State, size: i32) -> Rect {
+	assert(state != nil && state.open, "fit.layout_next: state not open")
 	_ = surface_ui(state.surface)
-	return from_rect(ui.next(&state.inner, size))
+	return ui.next(&state.inner, size)
 }
 
-Layout_Sized :: proc(state: ^Layout_State, main_size, cross_size: i32) -> Rect {
-	assert(state != nil && state.open, "Fit.Layout_Sized: state not open")
+layout_sized :: proc(state: ^Layout_State, main_size, cross_size: i32) -> Rect {
+	assert(state != nil && state.open, "fit.layout_sized: state not open")
 	_ = surface_ui(state.surface)
-	return from_rect(ui.next_sized(&state.inner, main_size, cross_size))
+	return ui.next_sized(&state.inner, main_size, cross_size)
 }
 
-Layout_Remaining :: proc(state: ^Layout_State) -> Rect {
-	assert(state != nil && state.open, "Fit.Layout_Remaining: state not open")
+layout_remaining :: proc(state: ^Layout_State) -> Rect {
+	assert(state != nil && state.open, "fit.layout_remaining: state not open")
 	_ = surface_ui(state.surface)
-	return from_rect(ui.remaining(&state.inner))
+	return ui.remaining(&state.inner)
 }
 
-Layout_Flex :: proc(state: ^Layout_State, tracks: []Track, justify: Main_Align = .Start) {
-	assert(state != nil && state.open, "Fit.Layout_Flex: state not open")
+layout_flex :: proc(state: ^Layout_State, tracks: []Track, justify: Main_Align = .Start) {
+	assert(state != nil && state.open, "fit.layout_flex: state not open")
 	_ = surface_ui(state.surface)
-	assert(len(tracks) <= ui.MAX_LAYOUT_FLEX, "Fit.Layout_Flex: too many tracks")
+	assert(len(tracks) <= ui.MAX_LAYOUT_FLEX, "fit.layout_flex: too many tracks")
 	inner: [ui.MAX_LAYOUT_FLEX]ui.Track
-	for track, index in tracks do inner[index] = to_track(track)
+	for track, index in tracks do inner[index] = track
 	ui.flex_begin(&state.inner, inner[:len(tracks)], justify)
 }
 
-Layout_Flex_Next :: proc(state: ^Layout_State) -> Rect {
-	assert(state != nil && state.open, "Fit.Layout_Flex_Next: state not open")
+layout_flex_next :: proc(state: ^Layout_State) -> Rect {
+	assert(state != nil && state.open, "fit.layout_flex_next: state not open")
 	_ = surface_ui(state.surface)
-	return from_rect(ui.flex_next(&state.inner))
+	return ui.flex_next(&state.inner)
 }
 
-Surface_Layout_Begin :: proc(
+surface_layout_begin :: proc(
 	surface: ^Surface,
 	state: ^Layout_State,
 	x, y, width, height: i32,
 	gap: i32 = 0,
 ) {
-	Layout_Begin(surface, state, {x, y, width, height}, gap)
+	layout_begin(surface, state, {x, y, width, height}, gap)
 }
 
-Surface_Layout_End :: proc(surface: ^Surface, state: ^Layout_State) {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Layout_End: surface mismatch")
-	Layout_End(state)
+surface_layout_end :: proc(surface: ^Surface, state: ^Layout_State) {
+	assert(state != nil && state.surface == surface, "fit.surface_layout_end: surface mismatch")
+	layout_end(state)
 }
 
-Surface_Layout_Push_Row :: proc(
+surface_layout_push_row :: proc(
 	surface: ^Surface,
 	state: ^Layout_State,
 	height: i32,
@@ -196,62 +196,62 @@ Surface_Layout_Push_Row :: proc(
 ) {
 	assert(
 		state != nil && state.surface == surface,
-		"Fit.Surface_Layout_Push_Row: surface mismatch",
+		"fit.surface_layout_push_row: surface mismatch",
 	)
-	Layout_Row(state, height, gap, align)
+	layout_row(state, height, gap, align)
 }
 
-Surface_Layout_Pop :: proc(surface: ^Surface, state: ^Layout_State) {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Layout_Pop: surface mismatch")
-	Layout_Pop(state)
+surface_layout_pop :: proc(surface: ^Surface, state: ^Layout_State) {
+	assert(state != nil && state.surface == surface, "fit.surface_layout_pop: surface mismatch")
+	layout_pop(state)
 }
 
-Surface_Layout_Row_Weights :: proc(surface: ^Surface, state: ^Layout_State, weights: []i32) {
+surface_layout_row_weights :: proc(surface: ^Surface, state: ^Layout_State, weights: []i32) {
 	assert(
 		state != nil && state.surface == surface,
-		"Fit.Surface_Layout_Row_Weights: surface mismatch",
+		"fit.surface_layout_row_weights: surface mismatch",
 	)
-	Layout_Weights(state, weights)
+	layout_weights(state, weights)
 }
 
-Surface_Layout_Next_Weighted :: proc(
+surface_layout_next_weighted :: proc(
 	surface: ^Surface,
 	state: ^Layout_State,
 	weight: i32,
 ) -> Rect {
 	assert(
 		state != nil && state.surface == surface,
-		"Fit.Surface_Layout_Next_Weighted: surface mismatch",
+		"fit.surface_layout_next_weighted: surface mismatch",
 	)
-	return Layout_Weighted(state, weight)
+	return layout_weighted(state, weight)
 }
 
-Surface_Layout_Next :: proc(surface: ^Surface, state: ^Layout_State, size: i32) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Layout_Next: surface mismatch")
-	return Layout_Next(state, size)
+surface_layout_next :: proc(surface: ^Surface, state: ^Layout_State, size: i32) -> Rect {
+	assert(state != nil && state.surface == surface, "fit.surface_layout_next: surface mismatch")
+	return layout_next(state, size)
 }
 
-Surface_Layout_Next_Sized :: proc(
+surface_layout_next_sized :: proc(
 	surface: ^Surface,
 	state: ^Layout_State,
 	main_size, cross_size: i32,
 ) -> Rect {
 	assert(
 		state != nil && state.surface == surface,
-		"Fit.Surface_Layout_Next_Sized: surface mismatch",
+		"fit.surface_layout_next_sized: surface mismatch",
 	)
-	return Layout_Sized(state, main_size, cross_size)
+	return layout_sized(state, main_size, cross_size)
 }
 
-Surface_Layout_Remaining :: proc(surface: ^Surface, state: ^Layout_State) -> Rect {
+surface_layout_remaining :: proc(surface: ^Surface, state: ^Layout_State) -> Rect {
 	assert(
 		state != nil && state.surface == surface,
-		"Fit.Surface_Layout_Remaining: surface mismatch",
+		"fit.surface_layout_remaining: surface mismatch",
 	)
-	return Layout_Remaining(state)
+	return layout_remaining(state)
 }
 
-Surface_Layout_Flex_Begin :: proc(
+surface_layout_flex_begin :: proc(
 	surface: ^Surface,
 	state: ^Layout_State,
 	tracks: []Track,
@@ -259,15 +259,15 @@ Surface_Layout_Flex_Begin :: proc(
 ) {
 	assert(
 		state != nil && state.surface == surface,
-		"Fit.Surface_Layout_Flex_Begin: surface mismatch",
+		"fit.surface_layout_flex_begin: surface mismatch",
 	)
-	Layout_Flex(state, tracks, justify)
+	layout_flex(state, tracks, justify)
 }
 
-Surface_Layout_Flex_Next :: proc(surface: ^Surface, state: ^Layout_State) -> Rect {
+surface_layout_flex_next :: proc(surface: ^Surface, state: ^Layout_State) -> Rect {
 	assert(
 		state != nil && state.surface == surface,
-		"Fit.Surface_Layout_Flex_Next: surface mismatch",
+		"fit.surface_layout_flex_next: surface mismatch",
 	)
-	return Layout_Flex_Next(state)
+	return layout_flex_next(state)
 }

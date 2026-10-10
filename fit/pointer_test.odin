@@ -29,10 +29,10 @@ fit_pointer_events_use_the_bound_builder_frame :: proc(t: ^testing.T) {
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
 	defer builder_close(&builder)
-	events := Pointer_Events(&builder)
+	events := pointer_events(&builder)
 	testing.expect_value(t, len(events), 1)
 	testing.expect_value(t, events[0].id, Pointer_Id(11))
-	testing.expect(t, Pointer_Events_Overflowed(&builder))
+	testing.expect(t, pointer_events_overflowed(&builder))
 }
 
 Pointer_Test_State :: struct {
@@ -42,19 +42,19 @@ Pointer_Test_State :: struct {
 pointer_test_draw :: proc(builder: ^Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil)
 	state := cast(^Pointer_Test_State)user_data
-	events := Pointer_Events(builder)
+	events := pointer_events(builder)
 	testing.expect_value(state.t, len(events), POINTER_EVENT_CAP)
 	testing.expect_value(state.t, events[0].id, Pointer_Id(12))
-	testing.expect(state.t, Pointer_Events_Overflowed(builder))
-	root := Center(builder)
-	Label(root, "pointer test")
+	testing.expect(state.t, pointer_events_overflowed(builder))
+	root := center(builder)
+	label(root, "pointer test")
 }
 
 @(test)
 fit_pointer_test_driver_copies_bounds_and_overflow :: proc(t: ^testing.T) {
 	driver: Test_Driver
-	Test_Driver_Init(&driver)
-	defer Test_Driver_Destroy(&driver)
+	test_driver_init(&driver)
+	defer test_driver_destroy(&driver)
 	input: Test_Input
 	input.pointer_events[0] = {
 		id           = 12,
@@ -66,5 +66,5 @@ fit_pointer_test_driver_copies_bounds_and_overflow :: proc(t: ^testing.T) {
 	state := Pointer_Test_State {
 		t = t,
 	}
-	testing.expect(t, Test_Driver_Frame(&driver, input, pointer_test_draw, &state))
+	testing.expect(t, test_driver_frame(&driver, input, pointer_test_draw, &state))
 }

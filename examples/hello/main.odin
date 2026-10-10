@@ -22,7 +22,7 @@ toggle_list :: proc(user_data: rawptr) {
 main :: proc() {
 	flags: fit.Window_Flags = {.Resizable, .Vsync}
 	when ODIN_OS == .Darwin do flags += {.High_Dpi}
-	_ = fit.Run(
+	_ = fit.run(
 		&app,
 		{
 			width = 720,
@@ -42,14 +42,14 @@ main :: proc() {
 draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil, "draw: invalid argument")
 	data := cast(^State)user_data
-	root := fit.Center(builder, {gap = .SM, padding = .LG})
-	fit.Label(root, "Hello from Ingot", {role = .Title})
-	controls := fit.Row(root, {gap = .SM, align = .Center})
-	fit.Label(controls, "Controls", {role = .Label, track = fit.Grow()})
-	fit.Button(controls, "toggle", "Toggle list", fit.action(toggle_list, data))
-	fit.Checkbox(root, "enabled", "Enabled", &data.enabled)
+	root := fit.center(builder, {gap = .SM, padding = .LG})
+	fit.label(root, "Hello from Ingot", {role = .Title})
+	controls := fit.row(root, {gap = .SM, align = .Center})
+	fit.label(controls, "Controls", {role = .Label, track = fit.grow()})
+	fit.button(controls, "toggle", "Toggle list", fit.action(toggle_list, data))
+	fit.checkbox(root, "enabled", "Enabled", &data.enabled)
 	if data.showing {
-		items := fit.Column(root, {gap = .XS})
-		for item in data.items do fit.Button(items, item, "Stable item")
+		items := fit.column(root, {gap = .XS})
+		for item in data.items do fit.button(items, item, "Stable item")
 	}
 }

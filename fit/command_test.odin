@@ -19,12 +19,12 @@ fit_command_take_uses_the_bound_builder_frame :: proc(t: ^testing.T) {
 	builder: Builder
 	builder_open(&builder, &frame, {0, 0, 320, 240})
 	defer builder_close(&builder)
-	command, ok := Command_Id_String("editor.save")
+	command, ok := command_id_string("editor.save")
 	testing.expect(t, ok)
 	bindings := [1]Command_Binding {
 		{command = command, stroke = {key = i32(Key.S), modifiers = {.Control}}},
 	}
 	keymap: Command_Keymap
-	testing.expect(t, Command_Keymap_Set(&keymap, bindings[:]))
-	testing.expect_value(t, Command_Take(&builder, &keymap), command)
+	testing.expect(t, command_keymap_set(&keymap, bindings[:]))
+	testing.expect_value(t, command_take(&builder, &keymap), command)
 }

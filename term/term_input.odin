@@ -215,24 +215,24 @@ term_handle_surface_input :: proc(
 	assert(surface != nil, "term_handle_surface_input: nil surface")
 	if ts == nil || !ts.pty_running do return
 	ctrl :=
-		fit.Surface_Key_Down(surface, .Left_Control) ||
-		fit.Surface_Key_Down(surface, .Right_Control)
+		fit.surface_key_down(surface, .Left_Control) ||
+		fit.surface_key_down(surface, .Right_Control)
 	shift :=
-		fit.Surface_Key_Down(surface, .Left_Shift) || fit.Surface_Key_Down(surface, .Right_Shift)
+		fit.surface_key_down(surface, .Left_Shift) || fit.surface_key_down(surface, .Right_Shift)
 	super :=
-		fit.Surface_Key_Down(surface, .Left_Super) || fit.Surface_Key_Down(surface, .Right_Super)
+		fit.surface_key_down(surface, .Left_Super) || fit.surface_key_down(surface, .Right_Super)
 	if !ctrl && !super {
-		for cp in fit.Surface_Characters(surface) {
+		for cp in fit.surface_characters(surface) {
 			if cp < 0x20 || cp == 0x7f do continue
 			buf, count := utf8.encode_rune(cp)
 			sent = term_write(ts, buf[:count]) || sent
 		}
 	}
 	for key in TERM_SURFACE_KEYS {
-		if !fit.Surface_Key_Pressed_Or_Repeat(surface, key) do continue
+		if !fit.surface_key_pressed_or_repeat(surface, key) do continue
 		gfx_key := rl.KeyboardKey(key)
 		if gfx_key == .V && (super || (ctrl && shift)) {
-			paste := fit.Surface_Clipboard(surface)
+			paste := fit.surface_clipboard(surface)
 			if len(paste) <= TERM_PASTE_MAX_BYTES do sent = term_write(ts, transmute([]u8)paste) || sent
 			continue
 		}

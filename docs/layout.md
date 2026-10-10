@@ -7,11 +7,11 @@ no open-container state to balance.
 
 ```odin
 Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
-	root := fit.Center(builder, {gap = .SM, padding = .LG})
-	fit.Label(root, "Settings", {role = .Title})
-	actions := fit.Row(root, {gap = .SM, align = .Center})
-	fit.Label(actions, "Actions", {track = fit.Grow()})
-	fit.Button(actions, "save", "Save", fit.action(Save))
+	root := fit.center(builder, {gap = .SM, padding = .LG})
+	fit.label(root, "Settings", {role = .Title})
+	actions := fit.row(root, {gap = .SM, align = .Center})
+	fit.label(actions, "Actions", {track = fit.grow()})
+	fit.button(actions, "save", "Save", fit.action(Save))
 }
 ```
 
@@ -27,22 +27,22 @@ Containers return Parent values and do not change an ambient current parent.
 This allows conditional layout and returning to an ancestor directly:
 
 ```odin
-root := fit.Column(builder, {gap = .SM})
-controls := fit.Row(root)
-fit.Button(controls, "save", "Save", fit.action(Save))
-fit.Label(root, "After controls")
+root := fit.column(builder, {gap = .SM})
+controls := fit.row(root)
+fit.button(controls, "save", "Save", fit.action(Save))
+fit.label(root, "After controls")
 
-content := fit.Row(root) if horizontal else fit.Column(root)
-for item in items do fit.Label(content, item.label)
+content := fit.row(root) if horizontal else fit.column(root)
+for item in items do fit.label(content, item.label)
 ```
 
-`fit.Scope(parent, key)` returns a Parent with the same layout node and a derived
-identity seed. `fit.Id` and keyed controls derive identity from that seed:
+`fit.scope(parent, key)` returns a Parent with the same layout node and a derived
+identity seed. `fit.id` and keyed controls derive identity from that seed:
 
 ```odin
 for item, index in items {
-	item_parent := fit.Scope(content, u64(index + 1))
-	fit.Button(item_parent, "open", item.label)
+	item_parent := fit.scope(content, u64(index + 1))
+	fit.button(item_parent, "open", item.label)
 }
 ```
 
@@ -86,13 +86,13 @@ configured limits.
 ## Responsive flow
 
 ```odin
-tags := fit.Flow(root, {
+tags := fit.flow(root, {
 	gap_x = .SM,
 	gap_y = .XS,
 	align = .Center,
 	justify = .Space_Between,
 })
-for tag in state.tags do fit.Button(tags, tag.id, tag.label)
+for tag in state.tags do fit.button(tags, tag.id, tag.label)
 ```
 
 Flow remains current-frame data. At most `fit.FLOW_GROW_ITEM_MAX` grow children
@@ -104,16 +104,16 @@ width without storing state across frames.
 ## Track grid
 
 ```odin
-columns := [3]fit.Track{fit.Fixed(180), fit.Grow(), fit.Fit(120)}
-grid := fit.Grid(root, {
+columns := [3]fit.Track{fit.fixed(180), fit.grow(), fit.fit(120)}
+grid := fit.grid(root, {
 	column_tracks = columns[:],
 	row_height = 36,
 	gap_x = .MD,
 	gap_y = .SM,
 })
-fit.Label(grid, "Name")
-wide := fit.Grid_Cell(grid, {column_span = 2})
-fit.Label(wide, "Spans two columns")
+fit.label(grid, "Name")
+wide := fit.grid_cell(grid, {column_span = 2})
+fit.label(wide, "Spans two columns")
 ```
 
 Track slices are borrowed through synchronous render and must remain valid and
@@ -144,7 +144,7 @@ bound may attach reusable caller-owned storage up to
 builder: fit.Builder
 nodes: [1024]fit.Storage_Node
 outputs: [1024]^bool
-fit.Set_Storage(&builder, {nodes = nodes[:], outputs = outputs[:]})
+fit.set_storage(&builder, {nodes = nodes[:], outputs = outputs[:]})
 ```
 
 Node and output slices must be non-nil, equal in length, and at least the layout
@@ -154,7 +154,7 @@ hierarchy.
 
 ## Tracks, leaves, and custom content
 
-`fit.Fit`, `fit.Grow`, `fit.Fixed`, `fit.Percent`, and `fit.Hug` construct
+`fit.fit`, `fit.grow`, `fit.fixed`, `fit.percent`, and `fit.hug` construct
 tracks. A leaf's `track` controls its parent main axis; `Size_Options` controls
 both axes. Default prepared children and explicit `Hug()` tracks use their
 current-frame intrinsic measurement as the preferred main-axis size. Under
@@ -181,12 +181,12 @@ state and retain their matching End calls:
 
 ```odin
 layout: fit.Layout_State
-fit.Layout_Begin(surface, &layout, rect, gap = fit.Px(surface, 8))
-fit.Layout_Row(&layout, fit.Px(surface, 32))
-left := fit.Layout_Next(&layout, fit.Px(surface, 120))
-right := fit.Layout_Remaining(&layout)
-fit.Layout_Pop(&layout)
-fit.Layout_End(&layout)
+fit.layout_begin(surface, &layout, rect, gap = fit.px(surface, 8))
+fit.layout_row(&layout, fit.px(surface, 32))
+left := fit.layout_next(&layout, fit.px(surface, 120))
+right := fit.layout_remaining(&layout)
+fit.layout_pop(&layout)
+fit.layout_end(&layout)
 ```
 
 These explicit states are reusable after End. Their physical rectangle results
@@ -198,12 +198,12 @@ spacers share one advancement rule instead of manually threading Y coordinates:
 
 ```odin
 cursor: fit.Vertical_Cursor_State
-fit.Vertical_Cursor_Begin(surface, &cursor, x, y, width, gap = fit.Px(surface, 8))
-fit.Vertical_Cursor_Text(&cursor, "Status", .Label, .Secondary)
-fit.Vertical_Cursor_Section_Header(&cursor, "DETAILS")
-button_rect := fit.Vertical_Cursor_Next(&cursor, fit.Px(surface, 30))
-_ = fit.Surface_Button(surface, button_id, "Continue", button_rect)
-content := fit.Vertical_Cursor_End(&cursor)
+fit.vertical_cursor_begin(surface, &cursor, x, y, width, gap = fit.px(surface, 8))
+fit.vertical_cursor_text(&cursor, "Status", .Label, .Secondary)
+fit.vertical_cursor_section_header(&cursor, "DETAILS")
+button_rect := fit.vertical_cursor_next(&cursor, fit.px(surface, 30))
+_ = fit.surface_button(surface, button_id, "Continue", button_rect)
+content := fit.vertical_cursor_end(&cursor)
 ```
 
 Use `Vertical_Cursor_Begin_Bounded` when the cursor must stay inside a fixed

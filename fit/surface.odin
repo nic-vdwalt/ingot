@@ -11,8 +11,8 @@ Surface_Performance :: struct {
 	measure_cache_misses:  u64,
 }
 
-Surface_Performance_Snapshot :: proc(surface: ^Surface) -> Surface_Performance {
-	assert(surface != nil, "Fit.Surface_Performance_Snapshot: nil surface")
+surface_performance_snapshot :: proc(surface: ^Surface) -> Surface_Performance {
+	assert(surface != nil, "fit.surface_performance_snapshot: nil surface")
 	widget := surface_ui(surface)
 	assert(widget.frame != nil && widget.frame.open)
 	frame := widget.frame
@@ -28,37 +28,37 @@ Surface_Performance_Snapshot :: proc(surface: ^Surface) -> Surface_Performance {
 	}
 }
 
-Surface_Viewport :: proc(surface: ^Surface) -> Rect {
+surface_viewport :: proc(surface: ^Surface) -> Rect {
 	u := surface_ui(surface)
-	return from_rect(ui.frame_viewport(u.frame))
+	return ui.frame_viewport(u.frame)
 }
 
-Surface_Pane_Origin :: proc(surface: ^Surface) -> Point {
+surface_pane_origin :: proc(surface: ^Surface) -> Point {
 	u := surface_ui(surface)
 	return from_point(ui.frame_pane_origin(u.frame))
 }
 
-Surface_Scale :: proc(surface: ^Surface, value: i32) -> i32 {
+surface_scale :: proc(surface: ^Surface, value: i32) -> i32 {
 	u := surface_ui(surface)
 	return ui.ui_frame_sc(u.frame, value)
 }
 
-Surface_Scale_Float :: proc(surface: ^Surface, value: f32) -> f32 {
+surface_scale_float :: proc(surface: ^Surface, value: f32) -> f32 {
 	u := surface_ui(surface)
 	return ui.ui_frame_scf(u.frame, value)
 }
 
-Px :: proc {
-	Surface_Scale,
-	Surface_Scale_Float,
+px :: proc {
+	surface_scale,
+	surface_scale_float,
 }
 
-Surface_Cull_Bounds :: proc(surface: ^Surface) -> (top, bottom: i32) {
+surface_cull_bounds :: proc(surface: ^Surface) -> (top, bottom: i32) {
 	u := surface_ui(surface)
 	return u.frame.text_cull_top, u.frame.text_cull_bottom
 }
 
-Surface_Metrics :: proc(surface: ^Surface) -> Metrics {
+surface_metrics :: proc(surface: ^Surface) -> Metrics {
 	u := surface_ui(surface)
 	metrics := ui.ui_frame_metrics(u.frame)
 	// Callers drawing their own geometry read card_radius directly, so it
@@ -93,13 +93,13 @@ Surface_Metrics :: proc(surface: ^Surface) -> Metrics {
 	}
 }
 
-Surface_Theme :: proc(surface: ^Surface) -> Theme {
+surface_theme :: proc(surface: ^Surface) -> Theme {
 	u := surface_ui(surface)
 	return {inner = ui.ui_frame_theme(u.frame)^}
 }
 
-Surface_Theme_Tokens :: proc(surface: ^Surface) -> Theme_Tokens {
-	return theme_tokens(Surface_Theme(surface).inner)
+surface_theme_tokens :: proc(surface: ^Surface) -> Theme_Tokens {
+	return theme_tokens(surface_theme(surface).inner)
 }
 
 @(private = "package")
@@ -164,23 +164,23 @@ theme_tokens :: proc(theme: ui.Theme) -> Theme_Tokens {
 		chalk = Color(theme.chalk),
 		highlighter = Color(theme.highlighter),
 		tape = Color(theme.tape_color),
-		substrate = from_substrate(theme.substrate.kind),
+		substrate = theme.substrate.kind,
 		margin_rule = theme.substrate.margin_rule,
 		square_corners = theme.square_corners,
-		font_face = from_font_face(theme.font_face),
-		reading_font_face = from_font_face(theme.reading_font_face),
-		surface_style = from_surface_style(theme.surface_style),
+		font_face = theme.font_face,
+		reading_font_face = theme.reading_font_face,
+		surface_style = theme.surface_style,
 		bevel_light = Color(theme.bevel_light),
 		bevel_shade = Color(theme.bevel_shade),
 	}
 }
 
-Surface_Theme_Color :: proc(surface: ^Surface, ink: Ink) -> Color {
+surface_theme_color :: proc(surface: ^Surface, ink: Ink) -> Color {
 	u := surface_ui(surface)
 	return Color(ui.text_ink(u.frame, ink))
 }
 
-Surface_Resolve_Colors :: proc(
+surface_resolve_colors :: proc(
 	surface: ^Surface,
 	kind: Surface_Kind,
 	state: Visual_State = .Rest,
@@ -190,29 +190,29 @@ Surface_Resolve_Colors :: proc(
 	return {Color(colors.bg), Color(colors.fg), Color(colors.border)}
 }
 
-Surface_Pigment :: proc(surface: ^Surface, pigment: Pigment) -> Color {
-	theme := Surface_Theme(surface)
-	return Theme_Pigment(theme, pigment)
+surface_pigment :: proc(surface: ^Surface, pigment: Pigment) -> Color {
+	theme := surface_theme(surface)
+	return theme_pigment(theme, pigment)
 }
 
-Surface_Space :: proc(surface: ^Surface, space: Space) -> i32 {
+surface_space :: proc(surface: ^Surface, space: Space) -> i32 {
 	u := surface_ui(surface)
 	return ui.space_pixels(u.frame, space)
 }
 
-Surface_Text_Size :: proc(surface: ^Surface, role: Text_Role) -> i32 {
+surface_text_size :: proc(surface: ^Surface, role: Text_Role) -> i32 {
 	u := surface_ui(surface)
 	return ui.text_role_size(u.frame, role)
 }
 
-Surface_Text_Line_Height :: proc(surface: ^Surface, role: Text_Role) -> i32 {
+surface_text_line_height :: proc(surface: ^Surface, role: Text_Role) -> i32 {
 	u := surface_ui(surface)
 	return ui.text_role_line_height(u.frame, role)
 }
 
-Surface_Text_Metrics :: proc(surface: ^Surface, font_size: i32) -> (Text_Metrics, bool) {
-	assert(surface != nil, "Fit.Surface_Text_Metrics: nil surface")
-	assert(font_size > 0, "Fit.Surface_Text_Metrics: invalid size")
+surface_text_metrics :: proc(surface: ^Surface, font_size: i32) -> (Text_Metrics, bool) {
+	assert(surface != nil, "fit.surface_text_metrics: nil surface")
+	assert(font_size > 0, "fit.surface_text_metrics: invalid size")
 	u := surface_ui(surface)
 	metrics, ok := ui.text_metrics_for_size_frame(u.frame, font_size)
 	if !ok do return {}, false
@@ -225,7 +225,7 @@ Surface_Text_Metrics :: proc(surface: ^Surface, font_size: i32) -> (Text_Metrics
 		true
 }
 
-Caret_Blink_Phase :: proc(
+caret_blink_phase :: proc(
 	now: f64,
 	epoch: f64,
 	interval_seconds: f64,
@@ -239,7 +239,7 @@ Caret_Blink_Phase :: proc(
 	}
 }
 
-Caret_Metrics_Or_Fallback :: proc(
+caret_metrics_or_fallback :: proc(
 	metrics: Text_Metrics,
 	metrics_ok: bool,
 	font_size: f32,
@@ -264,7 +264,7 @@ Caret_Metrics_Or_Fallback :: proc(
 	}
 }
 
-Caret_Rect :: proc(
+caret_rect :: proc(
 	line_origin: Point,
 	caret_x: f32,
 	metrics: Text_Metrics,
@@ -284,17 +284,17 @@ Caret_Rect :: proc(
 	return {rect.x, rect.y, rect.width, rect.height}
 }
 
-Surface_Reduced_Motion :: proc(surface: ^Surface) -> bool {
+surface_reduced_motion :: proc(surface: ^Surface) -> bool {
 	u := surface_ui(surface)
 	return ui.ui_frame_theme(u.frame).reduced_motion
 }
 
-Surface_Text_Width :: proc(surface: ^Surface, text: string, role: Text_Role = .Body) -> i32 {
+surface_text_width :: proc(surface: ^Surface, text: string, role: Text_Role = .Body) -> i32 {
 	u := surface_ui(surface)
 	return ui.text_width(u.frame, text, role)
 }
 
-Surface_Text :: proc(
+surface_text :: proc(
 	surface: ^Surface,
 	text: string,
 	x, y: i32,
@@ -305,7 +305,7 @@ Surface_Text :: proc(
 	ui.text(u.frame, text, x, y, role, ink)
 }
 
-Surface_Text_Truncated :: proc(
+surface_text_truncated :: proc(
 	surface: ^Surface,
 	text: string,
 	x, y, width: i32,
@@ -316,7 +316,7 @@ Surface_Text_Truncated :: proc(
 	ui.text_truncated(u.frame, text, x, y, width, role, ink)
 }
 
-Surface_Text_Wrapped :: proc(
+surface_text_wrapped :: proc(
 	surface: ^Surface,
 	text: string,
 	x, y, width: i32,
@@ -327,7 +327,7 @@ Surface_Text_Wrapped :: proc(
 	ui.draw_text_wrapped_frame(u.frame, x, y, width, text, ui.Color(color), font_size, line_height)
 }
 
-Surface_Text_Wrapped_Height :: proc(
+surface_text_wrapped_height :: proc(
 	surface: ^Surface,
 	text: string,
 	width, font_size, line_height: i32,
@@ -338,32 +338,32 @@ Surface_Text_Wrapped_Height :: proc(
 	return ui.wrapped_height_px_frame(u.frame, text, width, font_size, line_height)
 }
 
-Surface_Truncate_Path :: proc(surface: ^Surface, path: string, width, font_size: i32) -> string {
+surface_truncate_path :: proc(surface: ^Surface, path: string, width, font_size: i32) -> string {
 	u := surface_ui(surface)
 	return ui.truncate_path_middle_frame(u.frame, path, width, font_size)
 }
 
-Surface_Fill_Rect :: proc(surface: ^Surface, rect: Rect, color: Color) {
+surface_fill_rect :: proc(surface: ^Surface, rect: Rect, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_rectangle(u.frame, rect.x, rect.y, rect.w, rect.h, ui.Color(color))
 }
 
-Surface_Fill_Float_Rect :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+surface_fill_float_rect :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
 	u := surface_ui(surface)
-	ui.draw_rectangle_rec(u.frame, to_float_rect(rect), ui.Color(color))
+	ui.draw_rectangle_rec(u.frame, rect, ui.Color(color))
 }
 
-Surface_Stroke_Rect :: proc(surface: ^Surface, rect: Rect, color: Color) {
+surface_stroke_rect :: proc(surface: ^Surface, rect: Rect, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_rectangle_lines(u.frame, rect.x, rect.y, rect.w, rect.h, ui.Color(color))
 }
 
-Surface_Line :: proc(surface: ^Surface, from, to: Point, thickness: f32, color: Color) {
+surface_line :: proc(surface: ^Surface, from, to: Point, thickness: f32, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_line_ex(u.frame, {from.x, from.y}, {to.x, to.y}, thickness, ui.Color(color))
 }
 
-Surface_Fill_Rounded_Rect :: proc(
+surface_fill_rounded_rect :: proc(
 	surface: ^Surface,
 	rect: Float_Rect,
 	roundness: f32,
@@ -371,10 +371,10 @@ Surface_Fill_Rounded_Rect :: proc(
 	color: Color,
 ) {
 	u := surface_ui(surface)
-	ui.draw_rectangle_rounded(u.frame, to_float_rect(rect), roundness, segments, ui.Color(color))
+	ui.draw_rectangle_rounded(u.frame, rect, roundness, segments, ui.Color(color))
 }
 
-Surface_Stroke_Rounded_Rect :: proc(
+surface_stroke_rounded_rect :: proc(
 	surface: ^Surface,
 	rect: Float_Rect,
 	roundness: f32,
@@ -385,7 +385,7 @@ Surface_Stroke_Rounded_Rect :: proc(
 	u := surface_ui(surface)
 	ui.draw_rectangle_rounded_lines_ex(
 		u.frame,
-		to_float_rect(rect),
+		rect,
 		roundness,
 		segments,
 		thickness,
@@ -393,7 +393,7 @@ Surface_Stroke_Rounded_Rect :: proc(
 	)
 }
 
-Surface_Draw_Surface :: proc(
+surface_draw_surface :: proc(
 	surface: ^Surface,
 	rect: Float_Rect,
 	kind: Surface_Kind,
@@ -403,84 +403,84 @@ Surface_Draw_Surface :: proc(
 	elevation: Elevation = .Flat,
 ) {
 	u := surface_ui(surface)
-	ui.draw_surface(u.frame, to_float_rect(rect), kind, state, radius, border, elevation)
+	ui.draw_surface(u.frame, rect, kind, state, radius, border, elevation)
 }
 
-Surface_Interact :: proc(surface: ^Surface, rect: Float_Rect) -> Interaction {
+surface_interact :: proc(surface: ^Surface, rect: Float_Rect) -> Interaction {
 	u := surface_ui(surface)
-	result := ui.interact(u.frame, to_float_rect(rect))
+	result := ui.interact(u.frame, rect)
 	return {result.hovered, result.pressed, result.held, result.released, result.clicked}
 }
 
-Surface_Key_Pressed :: proc(surface: ^Surface, key: Key) -> bool {
+surface_key_pressed :: proc(surface: ^Surface, key: Key) -> bool {
 	u := surface_ui(surface)
 	return ui.is_key_pressed(u.frame, to_key(key))
 }
 
-Surface_Key_Pressed_Consume :: proc(surface: ^Surface, key: Key) {
+surface_key_pressed_consume :: proc(surface: ^Surface, key: Key) {
 	u := surface_ui(surface)
 	ui.key_pressed_consume(u.frame, to_key(key))
 }
 
-Surface_Mouse_Pressed :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
+surface_mouse_pressed :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
 	u := surface_ui(surface)
 	return ui.is_mouse_button_pressed(u.frame, to_mouse_button(button))
 }
 
-Surface_Mouse_Down :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
+surface_mouse_down :: proc(surface: ^Surface, button: Mouse_Button) -> bool {
 	u := surface_ui(surface)
 	return ui.is_mouse_button_down(u.frame, to_mouse_button(button))
 }
 
-Surface_Mouse_Position :: proc(surface: ^Surface) -> Point {
+surface_mouse_position :: proc(surface: ^Surface) -> Point {
 	u := surface_ui(surface)
 	return from_point(ui.get_mouse_position(u.frame))
 }
 
-Surface_Wheel_V :: proc(surface: ^Surface) -> Point {
+surface_wheel_v :: proc(surface: ^Surface) -> Point {
 	u := surface_ui(surface)
 	return from_point(ui.get_mouse_wheel_move_v(u.frame))
 }
 
-Surface_Wheel :: proc(surface: ^Surface) -> f32 {
+surface_wheel :: proc(surface: ^Surface) -> f32 {
 	u := surface_ui(surface)
 	return ui.get_wheel_move(u.frame)
 }
 
-Surface_Request_Cursor :: proc(surface: ^Surface, cursor: Cursor) {
+surface_request_cursor :: proc(surface: ^Surface, cursor: Cursor) {
 	u := surface_ui(surface)
 	ui.request_cursor(u.frame, to_cursor(cursor))
 }
 
-Request_Redraw :: proc(surface: ^Surface) {
+request_redraw :: proc(surface: ^Surface) {
 	u := surface_ui(surface)
 	ui.request_redraw(u.frame)
 }
 
-Surface_Settings_Scale_Preset_Index :: proc(value: f32) -> int {
+surface_settings_scale_preset_index :: proc(value: f32) -> int {
 	return ui.settings_scale_preset_index(value)
 }
 
-Surface_Region_Begin :: proc(surface: ^Surface, region: ^Region, rect: Rect, gap: Space = .None) {
+surface_region_begin :: proc(surface: ^Surface, region: ^Region, rect: Rect, gap: Space = .None) {
 	u := surface_ui(surface)
-	assert(region != nil && !region.inner.open, "Fit.Surface_Region_Begin: invalid region")
-	assert(!region.managed_scope, "Fit.Surface_Region_Begin: managed scope still open")
-	ui.begin(&region.inner, u.frame, to_rect(rect), gap = gap)
+	assert(region != nil && !region.inner.open, "fit.surface_region_begin: invalid region")
+	assert(!region.managed_scope, "fit.surface_region_begin: managed scope still open")
+	ui.begin(&region.inner, u.frame, rect, gap = gap)
 }
 
-Surface_Region_End :: proc(region: ^Region) -> i32 {
-	assert(region != nil && region.inner.open, "Fit.Surface_Region_End: region not open")
-	assert(!region.managed_scope, "Fit.Surface_Region_End: use Region_Close")
+surface_region_end :: proc(region: ^Region) -> i32 {
+	assert(region != nil && region.inner.open, "fit.surface_region_end: region not open")
+	assert(!region.managed_scope, "fit.surface_region_end: use region_close")
 	return ui.end(&region.inner)
 }
 
-Region_Open :: proc(
+region_open :: proc(
 	surface: ^Surface,
 	region: ^Region,
 	rect: Rect,
 	options: Region_Options = {},
 ) -> ^Region {
-	Surface_Region_Begin(surface, region, rect, options.gap)
+	surface_region_begin(surface, region, rect, options.gap)
 	if options.scope != "" {
 		ui.scope_begin(&region.inner, options.scope)
 		region.managed_scope = true
@@ -488,8 +488,8 @@ Region_Open :: proc(
 	return region
 }
 
-Region_Close :: proc(region: ^Region) -> i32 {
-	assert(region != nil && region.inner.open, "Fit.Region_Close: region not open")
+region_close :: proc(region: ^Region) -> i32 {
+	assert(region != nil && region.inner.open, "fit.region_close: region not open")
 	if region.managed_scope {
 		ui.scope_end(&region.inner)
 		region.managed_scope = false
@@ -497,7 +497,7 @@ Region_Close :: proc(region: ^Region) -> i32 {
 	return ui.end(&region.inner)
 }
 
-Surface_Pane_Begin :: proc(
+surface_pane_begin :: proc(
 	surface: ^Surface,
 	state: ^Pane_State,
 	rect: Rect,
@@ -506,18 +506,18 @@ Surface_Pane_Begin :: proc(
 	keyboard_unhovered: bool = false,
 ) -> i32 {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Pane_Begin: nil state")
+	assert(state != nil, "fit.surface_pane_begin: nil state")
 	return ui.pane_begin(
 		u.frame,
 		&state.inner,
-		to_rect(rect),
+		rect,
 		pad = padding,
 		keyboard = keyboard,
 		keyboard_unhovered = keyboard_unhovered,
 	)
 }
 
-Surface_Pane_End :: proc(
+surface_pane_end :: proc(
 	surface: ^Surface,
 	state: ^Pane_State,
 	rect: Rect,
@@ -525,16 +525,16 @@ Surface_Pane_End :: proc(
 	padding: i32 = 8,
 ) {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Pane_End: nil state")
-	ui.pane_end(u.frame, &state.inner, to_rect(rect), content_y, pad = padding)
+	assert(state != nil, "fit.surface_pane_end: nil state")
+	ui.pane_end(u.frame, &state.inner, rect, content_y, pad = padding)
 }
 
-Pane_Reset :: proc(state: ^Pane_State) {
-	assert(state != nil, "Fit.Pane_Reset: nil state")
+pane_reset :: proc(state: ^Pane_State) {
+	assert(state != nil, "fit.pane_reset: nil state")
 	ui.pane_reset(&state.inner)
 }
 
-Grid_Begin :: proc(
+grid_begin :: proc(
 	surface: ^Surface,
 	state: ^Grid_State,
 	rect: Rect,
@@ -543,35 +543,35 @@ Grid_Begin :: proc(
 	gap_y: i32 = 0,
 ) {
 	_ = surface_ui(surface)
-	assert(state != nil, "Fit.Grid_Begin: nil state")
-	assert(!state.open, "Fit.Grid_Begin: state already open")
+	assert(state != nil, "fit.grid_begin: nil state")
+	assert(!state.open, "fit.grid_begin: state already open")
 	state.surface = surface
 	state.open = true
-	ui.grid_begin(&state.inner, to_rect(rect), columns, row_height, gap_x, gap_y)
+	ui.grid_begin(&state.inner, rect, columns, row_height, gap_x, gap_y)
 }
 
-Grid_Next :: proc(state: ^Grid_State) -> Rect {
-	assert(state != nil && state.open, "Fit.Grid_Next: state not open")
+grid_next :: proc(state: ^Grid_State) -> Rect {
+	assert(state != nil && state.open, "fit.grid_next: state not open")
 	_ = surface_ui(state.surface)
-	return from_rect(ui.grid_next(&state.inner))
+	return ui.grid_next(&state.inner)
 }
 
-Grid_Skip_To :: proc(state: ^Grid_State, index: i32) {
-	assert(state != nil && state.open, "Fit.Grid_Skip_To: state not open")
+grid_skip_to :: proc(state: ^Grid_State, index: i32) {
+	assert(state != nil && state.open, "fit.grid_skip_to: state not open")
 	_ = surface_ui(state.surface)
 	ui.grid_skip_to(&state.inner, index)
 }
 
-Grid_End :: proc(state: ^Grid_State) -> Rect {
-	assert(state != nil && state.open, "Fit.Grid_End: state not open")
+grid_end :: proc(state: ^Grid_State) -> Rect {
+	assert(state != nil && state.open, "fit.grid_end: state not open")
 	_ = surface_ui(state.surface)
-	result := from_rect(ui.grid_end(&state.inner))
+	result := ui.grid_end(&state.inner)
 	state.surface = nil
 	state.open = false
 	return result
 }
 
-Surface_Grid_Begin :: proc(
+surface_grid_begin :: proc(
 	surface: ^Surface,
 	state: ^Grid_State,
 	rect: Rect,
@@ -579,127 +579,119 @@ Surface_Grid_Begin :: proc(
 	gap_x: i32 = 0,
 	gap_y: i32 = 0,
 ) {
-	Grid_Begin(surface, state, rect, columns, row_height, gap_x, gap_y)
+	grid_begin(surface, state, rect, columns, row_height, gap_x, gap_y)
 }
 
-Surface_Grid_Next :: proc(surface: ^Surface, state: ^Grid_State) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Grid_Next: surface mismatch")
-	return Grid_Next(state)
+surface_grid_next :: proc(surface: ^Surface, state: ^Grid_State) -> Rect {
+	assert(state != nil && state.surface == surface, "fit.surface_grid_next: surface mismatch")
+	return grid_next(state)
 }
 
-Surface_Grid_Visible_Range :: proc(
+surface_grid_visible_range :: proc(
 	surface: ^Surface,
 	rect: Rect,
 	columns, row_height, gap_y, count, top, bottom: i32,
 ) -> Visible_Range {
 	_ = surface_ui(surface)
-	first, end := ui.grid_visible_range(
-		to_rect(rect),
-		columns,
-		row_height,
-		gap_y,
-		count,
-		top,
-		bottom,
-	)
+	first, end := ui.grid_visible_range(rect, columns, row_height, gap_y, count, top, bottom)
 	return {first, end}
 }
 
-Surface_Grid_Skip_To :: proc(surface: ^Surface, state: ^Grid_State, index: i32) {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Grid_Skip_To: surface mismatch")
-	Grid_Skip_To(state, index)
+surface_grid_skip_to :: proc(surface: ^Surface, state: ^Grid_State, index: i32) {
+	assert(state != nil && state.surface == surface, "fit.surface_grid_skip_to: surface mismatch")
+	grid_skip_to(state, index)
 }
 
-Surface_Grid_End :: proc(surface: ^Surface, state: ^Grid_State) -> Rect {
-	assert(state != nil && state.surface == surface, "Fit.Surface_Grid_End: surface mismatch")
-	return Grid_End(state)
+surface_grid_end :: proc(surface: ^Surface, state: ^Grid_State) -> Rect {
+	assert(state != nil && state.surface == surface, "fit.surface_grid_end: surface mismatch")
+	return grid_end(state)
 }
 
-Surface_Draw_Shadow :: proc(
+surface_draw_shadow :: proc(
 	surface: ^Surface,
 	rect: Float_Rect,
 	radius: Radius,
 	elevation: Elevation,
 ) {
 	u := surface_ui(surface)
-	ui.draw_shadow_hard(u.frame, to_float_rect(rect), radius, elevation)
+	ui.draw_shadow_hard(u.frame, rect, radius, elevation)
 }
 
-Surface_Draw_Rules :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32, color: Color) {
+surface_draw_rules :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32, color: Color) {
 	u := surface_ui(surface)
-	ui.draw_rule_lines(u.frame, to_float_rect(rect), spacing, ui.Color(color))
+	ui.draw_rule_lines(u.frame, rect, spacing, ui.Color(color))
 }
 
-Surface_Draw_Margin_Rule :: proc(surface: ^Surface, rect: Float_Rect, inset: i32, color: Color) {
+surface_draw_margin_rule :: proc(surface: ^Surface, rect: Float_Rect, inset: i32, color: Color) {
 	u := surface_ui(surface)
-	ui.draw_margin_rule(u.frame, to_float_rect(rect), inset, ui.Color(color))
+	ui.draw_margin_rule(u.frame, rect, inset, ui.Color(color))
 }
 
-Surface_Draw_Hand_Underline :: proc(surface: ^Surface, x, y, width: i32, color: Color) {
+surface_draw_hand_underline :: proc(surface: ^Surface, x, y, width: i32, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_hand_underline(u.frame, x, y, width, ui.Color(color))
 }
 
-Surface_Draw_Dot_Grid :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32, color: Color) {
+surface_draw_dot_grid :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32, color: Color) {
 	u := surface_ui(surface)
-	ui.draw_dot_grid(u.frame, to_float_rect(rect), spacing, ui.Color(color))
+	ui.draw_dot_grid(u.frame, rect, spacing, ui.Color(color))
 }
 
-Surface_Draw_Highlight :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+surface_draw_highlight :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
 	u := surface_ui(surface)
-	ui.draw_highlight_swipe(u.frame, to_float_rect(rect), ui.Color(color))
+	ui.draw_highlight_swipe(u.frame, rect, ui.Color(color))
 }
 
-Surface_Draw_Scribble :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+surface_draw_scribble :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
 	u := surface_ui(surface)
-	ui.draw_scribble_fill(u.frame, to_float_rect(rect), ui.Color(color))
+	ui.draw_scribble_fill(u.frame, rect, ui.Color(color))
 }
 
-Surface_Draw_Tape :: proc(surface: ^Surface, rect: Float_Rect, length: f32, color: Color) {
+surface_draw_tape :: proc(surface: ^Surface, rect: Float_Rect, length: f32, color: Color) {
 	u := surface_ui(surface)
-	ui.draw_tape_strip(u.frame, to_float_rect(rect), length, ui.Color(color))
+	ui.draw_tape_strip(u.frame, rect, length, ui.Color(color))
 }
 
-Surface_Draw_Dog_Ear :: proc(surface: ^Surface, rect: Float_Rect, size: f32, fold, shade: Color) {
+surface_draw_dog_ear :: proc(surface: ^Surface, rect: Float_Rect, size: f32, fold, shade: Color) {
 	u := surface_ui(surface)
-	ui.draw_dog_ear(u.frame, to_float_rect(rect), size, ui.Color(fold), ui.Color(shade))
+	ui.draw_dog_ear(u.frame, rect, size, ui.Color(fold), ui.Color(shade))
 }
 
-Surface_Draw_Paper_Tooth :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+surface_draw_paper_tooth :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
 	u := surface_ui(surface)
-	ui.draw_paper_tooth(u.frame, to_float_rect(rect), ui.Color(color))
+	ui.draw_paper_tooth(u.frame, rect, ui.Color(color))
 }
 
-Surface_Draw_Wash :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+surface_draw_wash :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
 	u := surface_ui(surface)
-	ui.draw_wash(u.frame, to_float_rect(rect), ui.Color(color))
+	ui.draw_wash(u.frame, rect, ui.Color(color))
 }
 
-Surface_Draw_Pigment_Block :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
+surface_draw_pigment_block :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
 	u := surface_ui(surface)
-	ui.draw_pigment_block(u.frame, to_float_rect(rect), ui.Color(color))
+	ui.draw_pigment_block(u.frame, rect, ui.Color(color))
 }
 
-Surface_Draw_Chalk_Highlight :: proc(surface: ^Surface, rect: Float_Rect, radius: Radius) {
+surface_draw_chalk_highlight :: proc(surface: ^Surface, rect: Float_Rect, radius: Radius) {
 	u := surface_ui(surface)
-	ui.draw_chalk_highlight(u.frame, to_float_rect(rect), radius)
+	ui.draw_chalk_highlight(u.frame, rect, radius)
 }
 
-Surface_Dot_Grid_Fits :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32) -> bool {
+surface_dot_grid_fits :: proc(surface: ^Surface, rect: Float_Rect, spacing: i32) -> bool {
 	_ = surface_ui(surface)
-	return ui.dot_grid_fits(to_float_rect(rect), spacing)
+	return ui.dot_grid_fits(rect, spacing)
 }
 
-Surface_Scatter_Unit :: proc(index, lane: u32) -> f32 {
+surface_scatter_unit :: proc(index, lane: u32) -> f32 {
 	return ui.scatter_unit(index, lane)
 }
 
-Surface_Layer_Begin :: proc(surface: ^Surface, z: Z_Order, claim: Float_Rect = {}) {
+surface_layer_begin :: proc(surface: ^Surface, z: Z_Order, claim: Float_Rect = {}) {
 	u := surface_ui(surface)
-	ui.layer_begin(u.frame, ui.Z_Order(z), claim = to_float_rect(claim))
+	ui.layer_begin(u.frame, ui.Z_Order(z), claim = claim)
 }
 
-Surface_Layer_End :: proc(surface: ^Surface) {
+surface_layer_end :: proc(surface: ^Surface) {
 	u := surface_ui(surface)
 	ui.layer_end(u.frame)
 }

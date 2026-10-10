@@ -2,43 +2,43 @@ package fit
 
 import "ingot:ui"
 
-Begin :: proc(builder: ^Builder) {
-	assert(builder != nil && builder.bound, "Fit.Begin: builder not bound")
-	assert(builder.root.open, "Fit.Begin: root not open")
-	assert(builder.customs_used >= 0 && builder.customs_used <= i32(custom_capacity(builder)))
-	assert(builder.generation < max(u64), "Fit.Begin: generation exhausted")
+begin :: proc(builder: ^Builder) {
+	assert(builder != nil && builder.bound, "fit.begin: builder not bound")
+	assert(builder.root.open, "fit.begin: root not open")
+	assert(builder.customs_used >= 0 && builder.customs_used <= i32(custom_slot_capacity(builder)))
+	assert(builder.generation < max(u64), "fit.begin: generation exhausted")
 	builder.customs_used = 0
 	builder.generation += 1
 	ui.fit_begin(&builder.inner, &builder.root)
 }
 
-Set_Storage :: proc(builder: ^Builder, storage: Storage) {
-	assert(builder != nil && !builder.bound, "Fit.Set_Storage: builder bound")
-	assert(!builder.inner.prepared.open, "Fit.Set_Storage: description open")
+set_storage :: proc(builder: ^Builder, storage: Storage) {
+	assert(builder != nil && !builder.bound, "fit.set_storage: builder bound")
+	assert(!builder.inner.prepared.open, "fit.set_storage: description open")
 	ui.fit_builder_set_storage(&builder.inner, to_storage(storage))
 	builder.custom_storage = storage.customs
 }
 
-Reset_Storage :: proc(builder: ^Builder) {
-	assert(builder != nil && !builder.bound, "Fit.Reset_Storage: builder bound")
-	assert(!builder.inner.prepared.open, "Fit.Reset_Storage: description open")
+reset_storage :: proc(builder: ^Builder) {
+	assert(builder != nil && !builder.bound, "fit.reset_storage: builder bound")
+	assert(!builder.inner.prepared.open, "fit.reset_storage: description open")
 	ui.fit_builder_reset_storage(&builder.inner)
 	builder.custom_storage = nil
 }
 
-Storage_Capacity :: proc(builder: ^Builder) -> int {
-	assert(builder != nil, "Fit.Storage_Capacity: nil builder")
-	assert(!builder.inner.prepared.open || builder.bound, "Fit.Storage_Capacity: invalid state")
+storage_capacity :: proc(builder: ^Builder) -> int {
+	assert(builder != nil, "fit.storage_capacity: nil builder")
+	assert(!builder.inner.prepared.open || builder.bound, "fit.storage_capacity: invalid state")
 	return ui.prepared_capacity(&builder.inner.prepared)
 }
 
-Custom_Capacity :: proc(builder: ^Builder) -> int {
-	assert(builder != nil, "Fit.Custom_Capacity: nil builder")
-	return custom_capacity(builder)
+custom_capacity :: proc(builder: ^Builder) -> int {
+	assert(builder != nil, "fit.custom_capacity: nil builder")
+	return custom_slot_capacity(builder)
 }
 
 @(private = "file")
-custom_capacity :: proc(builder: ^Builder) -> int {
+custom_slot_capacity :: proc(builder: ^Builder) -> int {
 	assert(builder != nil, "fit custom capacity: nil builder")
 	if builder.custom_storage != nil do return len(builder.custom_storage)
 	return len(builder.customs)
@@ -46,7 +46,7 @@ custom_capacity :: proc(builder: ^Builder) -> int {
 
 @(private = "file")
 custom_at :: proc(builder: ^Builder, index: int) -> ^Custom_Spec {
-	assert(builder != nil && index >= 0 && index < custom_capacity(builder))
+	assert(builder != nil && index >= 0 && index < custom_slot_capacity(builder))
 	if builder.custom_storage != nil do return &builder.custom_storage[index]
 	return &builder.customs[index]
 }
@@ -54,29 +54,29 @@ custom_at :: proc(builder: ^Builder, index: int) -> ^Custom_Spec {
 @(private = "package")
 parent_validate :: proc(parent: Parent) -> ^Builder {
 	builder := parent.builder
-	assert(builder != nil && builder.bound, "Fit.Parent: builder not bound")
+	assert(builder != nil && builder.bound, "fit.Parent: builder not bound")
 	assert(
 		parent.generation != 0 && parent.generation == builder.generation,
-		"Fit.Parent: stale handle",
+		"fit.Parent: stale handle",
 	)
-	assert(ui.ui_frame_ticket_valid(builder.frame_ticket), "Fit.Parent: expired frame")
-	assert(ui.ui_frame_phase(builder.frame_ticket) == .Build, "Fit.Parent: invalid phase")
-	assert(parent.identity != ui.WIDGET_ID_NONE, "Fit.Parent: invalid identity")
+	assert(ui.ui_frame_ticket_valid(builder.frame_ticket), "fit.Parent: expired frame")
+	assert(ui.ui_frame_phase(builder.frame_ticket) == .Build, "fit.Parent: invalid phase")
+	assert(parent.identity != ui.WIDGET_ID_NONE, "fit.Parent: invalid identity")
 	index := i32(parent.handle)
-	assert(index >= 0 && index < builder.inner.prepared.count, "Fit.Parent: invalid handle")
+	assert(index >= 0 && index < builder.inner.prepared.count, "fit.Parent: invalid handle")
 	return builder
 }
 
-Debug_Frame_Access_Get :: proc(builder: ^Builder) -> Debug_Frame_Access {
-	assert(builder != nil && builder.bound, "Fit.Debug_Frame_Access_Get: builder not bound")
+debug_frame_access_get :: proc(builder: ^Builder) -> Debug_Frame_Access {
+	assert(builder != nil && builder.bound, "fit.debug_frame_access_get: builder not bound")
 	assert(
 		ui.ui_frame_ticket_valid(builder.frame_ticket),
-		"Fit.Debug_Frame_Access_Get: expired frame",
+		"fit.debug_frame_access_get: expired frame",
 	)
 	return {builder = builder, generation = builder.generation, frame = builder.frame_ticket}
 }
 
-Debug_Frame_Access_Valid :: proc(access: Debug_Frame_Access) -> bool {
+debug_frame_access_valid :: proc(access: Debug_Frame_Access) -> bool {
 	return(
 		access.builder != nil &&
 		access.builder.bound &&
@@ -86,20 +86,20 @@ Debug_Frame_Access_Valid :: proc(access: Debug_Frame_Access) -> bool {
 	)
 }
 
-Debug_Async_Begin :: proc(builder: ^Builder) -> (Debug_Async_Ticket, bool) {
-	assert(builder != nil && builder.owner.alive, "Fit.Debug_Async_Begin: retired owner")
+debug_async_begin :: proc(builder: ^Builder) -> (Debug_Async_Ticket, bool) {
+	assert(builder != nil && builder.owner.alive, "fit.debug_async_begin: retired owner")
 	if builder.owner.outstanding == max(u32) do return {}, false
 	builder.owner.outstanding += 1
 	return {owner = &builder.owner, epoch = builder.owner.epoch}, true
 }
 
-Debug_Async_Complete :: proc(ticket: Debug_Async_Ticket) {
-	assert(ticket.owner != nil, "Fit.Debug_Async_Complete: nil owner")
+debug_async_complete :: proc(ticket: Debug_Async_Ticket) {
+	assert(ticket.owner != nil, "fit.debug_async_complete: nil owner")
 	assert(
 		ticket.owner.alive && ticket.owner.epoch == ticket.epoch,
-		"Fit.Debug_Async_Complete: completion into destroyed owner",
+		"fit.debug_async_complete: completion into destroyed owner",
 	)
-	assert(ticket.owner.outstanding > 0, "Fit.Debug_Async_Complete: duplicate completion")
+	assert(ticket.owner.outstanding > 0, "fit.debug_async_complete: duplicate completion")
 	ticket.owner.outstanding -= 1
 }
 
@@ -131,7 +131,7 @@ debug_owner_prepare :: proc(builder: ^Builder) {
 
 @(private = "file")
 parent_root :: proc(builder: ^Builder, handle: ui.Prepared_Handle) -> Parent {
-	assert(builder != nil && builder.bound && builder.generation != 0, "Fit.Parent: invalid root")
+	assert(builder != nil && builder.bound && builder.generation != 0, "fit.Parent: invalid root")
 	return {builder, builder.generation, handle, ui.fit_identity_root()}
 }
 
@@ -150,14 +150,15 @@ parent_select :: proc(parent: Parent) -> ^Builder {
 
 @(private = "package")
 parent_clear :: proc(builder: ^Builder) {
-	assert(builder != nil && builder.bound, "Fit.Parent: builder not bound")
+	assert(builder != nil && builder.bound, "fit.Parent: builder not bound")
 	ui.fit_parent_clear(&builder.inner)
 }
 
 @(private = "file")
 row_root :: proc(builder: ^Builder, options: Container_Options = {}) -> Parent {
-	assert(builder != nil && builder.bound, "Fit.Row: builder not bound")
-	ui.fit_builder_row(&builder.inner, to_container_options(options))
+	assert(builder != nil && builder.bound, "fit.row: builder not bound")
+	effects_validate(options.effects)
+	ui.fit_builder_row(&builder.inner, options)
 	handle := ui.fit_parent_created(&builder.inner)
 	return parent_root(builder, handle)
 }
@@ -165,20 +166,22 @@ row_root :: proc(builder: ^Builder, options: Container_Options = {}) -> Parent {
 @(private = "file")
 row_child :: proc(parent: Parent, options: Container_Options = {}) -> Parent {
 	builder := parent_select(parent)
-	ui.fit_builder_row(&builder.inner, to_container_options(options))
+	effects_validate(options.effects)
+	ui.fit_builder_row(&builder.inner, options)
 	handle := ui.fit_parent_created(&builder.inner)
 	return parent_child(parent, handle)
 }
 
-Row :: proc {
+row :: proc {
 	row_root,
 	row_child,
 }
 
 @(private = "file")
 column_root :: proc(builder: ^Builder, options: Container_Options = {}) -> Parent {
-	assert(builder != nil && builder.bound, "Fit.Column: builder not bound")
-	ui.fit_builder_column(&builder.inner, to_container_options(options))
+	assert(builder != nil && builder.bound, "fit.column: builder not bound")
+	effects_validate(options.effects)
+	ui.fit_builder_column(&builder.inner, options)
 	handle := ui.fit_parent_created(&builder.inner)
 	return parent_root(builder, handle)
 }
@@ -186,33 +189,35 @@ column_root :: proc(builder: ^Builder, options: Container_Options = {}) -> Paren
 @(private = "file")
 column_child :: proc(parent: Parent, options: Container_Options = {}) -> Parent {
 	builder := parent_select(parent)
-	ui.fit_builder_column(&builder.inner, to_container_options(options))
+	effects_validate(options.effects)
+	ui.fit_builder_column(&builder.inner, options)
 	handle := ui.fit_parent_created(&builder.inner)
 	return parent_child(parent, handle)
 }
 
-Column :: proc {
+column :: proc {
 	column_root,
 	column_child,
 }
 
-Center :: proc(builder: ^Builder, options: Container_Options = {}) -> Parent {
-	assert(builder != nil && builder.bound, "Fit.Center: builder not bound")
-	assert(builder.inner.prepared.count == 0, "Fit.Center: root already declared")
+center :: proc(builder: ^Builder, options: Container_Options = {}) -> Parent {
+	assert(builder != nil && builder.bound, "fit.center: builder not bound")
+	assert(builder.inner.prepared.count == 0, "fit.center: root already declared")
 	resolved := options
 	resolved.align = .Center
 	resolved.justify = .Center
 	resolved.size = {
-		width  = Grow(),
-		height = Grow(),
+		width  = grow(),
+		height = grow(),
 	}
 	return column_root(builder, resolved)
 }
 
 @(private = "file")
 flow_root :: proc(builder: ^Builder, options: Flow_Options = {}) -> Parent {
-	assert(builder != nil && builder.bound, "Fit.Flow: builder not bound")
-	ui.fit_builder_flow(&builder.inner, to_flow_options(options))
+	assert(builder != nil && builder.bound, "fit.flow: builder not bound")
+	effects_validate(options.effects)
+	ui.fit_builder_flow(&builder.inner, options)
 	handle := ui.fit_parent_created(&builder.inner)
 	return parent_root(builder, handle)
 }
@@ -220,20 +225,22 @@ flow_root :: proc(builder: ^Builder, options: Flow_Options = {}) -> Parent {
 @(private = "file")
 flow_child :: proc(parent: Parent, options: Flow_Options = {}) -> Parent {
 	builder := parent_select(parent)
-	ui.fit_builder_flow(&builder.inner, to_flow_options(options))
+	effects_validate(options.effects)
+	ui.fit_builder_flow(&builder.inner, options)
 	handle := ui.fit_parent_created(&builder.inner)
 	return parent_child(parent, handle)
 }
 
-Flow :: proc {
+flow :: proc {
 	flow_root,
 	flow_child,
 }
 
 @(private = "file")
 grid_root :: proc(builder: ^Builder, options: Grid_Options) -> Parent {
-	assert(builder != nil && builder.bound, "Fit.Grid: builder not bound")
-	ui.fit_builder_grid(&builder.inner, to_grid_options(options))
+	assert(builder != nil && builder.bound, "fit.grid: builder not bound")
+	grid_options_validate(options)
+	ui.fit_builder_grid(&builder.inner, options)
 	handle := ui.fit_parent_created(&builder.inner)
 	return parent_root(builder, handle)
 }
@@ -241,26 +248,27 @@ grid_root :: proc(builder: ^Builder, options: Grid_Options) -> Parent {
 @(private = "file")
 grid_child :: proc(parent: Parent, options: Grid_Options) -> Parent {
 	builder := parent_select(parent)
-	ui.fit_builder_grid(&builder.inner, to_grid_options(options))
+	grid_options_validate(options)
+	ui.fit_builder_grid(&builder.inner, options)
 	handle := ui.fit_parent_created(&builder.inner)
 	return parent_child(parent, handle)
 }
 
-Grid :: proc {
+grid :: proc {
 	grid_root,
 	grid_child,
 }
 
-Grid_Cell :: proc(parent: Parent, options: Grid_Cell_Options = {}) -> Parent {
+grid_cell :: proc(parent: Parent, options: Grid_Cell_Options = {}) -> Parent {
 	builder := parent_select(parent)
 	ui.fit_builder_grid_cell(&builder.inner, to_grid_cell_options(options))
 	handle := ui.fit_parent_created(&builder.inner)
 	return parent_child(parent, handle)
 }
 
-Attachment :: proc(parent: Parent, options: Attachment_Options) -> Parent {
+attachment :: proc(parent: Parent, options: Attachment_Options) -> Parent {
 	builder := parent_select(parent)
-	ui.fit_builder_attachment(&builder.inner, to_attachment_options(options))
+	ui.fit_builder_attachment(&builder.inner, options)
 	handle := ui.fit_parent_created(&builder.inner)
 	return parent_child(parent, handle)
 }
@@ -272,8 +280,8 @@ scroll_string :: proc(
 	state: ^Scroll_State,
 	options: Scroll_Options = {},
 ) -> Parent {
-	assert(key != "" && state != nil, "Fit.Scroll: invalid state")
-	return scroll_id(parent, Id(parent, key), state, options)
+	assert(key != "" && state != nil, "fit.scroll: invalid state")
+	return scroll_id(parent, id(parent, key), state, options)
 }
 
 @(private = "package")
@@ -283,8 +291,8 @@ scroll_u64 :: proc(
 	state: ^Scroll_State,
 	options: Scroll_Options = {},
 ) -> Parent {
-	assert(key != 0 && state != nil, "Fit.Scroll: invalid state")
-	return scroll_id(parent, Id(parent, key), state, options)
+	assert(key != 0 && state != nil, "fit.scroll: invalid state")
+	return scroll_id(parent, id(parent, key), state, options)
 }
 
 @(private = "package")
@@ -294,7 +302,7 @@ scroll_id :: proc(
 	state: ^Scroll_State,
 	options: Scroll_Options = {},
 ) -> Parent {
-	assert(widget != Widget_Id(0) && state != nil, "Fit.Scroll: invalid state")
+	assert(widget != Widget_Id(0) && state != nil, "fit.scroll: invalid state")
 	builder := parent_select(parent)
 	ui.fit_builder_scroll(&builder.inner, to_scroll_options(widget, state, options))
 	handle := ui.fit_parent_created(&builder.inner)
@@ -307,35 +315,35 @@ scroll_compat :: proc(
 	state: ^Scroll_State,
 	options: Scroll_Options = {},
 ) -> Parent {
-	assert(state != nil, "Fit.Scroll: nil state")
-	return scroll_id(parent, Id(parent, u64(0x7363726f6c6c)), state, options)
+	assert(state != nil, "fit.scroll: nil state")
+	return scroll_id(parent, id(parent, u64(0x7363726f6c6c)), state, options)
 }
 
-Scroll :: proc {
+scroll :: proc {
 	scroll_string,
 	scroll_u64,
 	scroll_id,
 	scroll_compat,
 }
 
-Scroll_Reset :: proc(state: ^Scroll_State) {
-	assert(state != nil, "Fit.Scroll_Reset: nil state")
+scroll_reset :: proc(state: ^Scroll_State) {
+	assert(state != nil, "fit.scroll_reset: nil state")
 	state.inner = {}
 }
 
-Scroll_Offset :: proc(state: ^Scroll_State) -> f32 {
-	assert(state != nil, "Fit.Scroll_Offset: nil state")
+scroll_offset :: proc(state: ^Scroll_State) -> f32 {
+	assert(state != nil, "fit.scroll_offset: nil state")
 	return state.inner.offset
 }
 
-Scroll_Viewport_Height :: proc(state: ^Scroll_State) -> i32 {
-	assert(state != nil, "Fit.Scroll_Viewport_Height: nil state")
+scroll_viewport_height :: proc(state: ^Scroll_State) -> i32 {
+	assert(state != nil, "fit.scroll_viewport_height: nil state")
 	return state.inner.viewport_h
 }
 
-Scroll_Reveal_Range :: proc(state: ^Scroll_State, top, bottom: i32) {
-	assert(state != nil, "Fit.Scroll_Reveal_Range: nil state")
-	assert(top >= 0 && bottom >= top, "Fit.Scroll_Reveal_Range: invalid range")
+scroll_reveal_range :: proc(state: ^Scroll_State, top, bottom: i32) {
+	assert(state != nil, "fit.scroll_reveal_range: nil state")
+	assert(top >= 0 && bottom >= top, "fit.scroll_reveal_range: invalid range")
 	viewport := state.inner.viewport_h
 	if viewport <= 0 do return
 	if f32(top) < state.inner.offset {
@@ -347,31 +355,31 @@ Scroll_Reveal_Range :: proc(state: ^Scroll_State, top, bottom: i32) {
 	state.inner.offset = clamp(state.inner.offset, 0, f32(maximum))
 }
 
-Scroll_Content_Height :: proc(state: ^Scroll_State) -> i32 {
-	assert(state != nil, "Fit.Scroll_Content_Height: nil state")
+scroll_content_height :: proc(state: ^Scroll_State) -> i32 {
+	assert(state != nil, "fit.scroll_content_height: nil state")
 	return state.inner.content_h
 }
 
-Label :: proc(parent: Parent, text: string, options: Label_Options = {}) {
+label :: proc(parent: Parent, text: string, options: Label_Options = {}) {
 	builder := parent_select(parent)
-	ui.fit_builder_label(&builder.inner, text, to_label_options(options))
+	ui.fit_builder_label(&builder.inner, text, options)
 	parent_clear(builder)
 }
 
-Signal_Peek :: proc(signal: ^Signal) -> bool {
-	assert(signal != nil, "Fit.Signal_Peek: nil signal")
+signal_peek :: proc(signal: ^Signal) -> bool {
+	assert(signal != nil, "fit.signal_peek: nil signal")
 	return signal.pending
 }
 
-Signal_Take :: proc(signal: ^Signal) -> bool {
-	assert(signal != nil, "Fit.Signal_Take: nil signal")
+signal_take :: proc(signal: ^Signal) -> bool {
+	assert(signal != nil, "fit.signal_take: nil signal")
 	pending := signal.pending
 	signal.pending = false
 	return pending
 }
 
-Signal_Reset :: proc(signal: ^Signal) {
-	assert(signal != nil, "Fit.Signal_Reset: nil signal")
+signal_reset :: proc(signal: ^Signal) {
+	assert(signal != nil, "fit.signal_reset: nil signal")
 	signal.pending = false
 }
 
@@ -394,18 +402,18 @@ action :: proc {
 
 @(private = "package")
 button_string :: proc(parent: Parent, key, label: string, options: Button_Options = {}) {
-	button_id(parent, Id(parent, key), label, options)
+	button_id(parent, id(parent, key), label, options)
 }
 
 @(private = "package")
 button_u64 :: proc(parent: Parent, key: u64, label: string, options: Button_Options = {}) {
-	button_id(parent, Id(parent, key), label, options)
+	button_id(parent, id(parent, key), label, options)
 }
 
 @(private = "package")
 button_id :: proc(parent: Parent, widget: Widget_Id, label: string, options: Button_Options = {}) {
 	builder := parent_select(parent)
-	ui.fit_builder_button(&builder.inner, ui.Widget_Id(widget), label, to_button_options(options))
+	ui.fit_builder_button(&builder.inner, ui.Widget_Id(widget), label, options)
 	parent_clear(builder)
 }
 
@@ -416,7 +424,7 @@ button_string_action :: proc(parent: Parent, key, label: string, action: Action)
 
 @(private = "package")
 button_string_active :: proc(parent: Parent, key, label: string, activated: ^bool) {
-	assert(activated != nil, "Fit.Button: nil activation destination")
+	assert(activated != nil, "fit.button: nil activation destination")
 	button_string(parent, key, label, {activated = activated})
 }
 
@@ -427,7 +435,7 @@ button_u64_action :: proc(parent: Parent, key: u64, label: string, action: Actio
 
 @(private = "package")
 button_u64_active :: proc(parent: Parent, key: u64, label: string, activated: ^bool) {
-	assert(activated != nil, "Fit.Button: nil activation destination")
+	assert(activated != nil, "fit.button: nil activation destination")
 	button_u64(parent, key, label, {activated = activated})
 }
 
@@ -438,22 +446,22 @@ button_id_action :: proc(parent: Parent, widget: Widget_Id, label: string, actio
 
 @(private = "package")
 button_id_active :: proc(parent: Parent, widget: Widget_Id, label: string, activated: ^bool) {
-	assert(activated != nil, "Fit.Button: nil activation destination")
+	assert(activated != nil, "fit.button: nil activation destination")
 	button_id(parent, widget, label, {activated = activated})
 }
 
 @(private = "package")
 button_string_signal :: proc(parent: Parent, key, label: string, signal: ^Signal) -> bool {
-	assert(signal != nil, "Fit.Button: nil signal")
-	activated := Signal_Take(signal)
+	assert(signal != nil, "fit.button: nil signal")
+	activated := signal_take(signal)
 	button_string(parent, key, label, {activated = &signal.pending})
 	return activated
 }
 
 @(private = "package")
 button_u64_signal :: proc(parent: Parent, key: u64, label: string, signal: ^Signal) -> bool {
-	assert(signal != nil, "Fit.Button: nil signal")
-	activated := Signal_Take(signal)
+	assert(signal != nil, "fit.button: nil signal")
+	activated := signal_take(signal)
 	button_u64(parent, key, label, {activated = &signal.pending})
 	return activated
 }
@@ -465,13 +473,13 @@ button_id_signal :: proc(
 	label: string,
 	signal: ^Signal,
 ) -> bool {
-	assert(signal != nil, "Fit.Button: nil signal")
-	activated := Signal_Take(signal)
+	assert(signal != nil, "fit.button: nil signal")
+	activated := signal_take(signal)
 	button_id(parent, widget, label, {activated = &signal.pending})
 	return activated
 }
 
-Button :: proc {
+button :: proc {
 	button_string,
 	button_string_action,
 	button_string_active,
@@ -483,14 +491,14 @@ Button :: proc {
 	button_id_active,
 }
 
-Button_Delayed :: proc {
+button_delayed :: proc {
 	button_string_signal,
 	button_u64_signal,
 	button_id_signal,
 }
 
-Custom :: proc(parent: Parent, spec: Custom_Spec, options: Custom_Options = {}) {
-	assert(spec.measure != nil && spec.render != nil, "Fit.Custom: invalid callbacks")
+custom :: proc(parent: Parent, spec: Custom_Spec, options: Custom_Options = {}) {
+	assert(spec.measure != nil && spec.render != nil, "fit.custom: invalid callbacks")
 	custom_add(parent, spec, options)
 }
 
@@ -507,7 +515,10 @@ custom_intrinsic :: proc(parent: Parent, spec: Custom_Spec, options: Custom_Opti
 custom_add :: proc(parent: Parent, spec: Custom_Spec, options: Custom_Options) {
 	builder := parent_select(parent)
 	assert(spec.measure != nil && spec.render != nil, "fit custom add: invalid callbacks")
-	assert(builder.customs_used < i32(custom_capacity(builder)), "fit custom add: capacity full")
+	assert(
+		builder.customs_used < i32(custom_slot_capacity(builder)),
+		"fit custom add: capacity full",
+	)
 	index := int(builder.customs_used)
 	stored := custom_at(builder, index)
 	stored^ = spec
@@ -518,22 +529,22 @@ custom_add :: proc(parent: Parent, spec: Custom_Spec, options: Custom_Options) {
 			measure = custom_measure_bridge,
 			render = custom_render_bridge,
 			userdata = stored,
-			size = to_size(spec.size),
+			size = spec.size,
 		},
-		to_custom_options(options),
+		options,
 	)
 	parent_clear(builder)
 }
 
-Canvas :: proc(builder: ^Builder, render: Render_Proc, user_data: rawptr = nil) {
-	assert(builder != nil && builder.bound, "Fit.Canvas: builder not bound")
-	assert(render != nil, "Fit.Canvas: nil render callback")
-	assert(builder.inner.prepared.count == 0, "Fit.Canvas: root already declared")
-	root := Column(builder)
-	Custom(
+canvas :: proc(builder: ^Builder, render: Render_Proc, user_data: rawptr = nil) {
+	assert(builder != nil && builder.bound, "fit.canvas: builder not bound")
+	assert(render != nil, "fit.canvas: nil render callback")
+	assert(builder.inner.prepared.count == 0, "fit.canvas: root already declared")
+	root := column(builder)
+	custom(
 		root,
 		{measure = canvas_measure, render = render, user_data = user_data},
-		{size = {width = Grow(), height = Grow()}},
+		{size = {width = grow(), height = grow()}},
 	)
 }
 
@@ -554,20 +565,20 @@ custom_intrinsic_measure :: proc(constraints: Constraints, user_data: rawptr) ->
 	return spec.intrinsic
 }
 
-Measure :: proc(builder: ^Builder) -> Size {
-	assert(builder != nil && builder.bound, "Fit.Measure: builder not bound")
-	return from_size_value(ui.fit_measure(&builder.inner))
+measure :: proc(builder: ^Builder) -> Size {
+	assert(builder != nil && builder.bound, "fit.measure: builder not bound")
+	return ui.fit_measure(&builder.inner)
 }
 
-Render_At :: proc(builder: ^Builder, rect: Rect) {
-	assert(builder != nil && builder.bound, "Fit.Render_At: builder not bound")
-	ui.fit_render_at(&builder.inner, to_rect(rect))
+render_at :: proc(builder: ^Builder, rect: Rect) {
+	assert(builder != nil && builder.bound, "fit.render_at: builder not bound")
+	ui.fit_render_at(&builder.inner, rect)
 }
 
-Render :: proc(builder: ^Builder) -> Rect {
-	assert(builder != nil && builder.bound, "Fit.Render: builder not bound")
-	assert(!builder.inner.prepared.rendered, "Fit.Render: builder already rendered")
-	return from_rect(ui.fit_render(&builder.inner))
+render :: proc(builder: ^Builder) -> Rect {
+	assert(builder != nil && builder.bound, "fit.render: builder not bound")
+	assert(!builder.inner.prepared.rendered, "fit.render: builder already rendered")
+	return ui.fit_render(&builder.inner)
 }
 
 @(private = "file")
@@ -576,23 +587,23 @@ custom_measure_bridge :: proc(
 	constraints: ui.Intrinsic_Constraints,
 	userdata: rawptr,
 ) -> ui.Intrinsic_Size {
-	assert(root != nil && userdata != nil, "Fit.Custom: invalid measure bridge")
+	assert(root != nil && userdata != nil, "fit.custom: invalid measure bridge")
 	spec := cast(^Custom_Spec)userdata
-	assert(spec.measure != nil, "Fit.Custom: nil measure callback")
+	assert(spec.measure != nil, "fit.custom: nil measure callback")
 	measure_user_data := spec.user_data
 	if spec.measure == custom_intrinsic_measure do measure_user_data = spec
-	return to_size_value(spec.measure(from_constraints(constraints), measure_user_data))
+	return spec.measure(constraints, measure_user_data)
 }
 
 @(private = "file")
 custom_render_bridge :: proc(root: ^ui.Ui, rect: ui.Rect_I32, userdata: rawptr) -> bool {
-	assert(root != nil && userdata != nil, "Fit.Custom: invalid render bridge")
+	assert(root != nil && userdata != nil, "fit.custom: invalid render bridge")
 	spec := cast(^Custom_Spec)userdata
-	assert(spec.render != nil, "Fit.Custom: nil render callback")
+	assert(spec.render != nil, "fit.custom: nil render callback")
 	surface := Surface {
 		inner = root,
 	}
-	return spec.render(&surface, from_rect(rect), spec.user_data)
+	return spec.render(&surface, rect, spec.user_data)
 }
 
 @(private = "package")
@@ -601,9 +612,9 @@ builder_open :: proc(builder: ^Builder, frame: ^ui.Ui_Frame, rect: Rect) {
 	assert(frame != nil && frame.open, "fit builder: frame not open")
 	debug_owner_prepare(builder)
 	builder.frame_ticket = ui.ui_frame_ticket(frame)
-	ui.begin(&builder.root, frame, to_rect(rect))
+	ui.begin(&builder.root, frame, rect)
 	builder.bound = true
-	Begin(builder)
+	begin(builder)
 }
 
 @(private = "package")

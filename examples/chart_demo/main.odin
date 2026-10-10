@@ -22,7 +22,7 @@ toggle_theme :: proc(user_data: rawptr) {
 	data := cast(^State)user_data
 	assert(data != nil, "toggle_theme: nil state")
 	data.dark = !data.dark
-	fit.Set_Theme(&app, fit.Theme_Dark() if data.dark else fit.Theme_Light())
+	fit.set_theme(&app, fit.theme_dark() if data.dark else fit.theme_light())
 }
 
 revenue := [12]f32{12.4, 14.1, 13.2, 16.8, 18.9, 17.4, 21.0, 22.6, 20.1, 24.3, 26.8, 25.2}
@@ -50,7 +50,7 @@ MONTHS := [12]string {
 DAYS := [7]string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
 
 main :: proc() {
-	_ = fit.Run(
+	_ = fit.run(
 		&app,
 		{
 			width = 960,
@@ -68,19 +68,19 @@ main :: proc() {
 
 frame :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	data := cast(^State)user_data
-	root := fit.Column(builder, {gap = .MD, padding = .LG})
-	header := fit.Row(root, {gap = .MD, size = {height = fit.Fixed(36)}})
-	fit.Label(header, "Chart widgets", {role = .Title, track = fit.Grow()})
-	fit.Button(
+	root := fit.column(builder, {gap = .MD, padding = .LG})
+	header := fit.row(root, {gap = .MD, size = {height = fit.fixed(36)}})
+	fit.label(header, "Chart widgets", {role = .Title, track = fit.grow()})
+	fit.button(
 		header,
 		"theme",
 		"Light theme" if data.dark else "Dark theme",
-		fit.Button_Options{track = fit.Fixed(132), action = fit.action(toggle_theme, data)},
+		fit.Button_Options{track = fit.fixed(132), action = fit.action(toggle_theme, data)},
 	)
-	fit.Custom(
+	fit.custom(
 		root,
 		{measure = dashboard_measure, render = draw_dashboard, user_data = data},
-		{size = {width = fit.Grow(), height = fit.Grow()}},
+		{size = {width = fit.grow(), height = fit.grow()}},
 	)
 }
 
@@ -93,7 +93,7 @@ dashboard_measure :: proc(constraints: fit.Constraints, user_data: rawptr) -> fi
 
 draw_dashboard :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: rawptr) -> bool {
 	data := cast(^State)user_data
-	theme := fit.Surface_Theme_Tokens(surface)
+	theme := fit.surface_theme_tokens(surface)
 	line_series := [2]fit.Chart_Series {
 		{name = "Revenue", values = revenue[:]},
 		{name = "Costs", values = costs[:]},
@@ -106,14 +106,14 @@ draw_dashboard :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: rawptr)
 	chart_w := content_w * 2 / 3
 	side_x := rect.x + chart_w + 20
 	side_w := max(content_w - chart_w - 20, 0)
-	_ = fit.Surface_Line_Chart(
+	_ = fit.surface_line_chart(
 		surface,
 		{rect.x, rect.y, chart_w, 288},
 		line_series[:],
 		&data.line_state,
 		{labels = MONTHS[:], show_grid = true, show_axes = true, show_legend = true, fill = true},
 	)
-	_ = fit.Surface_Bar_Chart(
+	_ = fit.surface_bar_chart(
 		surface,
 		{rect.x, rect.y + 312, chart_w, 280},
 		bar_series[:],
@@ -154,18 +154,18 @@ stat_card :: proc(
 	values: []f32,
 	color: fit.Color,
 ) {
-	theme := fit.Surface_Theme_Tokens(surface)
-	metrics := fit.Surface_Metrics(surface)
-	fit.Surface_Card_Background(surface, rect, theme.background_secondary)
-	fit.Surface_Text(surface, label, rect.x + 14, rect.y + 12, .Label, .Label)
-	fit.Surface_Text(
+	theme := fit.surface_theme_tokens(surface)
+	metrics := fit.surface_metrics(surface)
+	fit.surface_card_background(surface, rect, theme.background_secondary)
+	fit.surface_text(surface, label, rect.x + 14, rect.y + 12, .Label, .Label)
+	fit.surface_text(
 		surface,
 		value,
 		rect.x + 14,
 		rect.y + rect.h - metrics.font_title - 14,
 		.Title,
 	)
-	fit.Surface_Sparkline(
+	fit.surface_sparkline(
 		surface,
 		{rect.x + rect.w - 130, rect.y + rect.h / 2 - 16, 110, 32},
 		values,

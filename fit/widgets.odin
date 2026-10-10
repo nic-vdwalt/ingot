@@ -16,21 +16,9 @@ Visual_State :: ui.Visual_State
 Surface_Kind :: ui.Surface
 Tint :: ui.Tint
 Elevation :: ui.Elevation
-Substrate_Kind :: enum u8 {
-	None,
-	Ruled,
-	Grid,
-	Dots,
-	Tooth,
-}
-Font_Face :: enum u8 {
-	Mono,
-	Pixel,
-}
-Surface_Style :: enum u8 {
-	Smooth,
-	Pixel,
-}
+Substrate_Kind :: ui.Substrate_Kind
+Font_Face :: ui.Font_Face
+Surface_Style :: ui.Surface_Style
 Surface_Colors :: struct {
 	background: Color,
 	foreground: Color,
@@ -153,11 +141,7 @@ Combobox_Item :: ui.Combobox_Item
 Date_Picker_State :: struct {
 	inner: ui.Date_Picker_State,
 }
-Calendar_Date :: struct {
-	year:  i32,
-	month: i32,
-	day:   i32,
-}
+Calendar_Date :: ui.Calendar_Date
 Tooltip_State :: struct {
 	inner: ui.Tooltip_State,
 }
@@ -165,57 +149,17 @@ Listbox_State :: struct {
 	inner: ui.Listbox_State,
 }
 Listbox_Keys :: ui.Listbox_Keys
-Listbox_Config :: struct {
-	rect:         Rect,
-	label:        string,
-	stable_id:    string,
-	count:        int,
-	selected:     ^int,
-	wrap:         bool,
-	hover_select: bool,
-	keys:         Listbox_Keys,
-	page_rows:    int,
-}
-Listbox_Result :: struct {
-	selection_changed: bool,
-	activated:         bool,
-	activated_index:   int,
-	reveal:            bool,
-	reveal_index:      int,
-}
-Selectable_Row_Config :: struct {
-	rect:        Rect,
-	label:       string,
-	stable_id:   string,
-	index:       int,
-	disabled:    bool,
-	description: string,
-}
-Selectable_Row_Result :: struct {
-	hovered:   bool,
-	pressed:   bool,
-	held:      bool,
-	selected:  bool,
-	activated: bool,
-}
-Table_Sort :: struct {
-	column:     i32,
-	descending: bool,
-}
-Table_Column :: struct {
-	label:   string,
-	track:   Track,
-	numeric: bool,
-}
+Listbox_Config :: ui.Listbox_Config
+Listbox_Result :: ui.Listbox_Result
+Selectable_Row_Config :: ui.Selectable_Row_Config
+Selectable_Row_Result :: ui.Selectable_Row_Result
+Table_Sort :: ui.Table_Sort
+Table_Column :: ui.Table_Column
 Chart_State :: struct {
 	enter_anim:  f32,
 	hover_index: int,
 }
-Chart_Series :: struct {
-	name:   string,
-	values: []f32,
-	color:  Color,
-}
+Chart_Series :: ui.Chart_Series
 Chart_Options :: struct {
 	labels:      []string,
 	y_min:       f32,
@@ -232,25 +176,18 @@ Markdown_Result :: struct {
 	link_activated: bool,
 	link_target:    string,
 }
-Confirm_Choice :: enum u8 {
-	None,
-	Confirmed,
-	Canceled,
-}
+Confirm_Choice :: ui.Confirm_Choice
 Modal_State :: struct {
 	inner: ui.Modal_State,
 }
-Modal_Id :: distinct u64
+Modal_Id :: ui.Modal_Id
 Modal_Close_Reason :: ui.Modal_Close_Reason
 Modal_Dismiss_Policy :: ui.Modal_Dismiss_Policy
 Modal_Scope :: enum u8 {
 	Viewport,
 	Host,
 }
-Modal_Placement :: enum u8 {
-	Center,
-	Bottom,
-}
+Modal_Placement :: ui.Modal_Placement
 Modal_Options :: struct {
 	placement:       Modal_Placement,
 	dismiss_escape:  bool,
@@ -264,39 +201,14 @@ Modal_Options :: struct {
 Popup_State :: struct {
 	inner: ui.Popup_State,
 }
-Popup_Id :: distinct u64
-Popup_Close_Reason :: enum u8 {
-	None,
-	Accepted,
-	Escape,
-	Outside_Click,
-	Programmatic,
-}
-Popup_Placement :: enum u8 {
-	Auto,
-	Above,
-	Below,
-	Point,
-}
-Popup_Options :: struct {
-	anchor:          Rect,
-	viewport:        Rect,
-	preferred_size:  [2]i32,
-	placement:       Popup_Placement,
-	dismiss_escape:  bool,
-	dismiss_outside: bool,
-	focus_scope:     ui.Focus_Scope_Id,
-	initial_focus:   ui.Focus_Opt,
-	restore_focus:   ui.Focus_Opt,
-}
+Popup_Id :: ui.Popup_Id
+Popup_Close_Reason :: ui.Popup_Close_Reason
+Popup_Placement :: ui.Popup_Placement
+Popup_Options :: ui.Popup_Config
 Context_Menu_State :: struct {
 	inner: ui.Context_Menu_State,
 }
-Menu_Item :: struct {
-	label:     string,
-	disabled:  bool,
-	separator: bool,
-}
+Menu_Item :: ui.Menu_Item
 Toast_State :: struct {
 	inner: ui.Toast_State,
 }
@@ -324,50 +236,50 @@ ROOT_EXTENT_OPEN :: i32(1 << 20)
 #assert(Z_POPUP == Z_Order(ui.Z_POPUP))
 #assert(ROOT_EXTENT_OPEN == ui.ROOT_EXTENT_OPEN)
 
-Input_Box_Init :: proc(box: ^Input_Box) {
-	assert(box != nil, "Fit.Input_Box_Init: nil box")
+input_box_init :: proc(box: ^Input_Box) {
+	assert(box != nil, "fit.input_box_init: nil box")
 	ui.input_box_init(&box.inner)
 }
 
-Input_Box_Destroy :: proc(box: ^Input_Box) {
-	assert(box != nil, "Fit.Input_Box_Destroy: nil box")
+input_box_destroy :: proc(box: ^Input_Box) {
+	assert(box != nil, "fit.input_box_destroy: nil box")
 	ui.input_box_destroy(&box.inner)
 }
 
-Input_Box_Reset :: proc(box: ^Input_Box) {
-	assert(box != nil, "Fit.Input_Box_Reset: nil box")
+input_box_reset :: proc(box: ^Input_Box) {
+	assert(box != nil, "fit.input_box_reset: nil box")
 	ui.input_box_reset(&box.inner)
 }
 
-Input_Box_Set_Text :: proc(box: ^Input_Box, text: string) {
-	assert(box != nil, "Fit.Input_Box_Set_Text: nil box")
+input_box_set_text :: proc(box: ^Input_Box, text: string) {
+	assert(box != nil, "fit.input_box_set_text: nil box")
 	ui.input_box_set_text(&box.inner, text)
 }
 
-Input_Box_Text :: proc(box: ^Input_Box) -> string {
-	assert(box != nil, "Fit.Input_Box_Text: nil box")
+input_box_text :: proc(box: ^Input_Box) -> string {
+	assert(box != nil, "fit.input_box_text: nil box")
 	return ui.input_box_text(&box.inner)
 }
 
-Text_Input_State_Destroy :: proc(state: ^Text_Input_State) {
-	assert(state != nil, "Fit.Text_Input_State_Destroy: nil state")
+text_input_state_destroy :: proc(state: ^Text_Input_State) {
+	assert(state != nil, "fit.text_input_state_destroy: nil state")
 	ui.text_input_state_destroy(&state.inner)
 }
 
-Text_Input_State_Cursor :: proc(state: ^Text_Input_State) -> int {
-	assert(state != nil, "Fit.Text_Input_State_Cursor: nil state")
+text_input_state_cursor :: proc(state: ^Text_Input_State) -> int {
+	assert(state != nil, "fit.text_input_state_cursor: nil state")
 	return state.inner.cursor
 }
 
-Text_Input_State_Set_Cursor :: proc(state: ^Text_Input_State, cursor: int) {
-	assert(state != nil && cursor >= 0, "Fit.Text_Input_State_Set_Cursor: invalid argument")
+text_input_state_set_cursor :: proc(state: ^Text_Input_State, cursor: int) {
+	assert(state != nil && cursor >= 0, "fit.text_input_state_set_cursor: invalid argument")
 	state.inner.cursor = cursor
 	state.inner.desired_col = 0
 	state.inner.scroll_line = 0
 }
 
-Text_Input_State_Clear :: proc(state: ^Text_Input_State) {
-	assert(state != nil, "Fit.Text_Input_State_Clear: nil state")
+text_input_state_clear :: proc(state: ^Text_Input_State) {
+	assert(state != nil, "fit.text_input_state_clear: nil state")
 	clear(&state.inner.pills)
 	ui.text_input_selection_clear(&state.inner)
 	ui.input_undo_reset(&state.inner.undo)
@@ -376,26 +288,26 @@ Text_Input_State_Clear :: proc(state: ^Text_Input_State) {
 	state.inner.scroll_line = 0
 }
 
-Text_Input_State_Selecting :: proc(state: ^Text_Input_State) -> bool {
-	assert(state != nil, "Fit.Text_Input_State_Selecting: nil state")
+text_input_state_selecting :: proc(state: ^Text_Input_State) -> bool {
+	assert(state != nil, "fit.text_input_state_selecting: nil state")
 	return ui.text_input_selecting(&state.inner)
 }
 
-Text_Input_State_Spell_Menu_Active :: proc(
+text_input_state_spell_menu_active :: proc(
 	state: ^Text_Input_State,
 	text: ^strings.Builder,
 ) -> bool {
-	assert(state != nil && text != nil, "Fit.Text_Input_State_Spell_Menu_Active: invalid argument")
+	assert(state != nil && text != nil, "fit.text_input_state_spell_menu_active: invalid argument")
 	return ui.text_input_spell_menu_active(&state.inner, text)
 }
 
-Text_Input_State_Record_Replace :: proc(
+text_input_state_record_replace :: proc(
 	state: ^Text_Input_State,
 	text: ^strings.Builder,
 	value: string,
 	now: f64,
 ) {
-	assert(state != nil && text != nil, "Fit.Text_Input_State_Record_Replace: invalid argument")
+	assert(state != nil && text != nil, "fit.text_input_state_record_replace: invalid argument")
 	ui.input_undo_record(
 		&state.inner.undo,
 		strings.to_string(text^),
@@ -412,226 +324,226 @@ Text_Input_State_Record_Replace :: proc(
 	state.inner.scroll_line = 0
 }
 
-Text_Input_State_Add_Pill :: proc(state: ^Text_Input_State, start, end: int) {
+text_input_state_add_pill :: proc(state: ^Text_Input_State, start, end: int) {
 	assert(
 		state != nil && start >= 0 && end >= start,
-		"Fit.Text_Input_State_Add_Pill: invalid argument",
+		"fit.text_input_state_add_pill: invalid argument",
 	)
 	ui.pills_shift_after_insert(&state.inner.pills, start, end - start + 1)
 	append(&state.inner.pills, ui.Mention_Span{start, end})
 }
 
-Text_Input_State_Encode_Pills :: proc(state: ^Text_Input_State, text: string) -> string {
-	assert(state != nil, "Fit.Text_Input_State_Encode_Pills: nil state")
+text_input_state_encode_pills :: proc(state: ^Text_Input_State, text: string) -> string {
+	assert(state != nil, "fit.text_input_state_encode_pills: nil state")
 	return ui.encode_pills(text, state.inner.pills[:])
 }
 
-Caret_Row_Column :: proc(text: string, cursor: int) -> (row, column: int) {
+caret_row_column :: proc(text: string, cursor: int) -> (row, column: int) {
 	return ui.caret_row_col(text, cursor)
 }
 
-Caret_Line_Count :: proc(text: string) -> int {
+caret_line_count :: proc(text: string) -> int {
 	return ui.caret_line_count(text)
 }
 
-Strip_Pill_Markers :: proc(text: string) -> string {
+strip_pill_markers :: proc(text: string) -> string {
 	return ui.strip_pill_markers(text)
 }
 
-Combobox_State_Destroy :: proc(state: ^Combobox_State) {
-	assert(state != nil, "Fit.Combobox_State_Destroy: nil state")
+combobox_state_destroy :: proc(state: ^Combobox_State) {
+	assert(state != nil, "fit.combobox_state_destroy: nil state")
 	ui.combobox_state_destroy(&state.inner)
 }
 
-Calendar_Date_Valid :: proc(value: Calendar_Date) -> bool {
+calendar_date_valid :: proc(value: Calendar_Date) -> bool {
 	return ui.calendar_date_valid({value.year, value.month, value.day})
 }
 
-Calendar_Format :: proc(value: Calendar_Date) -> string {
+calendar_format :: proc(value: Calendar_Date) -> string {
 	return ui.calendar_format({value.year, value.month, value.day})
 }
 
-Chart_Reset :: proc(state: ^Chart_State) {
-	assert(state != nil, "Fit.Chart_Reset: nil state")
+chart_reset :: proc(state: ^Chart_State) {
+	assert(state != nil, "fit.chart_reset: nil state")
 	state.enter_anim = 0
 	state.hover_index = -1
 }
 
-Modal_Open :: proc(state: ^Modal_State) {
-	assert(state != nil, "Fit.Modal_Open: nil state")
+modal_open :: proc(state: ^Modal_State) {
+	assert(state != nil, "fit.modal_open: nil state")
 	state.inner.open = true
 }
 
-Modal_Is_Open :: proc(state: ^Modal_State) -> bool {
-	assert(state != nil, "Fit.Modal_Is_Open: nil state")
+modal_is_open :: proc(state: ^Modal_State) -> bool {
+	assert(state != nil, "fit.modal_is_open: nil state")
 	return ui.modal_is_open(&state.inner)
 }
 
-Context_Menu_Is_Open :: proc(state: ^Context_Menu_State) -> bool {
-	assert(state != nil, "Fit.Context_Menu_Is_Open: nil state")
+context_menu_is_open :: proc(state: ^Context_Menu_State) -> bool {
+	assert(state != nil, "fit.context_menu_is_open: nil state")
 	return state.inner.open
 }
 
-Confirm_Dialog_Is_Open :: proc(state: ^Confirm_Dialog_State) -> bool {
-	assert(state != nil, "Fit.Confirm_Dialog_Is_Open: nil state")
+confirm_dialog_is_open :: proc(state: ^Confirm_Dialog_State) -> bool {
+	assert(state != nil, "fit.confirm_dialog_is_open: nil state")
 	return state.inner.modal.open
 }
 
-Modal_Close :: proc(state: ^Modal_State) {
-	assert(state != nil, "Fit.Modal_Close: nil state")
+modal_close :: proc(state: ^Modal_State) {
+	assert(state != nil, "fit.modal_close: nil state")
 	ui.modal_close(&state.inner)
 }
 
-Modal_Close_With :: proc(state: ^Modal_State, reason: Modal_Close_Reason) {
-	assert(state != nil, "Fit.Modal_Close_With: nil state")
+modal_close_with :: proc(state: ^Modal_State, reason: Modal_Close_Reason) {
+	assert(state != nil, "fit.modal_close_with: nil state")
 	ui.modal_close(&state.inner, reason)
 }
 
-Modal_Take_Close :: proc(state: ^Modal_State) -> Modal_Close_Reason {
-	assert(state != nil, "Fit.Modal_Take_Close: nil state")
+modal_take_close :: proc(state: ^Modal_State) -> Modal_Close_Reason {
+	assert(state != nil, "fit.modal_take_close: nil state")
 	return ui.modal_take_close(&state.inner)
 }
 
-Popup_Is_Open :: proc(state: ^Popup_State) -> bool {
-	assert(state != nil, "Fit.Popup_Is_Open: nil state")
+popup_is_open :: proc(state: ^Popup_State) -> bool {
+	assert(state != nil, "fit.popup_is_open: nil state")
 	return ui.popup_is_open(&state.inner)
 }
 
-Popup_Close :: proc(state: ^Popup_State) {
-	assert(state != nil, "Fit.Popup_Close: nil state")
+popup_close :: proc(state: ^Popup_State) {
+	assert(state != nil, "fit.popup_close: nil state")
 	ui.popup_close(&state.inner)
 }
 
-Popup_Close_With :: proc(state: ^Popup_State, reason: Popup_Close_Reason) {
-	assert(state != nil, "Fit.Popup_Close_With: nil state")
+popup_close_with :: proc(state: ^Popup_State, reason: Popup_Close_Reason) {
+	assert(state != nil, "fit.popup_close_with: nil state")
 	ui.popup_close(&state.inner, ui.Popup_Close_Reason(reason))
 }
 
-Popup_Take_Close :: proc(state: ^Popup_State) -> Popup_Close_Reason {
-	assert(state != nil, "Fit.Popup_Take_Close: nil state")
+popup_take_close :: proc(state: ^Popup_State) -> Popup_Close_Reason {
+	assert(state != nil, "fit.popup_take_close: nil state")
 	return Popup_Close_Reason(ui.popup_take_close(&state.inner))
 }
 
-Widget_Id_From_String :: proc(value: string) -> Widget_Id {
+widget_id_from_string :: proc(value: string) -> Widget_Id {
 	return Widget_Id(ui.widget_id(value))
 }
 
-Widget_Id_From_U64 :: proc(value: u64) -> Widget_Id {
+widget_id_from_u64 :: proc(value: u64) -> Widget_Id {
 	return Widget_Id(ui.widget_id(value))
 }
 
-Theme_Dark :: proc() -> Theme {
+theme_dark :: proc() -> Theme {
 	return {inner = ui.theme_dark()}
 }
 
-Theme_Light :: proc() -> Theme {
+theme_light :: proc() -> Theme {
 	return {inner = ui.theme_light()}
 }
 
-Theme_Retro_Orange :: proc() -> Theme {
+theme_retro_orange :: proc() -> Theme {
 	return {inner = ui.theme_retro_orange()}
 }
 
-Theme_Retro_Orange_Dark :: proc() -> Theme {
+theme_retro_orange_dark :: proc() -> Theme {
 	return {inner = ui.theme_retro_orange_dark()}
 }
 
-Theme_Retro_Ingot :: proc() -> Theme {
+theme_retro_ingot :: proc() -> Theme {
 	return {inner = ui.theme_retro_ingot()}
 }
 
-Theme_Retro_Ingot_Dark :: proc() -> Theme {
+theme_retro_ingot_dark :: proc() -> Theme {
 	return {inner = ui.theme_retro_ingot_dark()}
 }
 
-Theme_Terra :: proc() -> Theme {
+theme_terra :: proc() -> Theme {
 	return {inner = ui.theme_terra()}
 }
 
-Theme_Pixel :: proc() -> Theme {
+theme_pixel :: proc() -> Theme {
 	return {inner = ui.theme_pixel()}
 }
 
-Theme_High_Contrast :: proc() -> Theme {
+theme_high_contrast :: proc() -> Theme {
 	return {inner = ui.theme_high_contrast()}
 }
-Theme_From_Palette :: proc(palette: Theme_Palette) -> Theme {
+theme_from_palette :: proc(palette: Theme_Palette) -> Theme {
 	return {inner = ui.Theme_From_Palette(palette)}
 }
-Theme_Get_Color :: proc(theme: Theme, role: Theme_Role) -> Color {
+theme_get_color :: proc(theme: Theme, role: Theme_Role) -> Color {
 	return Color(ui.Theme_Get_Color(theme.inner, role))
 }
-Theme_Set_Color :: proc(theme: ^Theme, role: Theme_Role, color: Color) {
-	assert(theme != nil, "Fit.Theme_Set_Color: nil theme")
+theme_set_color :: proc(theme: ^Theme, role: Theme_Role, color: Color) {
+	assert(theme != nil, "fit.theme_set_color: nil theme")
 	ui.Theme_Set_Color(&theme.inner, role, ui.Color(color))
 }
-Theme_Validate :: proc(theme: Theme) -> Theme_Validation {
+theme_validate :: proc(theme: Theme) -> Theme_Validation {
 	return ui.Theme_Validate(theme.inner)
 }
-Theme_Is_Valid :: proc(theme: Theme) -> bool {
+theme_is_valid :: proc(theme: Theme) -> bool {
 	return ui.Theme_Is_Valid(theme.inner)
 }
-Theme_Pigment :: proc(theme: Theme, pigment: Pigment) -> Color {
+theme_pigment :: proc(theme: Theme, pigment: Pigment) -> Color {
 	inner := theme.inner
 	return Color(ui.theme_pigment(&inner, pigment))
 }
-Theme_Set_Pigment :: proc(theme: ^Theme, pigment: Pigment, color: Color) {
-	assert(theme != nil, "Fit.Theme_Set_Pigment: nil theme")
+theme_set_pigment :: proc(theme: ^Theme, pigment: Pigment, color: Color) {
+	assert(theme != nil, "fit.theme_set_pigment: nil theme")
 	ui.Theme_Set_Pigment(&theme.inner, pigment, ui.Color(color))
 }
-Theme_Set_Substrate :: proc(theme: ^Theme, kind: Substrate_Kind, margin_rule: bool = false) {
-	assert(theme != nil, "Fit.Theme_Set_Substrate: nil theme")
-	ui.Theme_Set_Substrate(&theme.inner, {kind = to_substrate(kind), margin_rule = margin_rule})
+theme_set_substrate :: proc(theme: ^Theme, kind: Substrate_Kind, margin_rule: bool = false) {
+	assert(theme != nil, "fit.theme_set_substrate: nil theme")
+	ui.Theme_Set_Substrate(&theme.inner, {kind = kind, margin_rule = margin_rule})
 }
-Theme_Set_Reduced_Motion :: proc(theme: ^Theme, enabled: bool) {
-	assert(theme != nil, "Fit.Theme_Set_Reduced_Motion: nil theme")
+theme_set_reduced_motion :: proc(theme: ^Theme, enabled: bool) {
+	assert(theme != nil, "fit.theme_set_reduced_motion: nil theme")
 	theme.inner.reduced_motion = enabled
 }
-Theme_Set_Square_Corners :: proc(theme: ^Theme, enabled: bool) {
-	assert(theme != nil, "Fit.Theme_Set_Square_Corners: nil theme")
+theme_set_square_corners :: proc(theme: ^Theme, enabled: bool) {
+	assert(theme != nil, "fit.theme_set_square_corners: nil theme")
 	ui.Theme_Set_Square_Corners(&theme.inner, enabled)
 }
-Theme_Set_Font_Face :: proc(theme: ^Theme, face: Font_Face) {
-	assert(theme != nil, "Fit.Theme_Set_Font_Face: nil theme")
-	ui.Theme_Set_Font_Face(&theme.inner, to_font_face(face))
-	stored := from_font_face(theme.inner.font_face)
-	assert(stored == face, "Fit.Theme_Set_Font_Face: face not stored")
+theme_set_font_face :: proc(theme: ^Theme, face: Font_Face) {
+	assert(theme != nil, "fit.theme_set_font_face: nil theme")
+	ui.Theme_Set_Font_Face(&theme.inner, face)
+	assert(theme.inner.font_face == face, "fit.theme_set_font_face: face not stored")
 }
-Theme_Set_Reading_Font_Face :: proc(theme: ^Theme, face: Font_Face) {
-	assert(theme != nil, "Fit.Theme_Set_Reading_Font_Face: nil theme")
-	ui.Theme_Set_Reading_Font_Face(&theme.inner, to_font_face(face))
-	stored := from_font_face(theme.inner.reading_font_face)
-	assert(stored == face, "Fit.Theme_Set_Reading_Font_Face: face not stored")
+theme_set_reading_font_face :: proc(theme: ^Theme, face: Font_Face) {
+	assert(theme != nil, "fit.theme_set_reading_font_face: nil theme")
+	ui.Theme_Set_Reading_Font_Face(&theme.inner, face)
+	assert(
+		theme.inner.reading_font_face == face,
+		"fit.theme_set_reading_font_face: face not stored",
+	)
 }
-Theme_Set_Surface_Style :: proc(theme: ^Theme, style: Surface_Style) {
-	assert(theme != nil, "Fit.Theme_Set_Surface_Style: nil theme")
-	ui.Theme_Set_Surface_Style(&theme.inner, to_surface_style(style))
-	stored := from_surface_style(theme.inner.surface_style)
-	assert(stored == style, "Fit.Theme_Set_Surface_Style: style not stored")
+theme_set_surface_style :: proc(theme: ^Theme, style: Surface_Style) {
+	assert(theme != nil, "fit.theme_set_surface_style: nil theme")
+	ui.Theme_Set_Surface_Style(&theme.inner, style)
+	assert(theme.inner.surface_style == style, "fit.theme_set_surface_style: style not stored")
 }
-Theme_Background :: proc(theme: Theme) -> Color {return Color(theme.inner.bg_app)}
-Color_Tinted :: proc(color: Color, tint: Tint) -> Color {
+theme_background :: proc(theme: Theme) -> Color {return Color(theme.inner.bg_app)}
+color_tinted :: proc(color: Color, tint: Tint) -> Color {
 	return Color(ui.color_tinted(ui.Color(color), tint))
 }
-Tint_Alpha :: proc(tint: Tint) -> u8 {
+tint_alpha :: proc(tint: Tint) -> u8 {
 	return ui.tint_alpha(tint)
 }
-Contrast_Ratio :: proc(a, b: Color) -> f64 {
+contrast_ratio :: proc(a, b: Color) -> f64 {
 	return ui.contrast_ratio(ui.Color(a), ui.Color(b))
 }
 
-Context_Menu_Open :: proc(state: ^Context_Menu_State, point: Point) {
-	assert(state != nil, "Fit.Context_Menu_Open: nil state")
+context_menu_open :: proc(state: ^Context_Menu_State, point: Point) {
+	assert(state != nil, "fit.context_menu_open: nil state")
 	ui.context_menu_open(&state.inner, i32(point.x), i32(point.y))
 }
 
-Confirm_Dialog_Open :: proc(state: ^Confirm_Dialog_State) {
-	assert(state != nil, "Fit.Confirm_Dialog_Open: nil state")
+confirm_dialog_open :: proc(state: ^Confirm_Dialog_State) {
+	assert(state != nil, "fit.confirm_dialog_open: nil state")
 	ui.confirm_dialog_open(&state.inner)
 }
 
-Toast_Push :: proc(state: ^Toast_State, kind: Toast_Kind, message: string) {
-	assert(state != nil, "Fit.Toast_Push: nil state")
+toast_push :: proc(state: ^Toast_State, kind: Toast_Kind, message: string) {
+	assert(state != nil, "fit.toast_push: nil state")
 	inner_kind := ui.Toast_Kind.Info
 	switch kind {
 	case .Info:
@@ -646,7 +558,7 @@ Toast_Push :: proc(state: ^Toast_State, kind: Toast_Kind, message: string) {
 	ui.toast_push(&state.inner, inner_kind, message)
 }
 
-Point_In_Rect :: proc(point: Point, rect: Float_Rect) -> bool {
+point_in_rect :: proc(point: Point, rect: Float_Rect) -> bool {
 	return(
 		point.x >= rect.x &&
 		point.y >= rect.y &&

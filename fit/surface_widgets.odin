@@ -3,7 +3,7 @@ package fit
 import "core:strings"
 import "ingot:ui"
 
-Surface_Button :: proc(
+surface_button :: proc(
 	surface: ^Surface,
 	widget: Widget_Id,
 	label: string,
@@ -14,15 +14,15 @@ Surface_Button :: proc(
 	interaction_rect: ^Rect = nil,
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != Widget_Id(0), "Fit.Surface_Button: zero widget")
+	assert(widget != Widget_Id(0), "fit.surface_button: zero widget")
 	hit: ^ui.Rect_I32
 	if interaction_rect != nil {
-		converted := to_rect(interaction_rect^)
+		converted := interaction_rect^
 		hit = &converted
 	}
 	return ui.button_at(
 		u.frame,
-		to_rect(rect),
+		rect,
 		label,
 		style,
 		enabled = enabled,
@@ -32,7 +32,7 @@ Surface_Button :: proc(
 	)
 }
 
-Surface_Icon_Button :: proc(
+surface_icon_button :: proc(
 	surface: ^Surface,
 	widget: Widget_Id,
 	icon: Icon,
@@ -41,11 +41,11 @@ Surface_Icon_Button :: proc(
 	enabled: bool = true,
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != Widget_Id(0), "Fit.Surface_Icon_Button: zero widget")
-	assert(accessible_label != "", "Fit.Surface_Icon_Button: empty accessible label")
+	assert(widget != Widget_Id(0), "fit.surface_icon_button: zero widget")
+	assert(accessible_label != "", "fit.surface_icon_button: empty accessible label")
 	return ui.icon_button_at(
 		u.frame,
-		to_rect(rect),
+		rect,
 		icon,
 		accessible_label,
 		enabled,
@@ -53,7 +53,7 @@ Surface_Icon_Button :: proc(
 	)
 }
 
-Surface_Text_Input :: proc(
+surface_text_input :: proc(
 	surface: ^Surface,
 	widget: Widget_Id,
 	box: ^Input_Box,
@@ -64,12 +64,12 @@ Surface_Text_Input :: proc(
 	semantics: Text_Input_Semantics = {},
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != Widget_Id(0) && box != nil, "Fit.Surface_Text_Input: invalid argument")
+	assert(widget != Widget_Id(0) && box != nil, "fit.surface_text_input: invalid argument")
 	inner_semantics := to_text_semantics(semantics)
 	inner_semantics.widget = ui.Widget_Id(widget)
 	return ui.text_input_at(
 		u.frame,
-		to_rect(rect),
+		rect,
 		&box.inner,
 		placeholder,
 		active,
@@ -79,7 +79,7 @@ Surface_Text_Input :: proc(
 }
 
 // to_submit maps the public façade enum explicitly because its declaration
-// order is part of Fit's compatibility surface and differs from ui.
+// order is part of fit's compatibility surface and differs from ui.
 @(private)
 to_submit :: proc(mode: Text_Input_Submit) -> ui.Text_Input_Submit {
 	switch mode {
@@ -95,18 +95,18 @@ to_submit :: proc(mode: Text_Input_Submit) -> ui.Text_Input_Submit {
 	unreachable()
 }
 
-Surface_Text_Input_State :: proc(
+surface_text_input_state :: proc(
 	surface: ^Surface,
 	config: Text_Input_Config,
 	text: ^strings.Builder,
 	state: ^Text_Input_State,
 ) -> bool {
 	u := surface_ui(surface)
-	assert(text != nil && state != nil, "Fit.Surface_Text_Input_State: invalid argument")
+	assert(text != nil && state != nil, "fit.surface_text_input_state: invalid argument")
 	return ui.text_input_box(
 		u.frame,
 		{
-			rect = to_rect(config.rect),
+			rect = config.rect,
 			placeholder = config.placeholder,
 			active = config.active,
 			masked = config.masked,
@@ -122,20 +122,20 @@ Surface_Text_Input_State :: proc(
 	)
 }
 
-Surface_Text_Input_Visual_Line_Count :: proc(
+surface_text_input_visual_line_count :: proc(
 	surface: ^Surface,
 	state: ^Text_Input_State,
 	text: string,
 	width, font_size: i32,
 ) -> int {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Text_Input_Visual_Line_Count: nil state")
+	assert(state != nil, "fit.surface_text_input_visual_line_count: nil state")
 	return len(
 		ui.input_visual_lines_memo_frame(u.frame, &state.inner.memo, text, width, font_size),
 	)
 }
 
-Surface_Checkbox :: proc(
+surface_checkbox :: proc(
 	surface: ^Surface,
 	widget: Widget_Id,
 	label: string,
@@ -144,15 +144,15 @@ Surface_Checkbox :: proc(
 	interaction_rect: ^Rect = nil,
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != Widget_Id(0) && value != nil, "Fit.Surface_Checkbox: invalid argument")
+	assert(widget != Widget_Id(0) && value != nil, "fit.surface_checkbox: invalid argument")
 	hit: ^ui.Rect_I32
 	if interaction_rect != nil {
-		converted := to_rect(interaction_rect^)
+		converted := interaction_rect^
 		hit = &converted
 	}
 	return ui.checkbox_at(
 		u.frame,
-		to_rect(rect),
+		rect,
 		label,
 		value,
 		widget = ui.Widget_Id(widget),
@@ -160,7 +160,7 @@ Surface_Checkbox :: proc(
 	)
 }
 
-Surface_Radio :: proc(
+surface_radio :: proc(
 	surface: ^Surface,
 	widget: Widget_Id,
 	label: string,
@@ -170,10 +170,10 @@ Surface_Radio :: proc(
 	focus: Focus_Link = {},
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != Widget_Id(0) && selected != nil, "Fit.Surface_Radio: invalid argument")
+	assert(widget != Widget_Id(0) && selected != nil, "fit.surface_radio: invalid argument")
 	return ui.radio_at(
 		u.frame,
-		to_rect(rect),
+		rect,
 		label,
 		selected,
 		value,
@@ -182,7 +182,7 @@ Surface_Radio :: proc(
 	)
 }
 
-Surface_Slider :: proc(
+surface_slider :: proc(
 	surface: ^Surface,
 	widget: Widget_Id,
 	value: ^f32,
@@ -191,16 +191,16 @@ Surface_Slider :: proc(
 	interaction_rect: ^Rect = nil,
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != Widget_Id(0) && value != nil, "Fit.Surface_Slider: invalid argument")
-	assert(minimum <= maximum && step >= 0, "Fit.Surface_Slider: invalid range")
+	assert(widget != Widget_Id(0) && value != nil, "fit.surface_slider: invalid argument")
+	assert(minimum <= maximum && step >= 0, "fit.surface_slider: invalid range")
 	hit: ^ui.Rect_I32
 	if interaction_rect != nil {
-		converted := to_rect(interaction_rect^)
+		converted := interaction_rect^
 		hit = &converted
 	}
 	return ui.slider_at(
 		u.frame,
-		to_rect(rect),
+		rect,
 		value,
 		minimum,
 		maximum,
@@ -210,27 +210,27 @@ Surface_Slider :: proc(
 	)
 }
 
-Surface_Dropdown :: proc(
+surface_dropdown :: proc(
 	surface: ^Surface,
 	widget: Widget_Id,
 	items: []string,
 	selected: ^i32,
 	state: ^Dropdown_State,
 	rect: Rect,
-	a11y_label: string = "Dropdown",
+	a11y_label: string = "dropdown",
 	interaction_rect: ^Rect = nil,
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != Widget_Id(0) && selected != nil, "Fit.Surface_Dropdown: invalid argument")
-	assert(state != nil && len(items) > 0, "Fit.Surface_Dropdown: invalid state")
+	assert(widget != Widget_Id(0) && selected != nil, "fit.surface_dropdown: invalid argument")
+	assert(state != nil && len(items) > 0, "fit.surface_dropdown: invalid state")
 	hit: ^ui.Rect_I32
 	if interaction_rect != nil {
-		converted := to_rect(interaction_rect^)
+		converted := interaction_rect^
 		hit = &converted
 	}
 	return ui.dropdown_at(
 		u.frame,
-		to_rect(rect),
+		rect,
 		items,
 		selected,
 		&state.inner,
@@ -242,7 +242,7 @@ Surface_Dropdown :: proc(
 	)
 }
 
-Surface_Combobox :: proc(
+surface_combobox :: proc(
 	surface: ^Surface,
 	widget: Widget_Id,
 	items: []Combobox_Item,
@@ -250,14 +250,14 @@ Surface_Combobox :: proc(
 	state: ^Combobox_State,
 	rect: Rect,
 	placeholder: string = "Select",
-	a11y_label: string = "Combobox",
+	a11y_label: string = "combobox",
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != Widget_Id(0) && selected != nil, "Fit.Surface_Combobox: invalid argument")
-	assert(state != nil, "Fit.Surface_Combobox: nil state")
+	assert(widget != Widget_Id(0) && selected != nil, "fit.surface_combobox: invalid argument")
+	assert(state != nil, "fit.surface_combobox: nil state")
 	return ui.combobox_at(
 		u.frame,
-		to_rect(rect),
+		rect,
 		&state.inner,
 		items,
 		selected,
@@ -269,7 +269,7 @@ Surface_Combobox :: proc(
 	)
 }
 
-Surface_Date_Picker :: proc(
+surface_date_picker :: proc(
 	surface: ^Surface,
 	widget: Widget_Id,
 	value: ^Calendar_Date,
@@ -279,25 +279,22 @@ Surface_Date_Picker :: proc(
 	a11y_label: string = "Date",
 ) -> bool {
 	u := surface_ui(surface)
-	assert(widget != Widget_Id(0) && value != nil, "Fit.Surface_Date_Picker: invalid argument")
-	assert(state != nil, "Fit.Surface_Date_Picker: nil state")
-	inner_value := ui.Calendar_Date{value.year, value.month, value.day}
-	changed := ui.date_picker_at(
+	assert(widget != Widget_Id(0) && value != nil, "fit.surface_date_picker: invalid argument")
+	assert(state != nil, "fit.surface_date_picker: nil state")
+	return ui.date_picker_at(
 		u.frame,
-		to_rect(rect),
+		rect,
 		&state.inner,
-		&inner_value,
+		value,
 		placeholder,
 		u.screen_w,
 		u.screen_h,
 		a11y_label = a11y_label,
 		widget = ui.Widget_Id(widget),
 	)
-	value^ = {inner_value.year, inner_value.month, inner_value.day}
-	return changed
 }
 
-Surface_Line_Chart :: proc(
+surface_line_chart :: proc(
 	surface: ^Surface,
 	rect: Rect,
 	series: []Chart_Series,
@@ -305,23 +302,15 @@ Surface_Line_Chart :: proc(
 	options: Chart_Options = {},
 ) -> int {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Line_Chart: nil state")
-	assert(len(series) <= ui.CHART_SERIES_COUNT_MAX, "Fit.Surface_Line_Chart: too many series")
-	inner_series: [ui.CHART_SERIES_COUNT_MAX]ui.Chart_Series
-	for item, index in series do inner_series[index] = {item.name, item.values, ui.Color(item.color)}
+	assert(state != nil, "fit.surface_line_chart: nil state")
+	assert(len(series) <= ui.CHART_SERIES_COUNT_MAX, "fit.surface_line_chart: too many series")
 	inner_state := ui.Chart_State{state.enter_anim, state.hover_index}
-	hovered := ui.line_chart_at(
-		u.frame,
-		to_rect(rect),
-		inner_series[:len(series)],
-		&inner_state,
-		to_chart_options(options),
-	)
+	hovered := ui.line_chart_at(u.frame, rect, series, &inner_state, to_chart_options(options))
 	state^ = {inner_state.enter_anim, inner_state.hover_idx}
 	return hovered
 }
 
-Surface_Bar_Chart :: proc(
+surface_bar_chart :: proc(
 	surface: ^Surface,
 	rect: Rect,
 	series: []Chart_Series,
@@ -329,28 +318,20 @@ Surface_Bar_Chart :: proc(
 	options: Chart_Options = {},
 ) -> int {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Bar_Chart: nil state")
-	assert(len(series) <= ui.CHART_SERIES_COUNT_MAX, "Fit.Surface_Bar_Chart: too many series")
-	inner_series: [ui.CHART_SERIES_COUNT_MAX]ui.Chart_Series
-	for item, index in series do inner_series[index] = {item.name, item.values, ui.Color(item.color)}
+	assert(state != nil, "fit.surface_bar_chart: nil state")
+	assert(len(series) <= ui.CHART_SERIES_COUNT_MAX, "fit.surface_bar_chart: too many series")
 	inner_state := ui.Chart_State{state.enter_anim, state.hover_index}
-	hovered := ui.bar_chart_at(
-		u.frame,
-		to_rect(rect),
-		inner_series[:len(series)],
-		&inner_state,
-		to_chart_options(options),
-	)
+	hovered := ui.bar_chart_at(u.frame, rect, series, &inner_state, to_chart_options(options))
 	state^ = {inner_state.enter_anim, inner_state.hover_idx}
 	return hovered
 }
 
-Surface_Sparkline :: proc(surface: ^Surface, rect: Rect, values: []f32, color: Color = {}) {
+surface_sparkline :: proc(surface: ^Surface, rect: Rect, values: []f32, color: Color = {}) {
 	u := surface_ui(surface)
-	ui.sparkline_at(u.frame, to_rect(rect), values, ui.Color(color))
+	ui.sparkline_at(u.frame, rect, values, ui.Color(color))
 }
 
-Surface_Markdown :: proc(
+surface_markdown :: proc(
 	surface: ^Surface,
 	rect: Rect,
 	source: string,
@@ -359,19 +340,19 @@ Surface_Markdown :: proc(
 	u := surface_ui(surface)
 	ctx := ui.markdown_context(u.frame)
 	width: i32
-	height := ui.markdown_draw(&ctx, to_rect(rect), source, ui.Color(color), out_w = &width)
+	height := ui.markdown_draw(&ctx, rect, source, ui.Color(color), out_w = &width)
 	target, activated := ui.markdown_link_activated(&ctx)
 	return {height, width, activated, target}
 }
 
-Surface_Context_Menu :: proc(
+surface_context_menu :: proc(
 	surface: ^Surface,
 	state: ^Context_Menu_State,
 	items: []Menu_Item,
 ) -> int {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Context_Menu: nil state")
-	assert(len(items) <= 32, "Fit.Surface_Context_Menu: too many items")
+	assert(state != nil, "fit.surface_context_menu: nil state")
+	assert(len(items) <= 32, "fit.surface_context_menu: too many items")
 	inner_items: [32]ui.Menu_Item
 	for item, index in items do inner_items[index] = {item.label, item.disabled, item.separator}
 	return ui.context_menu(
@@ -382,20 +363,20 @@ Surface_Context_Menu :: proc(
 	)
 }
 
-Surface_Toasts :: proc(surface: ^Surface, state: ^Toast_State) {
+surface_toasts :: proc(surface: ^Surface, state: ^Toast_State) {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Toasts: nil state")
+	assert(state != nil, "fit.surface_toasts: nil state")
 	ui.toasts_draw(u.frame, &state.inner, ui.frame_viewport(u.frame))
 }
 
-Surface_Confirm_Dialog :: proc(
+surface_confirm_dialog :: proc(
 	surface: ^Surface,
 	state: ^Confirm_Dialog_State,
 	title, message, confirm_label: string,
 	danger: bool = true,
 ) -> Confirm_Choice {
 	u := surface_ui(surface)
-	assert(state != nil, "Fit.Surface_Confirm_Dialog: nil state")
+	assert(state != nil, "fit.surface_confirm_dialog: nil state")
 	result := ui.confirm_dialog(
 		u.frame,
 		&state.inner,
@@ -408,19 +389,19 @@ Surface_Confirm_Dialog :: proc(
 	return Confirm_Choice(result)
 }
 
-Region_Label :: proc(region: ^Region, text: string, role: Text_Role = .Body, ink: Ink = .Primary) {
-	assert(region != nil && region.inner.open, "Fit.Region_Label: region not open")
+region_label :: proc(region: ^Region, text: string, role: Text_Role = .Body, ink: Ink = .Primary) {
+	assert(region != nil && region.inner.open, "fit.region_label: region not open")
 	ui.label(&region.inner, text, role, ink)
 }
 
-Region_Button_String :: proc(
+region_button_string :: proc(
 	region: ^Region,
 	key, label: string,
 	style: Button_Style = .Secondary,
 	enabled: bool = true,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
+	assert(region != nil && region.inner.open, "fit.region_button: region not open")
 	return ui.button(
 		&region.inner,
 		key,
@@ -429,7 +410,7 @@ Region_Button_String :: proc(
 	)
 }
 
-Region_Button_Id :: proc(
+region_button_id :: proc(
 	region: ^Region,
 	widget: Widget_Id,
 	label: string,
@@ -437,7 +418,7 @@ Region_Button_Id :: proc(
 	enabled: bool = true,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
+	assert(region != nil && region.inner.open, "fit.region_button: region not open")
 	return ui.button(
 		&region.inner,
 		ui.Widget_Id(widget),
@@ -446,7 +427,7 @@ Region_Button_Id :: proc(
 	)
 }
 
-Region_Button_U64 :: proc(
+region_button_u64 :: proc(
 	region: ^Region,
 	key: u64,
 	label: string,
@@ -454,7 +435,7 @@ Region_Button_U64 :: proc(
 	enabled: bool = true,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Button: region not open")
+	assert(region != nil && region.inner.open, "fit.region_button: region not open")
 	return ui.button(
 		&region.inner,
 		key,
@@ -463,21 +444,21 @@ Region_Button_U64 :: proc(
 	)
 }
 
-Region_Button :: proc {
-	Region_Button_String,
-	Region_Button_Id,
-	Region_Button_U64,
+region_button :: proc {
+	region_button_string,
+	region_button_id,
+	region_button_u64,
 }
 
-Region_Toggle_Id :: proc(
+region_toggle_id :: proc(
 	region: ^Region,
 	widget: Widget_Id,
 	label: string,
 	value: ^bool,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Toggle: region not open")
-	assert(value != nil && label != "", "Fit.Region_Toggle: invalid value")
+	assert(region != nil && region.inner.open, "fit.region_toggle: region not open")
+	assert(value != nil && label != "", "fit.region_toggle: invalid value")
 	spec := ui.Toggle_Spec {
 		id      = ui.Widget_Id(widget),
 		label   = label,
@@ -487,82 +468,82 @@ Region_Toggle_Id :: proc(
 	return ui.toggle(&region.inner, spec)
 }
 
-Region_Toggle_String :: proc(
+region_toggle_string :: proc(
 	region: ^Region,
 	key, label: string,
 	value: ^bool,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Toggle: region not open")
-	assert(key != "", "Fit.Region_Toggle: empty key")
-	return Region_Toggle_Id(region, Widget_Id(ui.id(&region.inner, key)), label, value, motion)
+	assert(region != nil && region.inner.open, "fit.region_toggle: region not open")
+	assert(key != "", "fit.region_toggle: empty key")
+	return region_toggle_id(region, Widget_Id(ui.id(&region.inner, key)), label, value, motion)
 }
 
-Region_Toggle_U64 :: proc(
+region_toggle_u64 :: proc(
 	region: ^Region,
 	key: u64,
 	label: string,
 	value: ^bool,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Toggle: region not open")
-	assert(value != nil && label != "", "Fit.Region_Toggle: invalid value")
-	return Region_Toggle_Id(region, Widget_Id(ui.id(&region.inner, key)), label, value, motion)
+	assert(region != nil && region.inner.open, "fit.region_toggle: region not open")
+	assert(value != nil && label != "", "fit.region_toggle: invalid value")
+	return region_toggle_id(region, Widget_Id(ui.id(&region.inner, key)), label, value, motion)
 }
 
-Region_Toggle :: proc {
-	Region_Toggle_String,
-	Region_Toggle_U64,
-	Region_Toggle_Id,
+region_toggle :: proc {
+	region_toggle_string,
+	region_toggle_u64,
+	region_toggle_id,
 }
 
-Region_Checkbox_String :: proc(region: ^Region, key, label: string, value: ^bool) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Checkbox: region not open")
+region_checkbox_string :: proc(region: ^Region, key, label: string, value: ^bool) -> bool {
+	assert(region != nil && region.inner.open, "fit.region_checkbox: region not open")
 	return ui.checkbox(&region.inner, ui.id(&region.inner, key), label, value)
 }
 
-Region_Checkbox_Id :: proc(
+region_checkbox_id :: proc(
 	region: ^Region,
 	widget: Widget_Id,
 	label: string,
 	value: ^bool,
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Checkbox: region not open")
+	assert(region != nil && region.inner.open, "fit.region_checkbox: region not open")
 	return ui.checkbox(&region.inner, ui.Widget_Id(widget), label, value)
 }
 
-Region_Checkbox :: proc {
-	Region_Checkbox_String,
-	Region_Checkbox_Id,
+region_checkbox :: proc {
+	region_checkbox_string,
+	region_checkbox_id,
 }
 
-Region_Radio_String :: proc(
+region_radio_string :: proc(
 	region: ^Region,
 	key, label: string,
 	selected: ^i32,
 	value: i32,
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Radio: region not open")
+	assert(region != nil && region.inner.open, "fit.region_radio: region not open")
 	return ui.radio(&region.inner, ui.id(&region.inner, key), label, selected, value)
 }
 
-Region_Radio_Id :: proc(
+region_radio_id :: proc(
 	region: ^Region,
 	widget: Widget_Id,
 	label: string,
 	selected: ^i32,
 	value: i32,
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Radio: region not open")
+	assert(region != nil && region.inner.open, "fit.region_radio: region not open")
 	return ui.radio(&region.inner, ui.Widget_Id(widget), label, selected, value)
 }
 
-Region_Radio :: proc {
-	Region_Radio_String,
-	Region_Radio_Id,
+region_radio :: proc {
+	region_radio_string,
+	region_radio_id,
 }
 
-Region_Text_Input :: proc(
+region_text_input :: proc(
 	region: ^Region,
 	key: string,
 	box: ^Input_Box,
@@ -571,7 +552,7 @@ Region_Text_Input :: proc(
 ) -> bool {
 	assert(
 		region != nil && region.inner.open && box != nil,
-		"Fit.Region_Text_Input: invalid argument",
+		"fit.region_text_input: invalid argument",
 	)
 	return ui.text_input(
 		&region.inner,
@@ -586,30 +567,30 @@ Region_Text_Input :: proc(
 	)
 }
 
-Region_Space :: proc(region: ^Region, space: Space) {
-	assert(region != nil && region.inner.open, "Fit.Region_Space: region not open")
+region_space :: proc(region: ^Region, space: Space) {
+	assert(region != nil && region.inner.open, "fit.region_space: region not open")
 	ui.space(&region.inner, space)
 }
 
-Region_Section_Header :: proc(region: ^Region, title: string) {
-	assert(region != nil && region.inner.open, "Fit.Region_Section_Header: region not open")
+region_section_header :: proc(region: ^Region, title: string) {
+	assert(region != nil && region.inner.open, "fit.region_section_header: region not open")
 	_ = ui.section_header(&region.inner, title)
 }
 
-Region_Tab_Bar :: proc(
+region_tab_bar :: proc(
 	region: ^Region,
 	key: string,
 	labels: []string,
 	active: ^i32,
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
-	assert(region != nil && region.inner.open, "Fit.Region_Tab_Bar: region not open")
+	assert(region != nil && region.inner.open, "fit.region_tab_bar: region not open")
 	return ui.tab_bar(&region.inner, key, labels, active, motion = motion)
 }
 
 @(private = "package")
 surface_ui :: proc(surface: ^Surface) -> ^ui.Ui {
-	assert(surface != nil && surface.inner != nil, "Fit.Surface: invalid surface")
-	assert(surface.inner.open && surface.inner.frame != nil, "Fit.Surface: closed surface")
+	assert(surface != nil && surface.inner != nil, "fit.Surface: invalid surface")
+	assert(surface.inner.open && surface.inner.frame != nil, "fit.Surface: closed surface")
 	return surface.inner
 }

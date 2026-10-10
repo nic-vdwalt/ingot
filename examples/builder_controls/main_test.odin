@@ -8,7 +8,7 @@ import fit "ingot:fit"
 preview_balances_clipping_at_multiple_scales :: proc(t: ^testing.T) {
 	for scale in 1 ..= 2 {
 		driver: fit.Test_Driver
-		fit.Test_Driver_Init(&driver)
+		fit.test_driver_init(&driver)
 		data := State {
 			active_tab = 2,
 		}
@@ -16,23 +16,23 @@ preview_balances_clipping_at_multiple_scales :: proc(t: ^testing.T) {
 			screen_size = {1520, 1120},
 			dpi_scale   = f32(scale),
 		}
-		testing.expect(t, fit.Test_Driver_Frame(&driver, input, draw, &data))
-		summary := fit.Test_Driver_Paint_Summary(&driver)
+		testing.expect(t, fit.test_driver_frame(&driver, input, draw, &data))
+		summary := fit.test_driver_paint_summary(&driver)
 		testing.expect(t, summary.main_geometry_commands > 0)
 		testing.expect_value(t, summary.main_clip_depth, 0)
 		testing.expect_value(t, summary.overlay_clip_depth, 0)
-		diagnostics := fit.Test_Driver_Diagnostics(&driver)
+		diagnostics := fit.test_driver_diagnostics(&driver)
 		testing.expect_value(t, diagnostics.main_commands_dropped, i32(0))
 		testing.expect_value(t, diagnostics.layout_overflows, i32(0))
-		testing.expect(t, fit.Test_Driver_Frame(&driver, input, draw, &data))
-		baseline := fit.Test_Driver_Telemetry(&driver)
-		testing.expect(t, fit.Test_Driver_Frame(&driver, input, draw, &data))
-		steady := fit.Test_Driver_Telemetry(&driver)
+		testing.expect(t, fit.test_driver_frame(&driver, input, draw, &data))
+		baseline := fit.test_driver_telemetry(&driver)
+		testing.expect(t, fit.test_driver_frame(&driver, input, draw, &data))
+		steady := fit.test_driver_telemetry(&driver)
 		testing.expect_value(t, steady.scratch_allocations, baseline.scratch_allocations)
 		testing.expect_value(t, steady.scratch_resizes, baseline.scratch_resizes)
 		testing.expect_value(t, steady.render_relayouts, baseline.render_relayouts)
 		destroy_state(&data)
-		fit.Test_Driver_Destroy(&driver)
+		fit.test_driver_destroy(&driver)
 	}
 }
 
@@ -44,13 +44,13 @@ Preview_Test_State :: struct {
 preview_test_render :: proc(surface: ^fit.Surface, rect: fit.Rect, user_data: rawptr) -> bool {
 	data := cast(^Preview_Test_State)user_data
 	data.rect = rect
-	data.inset = min(fit.Px(surface, 8), min(rect.w, rect.h) / 2)
+	data.inset = min(fit.px(surface, 8), min(rect.w, rect.h) / 2)
 	return preview_render(surface, rect, nil)
 }
 
 preview_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
-	fit.Canvas_Leaf(
-		fit.Column(builder),
+	fit.canvas_leaf(
+		fit.column(builder),
 		{intrinsic = {w = 160, h = 48}},
 		preview_test_render,
 		user_data,
@@ -61,13 +61,13 @@ preview_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 preview_geometry_stays_inside_physical_bounds :: proc(t: ^testing.T) {
 	for scale in 1 ..= 2 {
 		driver: fit.Test_Driver
-		fit.Test_Driver_Init(&driver)
+		fit.test_driver_init(&driver)
 		data: Preview_Test_State
 		input := fit.Test_Input {
 			screen_size = {640, 480},
 			dpi_scale   = f32(scale),
 		}
-		testing.expect(t, fit.Test_Driver_Frame(&driver, input, preview_test_draw, &data))
+		testing.expect(t, fit.test_driver_frame(&driver, input, preview_test_draw, &data))
 		testing.expect_value(t, data.rect.w, i32(160))
 		testing.expect_value(t, data.rect.h, i32(48))
 		impl := cast(^fit.Test_Driver_Impl)driver.inner
@@ -85,7 +85,7 @@ preview_geometry_stays_inside_physical_bounds :: proc(t: ^testing.T) {
 		}
 		testing.expect_value(t, rectangle_count, 2)
 		testing.expect_value(t, paint.clip_count, 0)
-		fit.Test_Driver_Destroy(&driver)
+		fit.test_driver_destroy(&driver)
 	}
 }
 
@@ -97,7 +97,7 @@ Preference_Test_State :: struct {
 
 preference_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	data := cast(^Preference_Test_State)user_data
-	root := fit.Column(builder)
+	root := fit.column(builder)
 	for position in 0 ..< 2 {
 		index := position
 		if data.reversed do index = 1 - position
@@ -109,30 +109,30 @@ preference_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 @(test)
 preferences_are_isolated_across_reorder_and_removal :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
-	fit.Test_Driver_Init(&driver)
-	defer fit.Test_Driver_Destroy(&driver)
-	fit.Test_Driver_Set_Semantics(&driver, true)
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
+	fit.test_driver_set_semantics(&driver, true)
 	data: Preference_Test_State
 	input := fit.Test_Input {
 		screen_size = {760, 560},
 		dpi_scale   = 1,
 	}
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, preference_test_draw, &data))
+	testing.expect(t, fit.test_driver_frame(&driver, input, preference_test_draw, &data))
 	input.keys_pressed[int(fit.Key.Tab)] = true
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, preference_test_draw, &data))
+	testing.expect(t, fit.test_driver_frame(&driver, input, preference_test_draw, &data))
 	input.keys_pressed = {}
 	input.keys_pressed[int(fit.Key.Enter)] = true
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, preference_test_draw, &data))
+	testing.expect(t, fit.test_driver_frame(&driver, input, preference_test_draw, &data))
 	testing.expect(t, data.values[0].enabled && !data.values[1].enabled)
 	input.keys_pressed = {}
 	data.reversed = true
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, preference_test_draw, &data))
+	testing.expect(t, fit.test_driver_frame(&driver, input, preference_test_draw, &data))
 	data.hide_first = true
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, preference_test_draw, &data))
+	testing.expect(t, fit.test_driver_frame(&driver, input, preference_test_draw, &data))
 	data.hide_first = false
-	testing.expect(t, fit.Test_Driver_Frame(&driver, input, preference_test_draw, &data))
+	testing.expect(t, fit.test_driver_frame(&driver, input, preference_test_draw, &data))
 	testing.expect(t, data.values[0].enabled && !data.values[1].enabled)
-	testing.expect_value(t, fit.Test_Driver_Diagnostics(&driver).semantic_id_collisions, i32(0))
+	testing.expect_value(t, fit.test_driver_diagnostics(&driver).semantic_id_collisions, i32(0))
 }
 
 builder_controls_test_frame :: proc(
@@ -147,15 +147,15 @@ builder_controls_test_frame :: proc(
 		dpi_scale   = 1,
 	}
 	if press_key do input.keys_pressed[int(key)] = true
-	return fit.Test_Driver_Frame(driver, input, draw, state)
+	return fit.test_driver_frame(driver, input, draw, state)
 }
 
 @(test)
 builder_controls_builds_and_emits_semantics :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
-	fit.Test_Driver_Init(&driver)
-	defer fit.Test_Driver_Destroy(&driver)
-	fit.Test_Driver_Set_Semantics(&driver, true)
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
+	fit.test_driver_set_semantics(&driver, true)
 	state := State {
 		notifications_enabled = true,
 		quality               = 1,
@@ -164,7 +164,7 @@ builder_controls_builds_and_emits_semantics :: proc(t: ^testing.T) {
 	defer destroy_state(&state)
 
 	testing.expect(t, builder_controls_test_frame(&driver, &state, .Tab))
-	summary := fit.Test_Driver_Paint_Summary(&driver)
+	summary := fit.test_driver_paint_summary(&driver)
 	testing.expect(t, summary.main_commands > 0)
 	testing.expect(t, summary.main_geometry_commands > 0)
 	testing.expect(t, summary.semantic_nodes >= 5)
@@ -173,8 +173,8 @@ builder_controls_builds_and_emits_semantics :: proc(t: ^testing.T) {
 @(test)
 builder_controls_keyboard_changes_caller_owned_state :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
-	fit.Test_Driver_Init(&driver)
-	defer fit.Test_Driver_Destroy(&driver)
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
 	state := State {
 		notifications_enabled = true,
 		quality               = 1,
@@ -195,8 +195,8 @@ builder_controls_keyboard_changes_caller_owned_state :: proc(t: ^testing.T) {
 @(test)
 builder_controls_keyboard_changes_tabs_and_persists :: proc(t: ^testing.T) {
 	driver: fit.Test_Driver
-	fit.Test_Driver_Init(&driver)
-	defer fit.Test_Driver_Destroy(&driver)
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
 	state := State {
 		notifications_enabled = true,
 		quality               = 1,

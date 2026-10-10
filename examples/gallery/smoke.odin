@@ -73,7 +73,7 @@ when SMOKE {
 			fmt.printfln("smoke: theme %s rm=%v", PALETTE_NAMES[palette], reduced_motion)
 		case step < total:
 			section = Section(step - scale_steps - theme_steps)
-			fit.Pane_Reset(&content_pane)
+			fit.pane_reset(&content_pane)
 			fmt.printfln("smoke: section %s", SECTION_NAMES[section])
 		case:
 			smoke_report_peaks()
@@ -89,7 +89,7 @@ when SMOKE {
 	// on this app. The smoke run visits every section, including the 1000
 	// button stress grid, so these numbers are the evidence for sizing them.
 	smoke_report_peaks :: proc() {
-		usage := fit.Renderer_Peak_Usage()
+		usage := fit.renderer_peak_usage()
 		// A full run that drew every section cannot legitimately report a
 		// zero peak: that means the recording call was lost, and the numbers
 		// the capacities are sized from would silently become fiction. Unit
@@ -117,7 +117,7 @@ when SMOKE {
 			usage.uniform_stream_bytes / 1024,
 			usage.uniform_capacity_bytes / 1024,
 		)
-		peaks := fit.Paint_Peak_Usage(&app)
+		peaks := fit.paint_peak_usage(&app)
 		assert(peaks.main_commands > 0, "smoke: no paint peak recorded")
 		fmt.printfln(
 			"smoke: peak paint main %d/%d cmds %d/%d text, overlay %d/%d cmds %d/%d text",

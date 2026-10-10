@@ -5,29 +5,14 @@ import "ingot:ui"
 Virtual_List_State :: struct {
 	inner: ui.Virtual_List_State,
 }
-Virtual_List_Window :: struct {
-	first:        int,
-	visible_rows: int,
-	row_height:   i32,
-	row_width:    i32,
-}
+Virtual_List_Window :: ui.Virtual_List_Window
 Split_Pane_State :: struct {
 	inner: ui.Split_Pane_State,
 }
-Split_Pane_Result :: struct {
-	first:   Rect,
-	divider: Rect,
-	second:  Rect,
-	changed: bool,
-}
-Time_Of_Day :: struct {
-	hour:   i32,
-	minute: i32,
-	second: i32,
-	set:    bool,
-}
+Split_Pane_Result :: ui.Split_Pane_Result
+Time_Of_Day :: ui.Time_Of_Day
 
-Virtual_List_Begin :: proc(
+virtual_list_begin :: proc(
 	surface: ^Surface,
 	key: string,
 	state: ^Virtual_List_State,
@@ -35,8 +20,8 @@ Virtual_List_Begin :: proc(
 	count: int,
 	visible_height: i32 = 0,
 ) -> Virtual_List_Window {
-	assert(surface != nil && state != nil, "Fit.Virtual_List_Begin: invalid argument")
-	inner := ui.virtual_list_begin(
+	assert(surface != nil && state != nil, "fit.virtual_list_begin: invalid argument")
+	return ui.virtual_list_begin(
 		surface_ui(surface),
 		key,
 		&state.inner,
@@ -44,30 +29,23 @@ Virtual_List_Begin :: proc(
 		count,
 		visible_height,
 	)
-	return {inner.first, inner.visible_rows, inner.row_height, inner.row_width}
 }
 
-Virtual_List_Row :: proc(
+virtual_list_row :: proc(
 	window: Virtual_List_Window,
 	state: ^Virtual_List_State,
 	index: int,
 ) -> Rect {
-	assert(state != nil, "Fit.Virtual_List_Row: nil state")
-	inner := ui.Virtual_List_Window {
-		window.first,
-		window.visible_rows,
-		window.row_height,
-		window.row_width,
-	}
-	return from_rect(ui.virtual_list_row(inner, &state.inner, index))
+	assert(state != nil, "fit.virtual_list_row: nil state")
+	return ui.virtual_list_row(window, &state.inner, index)
 }
 
-Virtual_List_End :: proc(surface: ^Surface, state: ^Virtual_List_State) {
-	assert(surface != nil && state != nil, "Fit.Virtual_List_End: invalid argument")
+virtual_list_end :: proc(surface: ^Surface, state: ^Virtual_List_State) {
+	assert(surface != nil && state != nil, "fit.virtual_list_end: invalid argument")
 	ui.virtual_list_end(surface_ui(surface), &state.inner)
 }
 
-Split_Pane :: proc(
+split_pane :: proc(
 	surface: ^Surface,
 	state: ^Split_Pane_State,
 	rect: Rect,
@@ -76,43 +54,34 @@ Split_Pane :: proc(
 	minimum_first: i32 = 0,
 	minimum_second: i32 = 0,
 ) -> Split_Pane_Result {
-	assert(surface != nil && state != nil, "Fit.Split_Pane: invalid argument")
-	inner := ui.split_pane(
+	assert(surface != nil && state != nil, "fit.split_pane: invalid argument")
+	return ui.split_pane(
 		surface_ui(surface).frame,
 		&state.inner,
-		to_rect(rect),
+		rect,
 		label,
-		ui.Widget_Id(widget),
+		widget,
 		minimum_first,
 		minimum_second,
 	)
-	return {
-		from_rect(inner.first),
-		from_rect(inner.divider),
-		from_rect(inner.second),
-		inner.changed,
-	}
 }
 
-Time_Of_Day_Valid :: proc(value: Time_Of_Day) -> bool {
-	return ui.time_of_day_valid(ui.Time_Of_Day{value.hour, value.minute, value.second, value.set})
+time_of_day_valid :: proc(value: Time_Of_Day) -> bool {
+	return ui.time_of_day_valid(value)
 }
 
-Time_Of_Day_Format :: proc(value: Time_Of_Day, show_seconds: bool = false) -> string {
-	inner := ui.Time_Of_Day{value.hour, value.minute, value.second, value.set}
-	return ui.time_of_day_format(inner, show_seconds)
+time_of_day_format :: proc(value: Time_Of_Day, show_seconds: bool = false) -> string {
+	return ui.time_of_day_format(value, show_seconds)
 }
 
-Time_Of_Day_Parse :: proc(value: string, show_seconds: bool = false) -> (Time_Of_Day, bool) {
-	inner, ok := ui.time_of_day_parse(value, show_seconds)
-	return {inner.hour, inner.minute, inner.second, inner.set}, ok
+time_of_day_parse :: proc(value: string, show_seconds: bool = false) -> (Time_Of_Day, bool) {
+	return ui.time_of_day_parse(value, show_seconds)
 }
 
-Color_Format_Hex :: proc(value: Color, include_alpha: bool = false) -> string {
-	return ui.color_format_hex(ui.Color(value), include_alpha)
+color_format_hex :: proc(value: Color, include_alpha: bool = false) -> string {
+	return ui.color_format_hex(value, include_alpha)
 }
 
-Color_Parse_Hex :: proc(value: string, allow_alpha: bool = false) -> (Color, bool) {
-	result, ok := ui.color_parse_hex(value, allow_alpha)
-	return Color(result), ok
+color_parse_hex :: proc(value: string, allow_alpha: bool = false) -> (Color, bool) {
+	return ui.color_parse_hex(value, allow_alpha)
 }

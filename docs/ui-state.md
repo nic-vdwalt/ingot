@@ -66,7 +66,7 @@ in the build phase. Custom measurement and rendering run in read-only phases, so
 reentrant declarations fail at the mutation boundary rather than corrupting the
 prepared tree.
 
-`fit.Debug_Async_Begin` ties an asynchronous completion to the owning builder's
+`fit.debug_async_begin` ties an asynchronous completion to the owning builder's
 epoch. Every ticket must complete exactly once before the app, session, or test
 driver is destroyed. Destruction rejects outstanding work, and completion rejects
 a retired or reused owner. These tickets diagnose misuse only while their anchor
@@ -134,7 +134,7 @@ The Pixel theme goes further through two more theme fields.
 region. The Pixel theme sets it to `.Mono`, so transcripts and code stay
 legible while the chrome stays pixel.
 - An application opens a region with `frame_reading_begin` and closes it with
-  `frame_reading_end` (`fit.Surface_Reading_Begin` / `_End`). Regions nest up
+  `frame_reading_end` (`fit.surface_reading_begin` / `_End`). Regions nest up
   to `READING_DEPTH_MAX`, and `ui_frame_finalize` asserts they are balanced.
 - `frame_font_face` returns the reading face inside a region and the chrome
   face outside. Pixel quantisation applies only while the pixel face is the
@@ -157,24 +157,24 @@ shadow helpers in `material.odin` to `material_pixel.odin`.
 
 ## Custom themes
 
-The ordinary application path is `fit.Theme_From_Palette`. Its named palette
+The ordinary application path is `fit.theme_from_palette`. Its named palette
 fields provide explicit ground, surface, control-state, ink, semantic, border,
 and focus swatches. `basis` selects a complete dark or light foundation for
 specialist roles; construction only assigns colors to roles and never computes
 a lighter hover or darker press.
 
 Build the value when application settings change, retain it with the application
-state if needed, and pass it to `fit.Set_Theme` or `fit.Session_Set_Theme`. This
+state if needed, and pass it to `fit.set_theme` or `fit.session_set_theme`. This
 keeps the application as the source of truth and creates no hidden theme object
 or per-widget synchronization.
 
-Use `fit.Theme_Validate` before installing editable or file-derived colors.
-`fit.Try_Set_Theme` and `fit.Session_Try_Set_Theme` return the first bounded,
+Use `fit.theme_validate` before installing editable or file-derived colors.
+`fit.try_set_theme` and `fit.session_try_set_theme` return the first bounded,
 actionable validation failure and leave the current runtime unchanged. The
 existing setters continue to assert because an invalid program-authored theme is
 a programmer error.
 
-For a specialist token, fork any theme value and call `fit.Theme_Set_Color` with
+For a specialist token, fork any theme value and call `fit.theme_set_color` with
 a `Theme_Role`. Pigments and page texture remain separate typed decisions through
 `Theme_Set_Pigment` and `Theme_Set_Substrate`; reduced motion remains orthogonal.
 Widgets still consume semantic `Ink`, `Pigment`, and `Surface` tokens rather than
@@ -292,8 +292,8 @@ record's ID for a different control.
 `Widget_Id` is the canonical identity for conditional controls, collections,
 and reusable components. A `Ui` owns a bounded `Id_Context`; scopes compose
 explicit component and domain identity without retaining widget state. At the
-supported `ingot:fit` layer, `fit.Scope` composes an explicit component or
-domain key and `fit.Id` derives a control identity inside it. Source locations
+supported `ingot:fit` layer, `fit.scope` composes an explicit component or
+domain key and `fit.id` derives a control identity inside it. Source locations
 improve balance assertions only; they are never hashed into identity.
 
 ```odin

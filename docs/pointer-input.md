@@ -31,11 +31,11 @@ Pointer_State :: struct {
 
 pointer_update :: proc(builder: ^fit.Builder, state: ^Pointer_State) {
 	assert(builder != nil && state != nil)
-	if fit.Pointer_Events_Overflowed(builder) {
+	if fit.pointer_events_overflowed(builder) {
 		state.count = 0
 		return
 	}
-	for event in fit.Pointer_Events(builder) {
+	for event in fit.pointer_events(builder) {
 		switch event.kind {
 		case .Down:
 			if state.count < len(state.active) {

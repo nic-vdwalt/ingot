@@ -1,12 +1,12 @@
 package ui
 
-Fit_Action_Proc :: #type proc(userdata: rawptr)
-Fit_Tagged_Action_Proc :: #type proc(userdata: rawptr, tag: u64)
+Fit_Action_Proc :: #type proc(user_data: rawptr)
+Fit_Tagged_Action_Proc :: #type proc(user_data: rawptr, tag: u64)
 
 Fit_Action :: struct {
 	procedure:        Fit_Action_Proc,
 	tagged_procedure: Fit_Tagged_Action_Proc,
-	userdata:         rawptr,
+	user_data:        rawptr,
 	tag:              u64,
 }
 
@@ -607,9 +607,9 @@ fit_actions_dispatch :: proc(builder: ^Fit_Builder) {
 		if action.procedure == nil && action.tagged_procedure == nil do continue
 		node.activated = false
 		if action.procedure != nil {
-			action.procedure(action.userdata)
+			action.procedure(action.user_data)
 		} else {
-			action.tagged_procedure(action.userdata, action.tag)
+			action.tagged_procedure(action.user_data, action.tag)
 		}
 		dispatched = true
 	}

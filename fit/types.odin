@@ -1,6 +1,7 @@
 package fit
 
 import "ingot:action"
+import "ingot:gfx"
 import "ingot:ui"
 import "ingot:ui_gfx"
 
@@ -44,15 +45,9 @@ Signal :: struct {
 	pending: bool,
 }
 
-Action_Proc :: #type proc(user_data: rawptr)
-Tagged_Action_Proc :: #type proc(user_data: rawptr, tag: u64)
-
-Action :: struct {
-	procedure:        Action_Proc,
-	tagged_procedure: Tagged_Action_Proc,
-	user_data:        rawptr,
-	tag:              u64,
-}
+Action_Proc :: ui.Fit_Action_Proc
+Tagged_Action_Proc :: ui.Fit_Tagged_Action_Proc
+Action :: ui.Fit_Action
 
 Command_Id :: action.Command_Id
 Command_Context_Id :: action.Context_Id
@@ -111,18 +106,8 @@ Session :: struct {
 	user_data: rawptr,
 }
 
-State :: enum u8 {
-	Empty,
-	Ready,
-	Running,
-	Stopped,
-}
-
-Frame_Pacing :: enum u8 {
-	Fixed,
-	Uncapped,
-	Monitor_Refresh,
-}
+State :: ui_gfx.App_State
+Frame_Pacing :: ui_gfx.App_Frame_Pacing
 
 Window_Flag :: enum i32 {
 	Fullscreen          = 1,
@@ -144,16 +129,16 @@ Window_Flag :: enum i32 {
 	No_Focus_On_Hover   = 18,
 }
 Window_Flags :: distinct bit_set[Window_Flag;i32]
+// Why assert: to_window_flags transmutes this bit set into gfx.ConfigFlags, so
+// every Window_Flag bit position must equal the ConfigFlag it names.
+#assert(size_of(Window_Flags) == size_of(gfx.ConfigFlags))
+#assert(i32(Window_Flag.Fullscreen) == i32(gfx.ConfigFlag.FULLSCREEN_MODE))
+#assert(i32(Window_Flag.No_Focus_On_Hover) == i32(gfx.ConfigFlag.WINDOW_NO_FOCUS_ON_HOVER))
 
 Scale_Metrics_Proc :: #type proc(scale: f32)
 Scale_Invalidate_Proc :: #type proc()
 
-Session_Config :: struct {
-	user_scale:        f32,
-	semantics_enabled: bool,
-	scale_metrics:     Scale_Metrics_Proc,
-	scale_invalidate:  Scale_Invalidate_Proc,
-}
+Session_Config :: ui_gfx.Session_Config
 
 Paint_Peaks :: struct {
 	main_commands:      int,
@@ -247,33 +232,8 @@ Frame_Telemetry :: struct {
 	measure_cache_policy_bypasses: u64,
 }
 
-Frame_Diagnostics :: struct {
-	input_characters_dropped:   i32,
-	degenerate_widgets_dropped: i32,
-	layout_overflows:           i32,
-	unsupported_glyphs:         i32,
-	semantic_nodes_dropped:     i32,
-	semantic_focus_dropped:     i32,
-	semantic_actions_dropped:   i32,
-	semantic_id_collisions:     i32,
-	semantic_text_truncations:  i32,
-	main_commands_dropped:      i32,
-	main_text_bytes_dropped:    i32,
-	overlay_commands_dropped:   i32,
-	overlay_text_bytes_dropped: i32,
-	platform_controls_dropped:  i32,
-}
-
-Renderer_Peaks :: struct {
-	vertices:                int,
-	vertices_capacity:       int,
-	indices:                 int,
-	indices_capacity:        int,
-	geometry_stream_bytes:   u64,
-	geometry_capacity_bytes: u64,
-	uniform_stream_bytes:    u64,
-	uniform_capacity_bytes:  u64,
-}
+Frame_Diagnostics :: ui.Ui_Frame_Diagnostics
+Renderer_Peaks :: gfx.Peak_Usage
 
 Config :: struct {
 	width:         i32,
@@ -304,45 +264,22 @@ Space :: ui.Space
 Cross_Align :: ui.Cross_Align
 Main_Align :: ui.Main_Align
 Text_Role :: ui.Text_Role
-Text_Metrics :: struct {
-	ascent:       f32,
-	descent:      f32,
-	line_gap:     f32,
-	line_advance: f32,
-}
-Caret_Blink :: struct {
-	visible:              bool,
-	seconds_until_toggle: f64,
-	animate:              bool,
-}
+Text_Metrics :: ui.Text_Metrics
+Caret_Blink :: ui.Caret_Blink
 Truncate_Side :: ui.Truncate_Side
 Ink :: ui.Ink
 Button_Style :: ui.Btn_Style
 Icon :: ui.Icon
-Widget_Id :: distinct u64
-Rect :: struct {
-	x, y, w, h: i32,
-}
-Size :: struct {
-	w, h:     i32,
-	overflow: bool,
-}
-Constraints :: struct {
-	min_w, min_h: i32,
-	max_w, max_h: i32,
-}
-Z_Order :: distinct f32
+Widget_Id :: ui.Widget_Id
+Rect :: ui.Rect_I32
+Size :: ui.Intrinsic_Size
+Constraints :: ui.Intrinsic_Constraints
+Z_Order :: ui.Z_Order
 Transition_State :: ui.Transition_Rect_State
-Transition_Options :: struct {
-	speed: f32,
-}
-Aspect_Ratio :: struct {
-	width, height: i32,
-}
-Float_Rect :: struct {
-	x, y, width, height: f32,
-}
-Color :: distinct [4]u8
+Transition_Options :: ui.Transition_Options
+Aspect_Ratio :: ui.Aspect_Ratio
+Float_Rect :: ui.Rect
+Color :: ui.Color
 Point :: struct {
 	x, y: f32,
 }
@@ -432,6 +369,11 @@ Key :: enum i32 {
 	Right_Alt     = 346,
 	Right_Super   = 347,
 }
+// Why assert: to_key transmutes this enum into ui.Key, so the backing type and
+// every member value must agree; fit_key_contract_complete checks each member.
+#assert(size_of(Key) == size_of(ui.Key))
+#assert(i32(Key.Null) == i32(ui.Key.KEY_NULL))
+#assert(i32(Key.Right_Super) == i32(ui.Key.RIGHT_SUPER))
 
 Test_Input :: struct {
 	mouse_position:            Point,
@@ -467,6 +409,8 @@ Mouse_Button :: enum i32 {
 	Forward,
 	Back,
 }
+#assert(size_of(Mouse_Button) == size_of(ui.Mouse_Button))
+#assert(len(Mouse_Button) == len(ui.Mouse_Button))
 Cursor :: enum i32 {
 	Default,
 	Arrow,
@@ -480,13 +424,9 @@ Cursor :: enum i32 {
 	Resize_All,
 	Not_Allowed,
 }
-Interaction :: struct {
-	hovered:  bool,
-	pressed:  bool,
-	held:     bool,
-	released: bool,
-	clicked:  bool,
-}
+#assert(size_of(Cursor) == size_of(ui.Cursor))
+#assert(len(Cursor) == len(ui.Cursor))
+Interaction :: ui.Interaction
 Metrics :: struct {
 	font_title:         i32,
 	font_body:          i32,
@@ -516,45 +456,11 @@ Metrics :: struct {
 Radius :: ui.Radius
 Border :: ui.Border
 
-Transition :: struct {
-	state:   ^Transition_State,
-	options: Transition_Options,
-}
-
-Size_Options :: struct {
-	width:      Track,
-	height:     Track,
-	aspect:     Aspect_Ratio,
-	transition: Transition,
-}
-
-Container_Surface :: struct {
-	enabled:   bool,
-	kind:      Surface_Kind,
-	state:     Visual_State,
-	radius:    Radius,
-	border:    Border,
-	elevation: Elevation,
-}
-
-Container_Effects :: struct {
-	clip:         bool,
-	background:   Color,
-	radius:       Radius,
-	border:       Border,
-	border_color: Color,
-	surface:      Container_Surface,
-}
-
-Container_Options :: struct {
-	gap:     Space,
-	padding: Space,
-	align:   Cross_Align,
-	justify: Main_Align,
-	track:   Track,
-	size:    Size_Options,
-	effects: Container_Effects,
-}
+Transition :: ui.Prepared_Transition
+Size_Options :: ui.Prepared_Size
+Container_Surface :: ui.Prepared_Container_Surface
+Container_Effects :: ui.Prepared_Container_Effects
+Container_Options :: ui.Prepared_Container_Options
 
 Section_Options :: struct {
 	container: Container_Options,
@@ -570,33 +476,9 @@ Card_Options :: struct {
 	elevation: Elevation,
 }
 
-Flow_Options :: struct {
-	gap_x, gap_y: Space,
-	padding:      Space,
-	align:        Cross_Align,
-	justify:      Main_Align,
-	track:        Track,
-	size:         Size_Options,
-	effects:      Container_Effects,
-}
-
-Grid_Auto_Flow :: enum u8 {
-	Row,
-	Column,
-}
-
-Grid_Options :: struct {
-	columns:       i32,
-	row_height:    i32,
-	column_tracks: []Track,
-	row_tracks:    []Track,
-	auto_flow:     Grid_Auto_Flow,
-	gap_x, gap_y:  Space,
-	padding:       Space,
-	track:         Track,
-	size:          Size_Options,
-	effects:       Container_Effects,
-}
+Flow_Options :: ui.Prepared_Flow_Options
+Grid_Auto_Flow :: ui.Grid_Auto_Flow
+Grid_Options :: ui.Prepared_Grid_Options
 
 Grid_Cell_Options :: struct {
 	column, row:           i32,
@@ -608,56 +490,18 @@ Grid_Cell_Options :: struct {
 Attachment_Target :: ui.Attachment_Target_Kind
 Attachment_Point :: ui.Attachment_Point
 
-Attachment_Options :: struct {
-	target_kind:       Attachment_Target,
-	target:            i32,
-	target_screen:     Rect,
-	target_point:      Attachment_Point,
-	self_point:        Attachment_Point,
-	offset_x:          i32,
-	offset_y:          i32,
-	z:                 Z_Order,
-	claim:             bool,
-	clamp_to_viewport: bool,
-	transition:        Transition,
-}
-
-Label_Options :: struct {
-	role:  Text_Role,
-	ink:   Ink,
-	wrap:  bool,
-	track: Track,
-	size:  Size_Options,
-}
+Attachment_Options :: ui.Prepared_Attachment_Options
+Label_Options :: ui.Fit_Label_Options
 
 Control_Motion_State :: ui.Control_Motion_State
 
-Button_Options :: struct {
-	style:       Button_Style,
-	disabled:    bool,
-	web_form_id: string,
-	track:       Track,
-	size:        Size_Options,
-	// activated is the advanced raw-output path. Render writes it after the
-	// build callback returns, so it must outlive the build and render.
-	activated:   ^bool,
-	action:      Action,
-	motion:      ^Control_Motion_State,
-}
-
-Control_Options :: struct {
-	track:   Track,
-	size:    Size_Options,
-	// changed follows the activated lifetime contract on Button_Options: it
-	// is written during Render and must outlive the build callback.
-	changed: ^bool,
-	motion:  ^Control_Motion_State,
-}
-
-Leaf_Options :: struct {
-	track: Track,
-	size:  Size_Options,
-}
+// Button_Options.activated is the advanced raw-output path. render writes it
+// after the build callback returns, so it must outlive the build and render.
+// Control_Options.changed and Custom_Options.activated follow the same
+// lifetime contract.
+Button_Options :: ui.Fit_Button_Options
+Control_Options :: ui.Fit_Control_Options
+Leaf_Options :: ui.Fit_Leaf_Options
 
 Builder_Text_Input_Options :: struct {
 	height:        i32,
@@ -665,7 +509,7 @@ Builder_Text_Input_Options :: struct {
 	semantics:     Text_Input_Semantics,
 	track:         Track,
 	size:          Size_Options,
-	// submitted is written during Render and must outlive the build callback.
+	// submitted is written during render and must outlive the build callback.
 	submitted:     ^bool,
 	// submit overrides the Enter behaviour; .Default keeps the height-based
 	// choice (one-line boxes submit, taller boxes insert a newline).
@@ -688,19 +532,13 @@ Progress_Options :: struct {
 	size:     Size_Options,
 }
 
-Custom_Options :: struct {
-	track:     Track,
-	size:      Size_Options,
-	// activated follows the lifetime contract on Button_Options: it is
-	// written during Render and must outlive the build callback.
-	activated: ^bool,
-}
+Custom_Options :: ui.Fit_Custom_Options
 
 Canvas_Options :: struct {
 	intrinsic: Size,
 	track:     Track,
 	size:      Size_Options,
-	// activated is written during Render and must outlive the build callback.
+	// activated is written during render and must outlive the build callback.
 	activated: ^bool,
 }
 
@@ -730,10 +568,7 @@ Scroll_State :: struct {
 	inner: ui.Prepared_Scroll_State,
 }
 
-Scroll_Axis :: enum u8 {
-	Vertical,
-	Horizontal,
-}
+Scroll_Axis :: ui.Scroll_Axis
 
 Scroll_Options :: struct {
 	padding:  Space,
@@ -796,34 +631,34 @@ Custom_Spec :: struct {
 	intrinsic: Size,
 }
 
-Fixed :: proc(size: i32) -> Track {
-	assert(size >= 0, "Fit.Fixed: negative size")
+fixed :: proc(size: i32) -> Track {
+	assert(size >= 0, "fit.fixed: negative size")
 	return {kind = .Fixed, basis = size, min_size = size, max_size = size}
 }
 
-Grow :: proc(weight: i32 = 1, min_size: i32 = 0, max_size: i32 = 0) -> Track {
-	assert(weight > 0, "Fit.Grow: non-positive weight")
-	assert(min_size >= 0, "Fit.Grow: negative minimum")
-	assert(max_size == 0 || max_size >= min_size, "Fit.Grow: invalid maximum")
+grow :: proc(weight: i32 = 1, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(weight > 0, "fit.grow: non-positive weight")
+	assert(min_size >= 0, "fit.grow: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "fit.grow: invalid maximum")
 	return {kind = .Grow, weight = weight, min_size = min_size, max_size = max_size}
 }
 
-Percent :: proc(value: f32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
-	assert(value >= 0 && value <= 1, "Fit.Percent: value outside 0..1")
-	assert(min_size >= 0, "Fit.Percent: negative minimum")
-	assert(max_size == 0 || max_size >= min_size, "Fit.Percent: invalid maximum")
+percent :: proc(value: f32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(value >= 0 && value <= 1, "fit.percent: value outside 0..1")
+	assert(min_size >= 0, "fit.percent: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "fit.percent: invalid maximum")
 	return {kind = .Percent, percent = value, min_size = min_size, max_size = max_size}
 }
 
-Fit :: proc(basis: i32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
-	assert(basis >= 0, "Fit.Fit: negative basis")
-	assert(min_size >= 0, "Fit.Fit: negative minimum")
-	assert(max_size == 0 || max_size >= min_size, "Fit.Fit: invalid maximum")
+fit :: proc(basis: i32, min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(basis >= 0, "fit.fit: negative basis")
+	assert(min_size >= 0, "fit.fit: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "fit.fit: invalid maximum")
 	return {kind = .Fit, basis = basis, min_size = min_size, max_size = max_size}
 }
 
-Hug :: proc(min_size: i32 = 0, max_size: i32 = 0) -> Track {
-	assert(min_size >= 0, "Fit.Hug: negative minimum")
-	assert(max_size == 0 || max_size >= min_size, "Fit.Hug: invalid maximum")
+hug :: proc(min_size: i32 = 0, max_size: i32 = 0) -> Track {
+	assert(min_size >= 0, "fit.hug: negative minimum")
+	assert(max_size == 0 || max_size >= min_size, "fit.hug: invalid maximum")
 	return {kind = .Hug, min_size = min_size, max_size = max_size}
 }

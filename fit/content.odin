@@ -7,27 +7,24 @@ Variable_List_Index :: struct {
 	heights: []i64,
 	total:   i64,
 }
-Variable_List_Window :: struct {
-	first, end: int,
-	top:        i64,
-}
-Variable_List_Init :: proc(index: ^Variable_List_Index) {
+Variable_List_Window :: ui.Variable_List_Window
+variable_list_init :: proc(index: ^Variable_List_Index) {
 	assert(index != nil)
 	ui.variable_list_init(&index.inner)
 }
-Variable_List_Destroy :: proc(index: ^Variable_List_Index) {
+variable_list_destroy :: proc(index: ^Variable_List_Index) {
 	assert(index != nil)
 	ui.variable_list_destroy(&index.inner)
 	index^ = {}
 }
-Variable_List_Reset :: proc(index: ^Variable_List_Index, heights: []i64) -> bool {
+variable_list_reset :: proc(index: ^Variable_List_Index, heights: []i64) -> bool {
 	assert(index != nil)
 	if !ui.variable_list_reset(&index.inner, heights) do return false
 	index.heights = index.inner.heights[:]
 	index.total = index.inner.total
 	return true
 }
-Variable_List_Append :: proc(index: ^Variable_List_Index, height: i64) -> bool {
+variable_list_append :: proc(index: ^Variable_List_Index, height: i64) -> bool {
 	assert(index != nil)
 	assert(index.inner.allocator.procedure != nil)
 	ok := ui.variable_list_append(&index.inner, height)
@@ -36,24 +33,23 @@ Variable_List_Append :: proc(index: ^Variable_List_Index, height: i64) -> bool {
 	return ok
 }
 
-Variable_List_Update :: proc(index: ^Variable_List_Index, offset: int, height: i64) -> bool {
+variable_list_update :: proc(index: ^Variable_List_Index, offset: int, height: i64) -> bool {
 	assert(index != nil)
 	if !ui.variable_list_update(&index.inner, offset, height) do return false
 	index.total = index.inner.total
 	return true
 }
-Variable_List_Prefix :: proc(index: ^Variable_List_Index, end: int) -> i64 {
+variable_list_prefix :: proc(index: ^Variable_List_Index, end: int) -> i64 {
 	assert(index != nil)
 	return ui.variable_list_prefix(&index.inner, end)
 }
-Variable_List_Visible :: proc(
+variable_list_visible :: proc(
 	index: ^Variable_List_Index,
 	scroll: f64,
 	height: i32,
 ) -> Variable_List_Window {
 	assert(index != nil)
-	window := ui.variable_list_window(&index.inner, scroll, height)
-	return {window.first, window.end, window.top}
+	return ui.variable_list_window(&index.inner, scroll, height)
 }
 
 Markdown_Reference_Resolver :: #type proc(
@@ -74,18 +70,18 @@ Markdown_Layout :: struct {
 	inner: ui.Markdown_Layout,
 }
 
-Markdown_Layout_Init :: proc(layout: ^Markdown_Layout) {
+markdown_layout_init :: proc(layout: ^Markdown_Layout) {
 	assert(layout != nil)
 	assert(!layout.inner.initialized)
 	ui.markdown_layout_init(&layout.inner)
 }
 
-Markdown_Layout_Destroy :: proc(layout: ^Markdown_Layout) {
+markdown_layout_destroy :: proc(layout: ^Markdown_Layout) {
 	assert(layout != nil)
 	ui.markdown_layout_destroy(&layout.inner)
 }
 
-Markdown_Layout_Prepare :: proc(
+markdown_layout_prepare :: proc(
 	ctx: ^Markdown_Context,
 	layout: ^Markdown_Layout,
 	width: i32,
@@ -96,17 +92,17 @@ Markdown_Layout_Prepare :: proc(
 	return ui.markdown_layout_prepare(&ctx.inner, &layout.inner, width, source)
 }
 
-Markdown_Layout_Measure :: proc(layout: ^Markdown_Layout) -> (width, height: i32) {
+markdown_layout_measure :: proc(layout: ^Markdown_Layout) -> (width, height: i32) {
 	assert(layout != nil)
 	return ui.markdown_layout_measure(&layout.inner)
 }
 
-Markdown_Layout_Bytes :: proc(layout: ^Markdown_Layout) -> u64 {
+markdown_layout_bytes :: proc(layout: ^Markdown_Layout) -> u64 {
 	assert(layout != nil)
 	return ui.markdown_layout_owned_bytes(&layout.inner)
 }
 
-Markdown_Layout_Draw :: proc(
+markdown_layout_draw :: proc(
 	ctx: ^Markdown_Context,
 	layout: ^Markdown_Layout,
 	rect: Rect,
@@ -121,20 +117,20 @@ Markdown_Layout_Draw :: proc(
 	return ui.markdown_layout_draw(
 		&ctx.inner,
 		&layout.inner,
-		to_rect(rect),
-		ui.Color(color),
+		rect,
+		color,
 		selection_start,
 		selection_end,
 		out_width,
 	)
 }
 
-Markdown_Layout_Hit_Test :: proc(layout: ^Markdown_Layout, x, y, mouse_x, mouse_y: i32) -> int {
+markdown_layout_hit_test :: proc(layout: ^Markdown_Layout, x, y, mouse_x, mouse_y: i32) -> int {
 	assert(layout != nil)
 	return ui.markdown_layout_hit_test(&layout.inner, x, y, mouse_x, mouse_y)
 }
 
-Markdown_Layout_Source_Y :: proc(layout: ^Markdown_Layout, offset: int) -> i32 {
+markdown_layout_source_y :: proc(layout: ^Markdown_Layout, offset: int) -> i32 {
 	assert(layout != nil)
 	return ui.markdown_layout_source_y(&layout.inner, offset)
 }
@@ -143,32 +139,9 @@ Markdown_Prepared :: struct {
 	inner: ui.Markdown_Prepared,
 }
 
-Text_Span :: struct {
-	text:           string,
-	raw_start:      int,
-	raw_end:        int,
-	text_raw_start: int,
-	text_raw_end:   int,
-	bold:           bool,
-	pill:           bool,
-	code:           bool,
-	link:           bool,
-	href:           string,
-}
-#assert(size_of(Text_Span) == size_of(ui.Text_Span))
-#assert(align_of(Text_Span) == align_of(ui.Text_Span))
-#assert(offset_of(Text_Span, text) == offset_of(ui.Text_Span, text))
-#assert(offset_of(Text_Span, raw_start) == offset_of(ui.Text_Span, raw_start))
-#assert(offset_of(Text_Span, raw_end) == offset_of(ui.Text_Span, raw_end))
-#assert(offset_of(Text_Span, text_raw_start) == offset_of(ui.Text_Span, text_raw_start))
-#assert(offset_of(Text_Span, text_raw_end) == offset_of(ui.Text_Span, text_raw_end))
-#assert(offset_of(Text_Span, bold) == offset_of(ui.Text_Span, bold))
-#assert(offset_of(Text_Span, pill) == offset_of(ui.Text_Span, pill))
-#assert(offset_of(Text_Span, code) == offset_of(ui.Text_Span, code))
-#assert(offset_of(Text_Span, link) == offset_of(ui.Text_Span, link))
-#assert(offset_of(Text_Span, href) == offset_of(ui.Text_Span, href))
+Text_Span :: ui.Text_Span
 
-Markdown_Context_Create :: proc(
+markdown_context_create :: proc(
 	surface: ^Surface,
 	workspace_files: []string = nil,
 	reference_resolver: Markdown_Reference_Resolver = nil,
@@ -185,41 +158,41 @@ Markdown_Context_Create :: proc(
 	return {inner = inner, cull_top = inner.cull_top, cull_bottom = inner.cull_bottom}
 }
 
-Markdown_Prepare :: proc(ctx: ^Markdown_Context, width: i32, text: string) -> Markdown_Prepared {
-	assert(ctx != nil, "Fit.Markdown_Prepare: nil context")
+markdown_prepare :: proc(ctx: ^Markdown_Context, width: i32, text: string) -> Markdown_Prepared {
+	assert(ctx != nil, "fit.markdown_prepare: nil context")
 	ctx.inner.cull_top = ctx.cull_top
 	ctx.inner.cull_bottom = ctx.cull_bottom
 	return {inner = ui.markdown_prepare(&ctx.inner, width, text)}
 }
 
-Markdown_Prepared_Measure :: proc(
+markdown_prepared_measure :: proc(
 	ctx: ^Markdown_Context,
 	prepared: ^Markdown_Prepared,
 	out_width: ^i32 = nil,
 ) -> i32 {
-	assert(ctx != nil && prepared != nil, "Fit.Markdown_Prepared_Measure: invalid argument")
+	assert(ctx != nil && prepared != nil, "fit.markdown_prepared_measure: invalid argument")
 	return ui.markdown_prepared_measure(&ctx.inner, &prepared.inner, out_width)
 }
 
-Markdown_Prepared_Hit_Test :: proc(
+markdown_prepared_hit_test :: proc(
 	ctx: ^Markdown_Context,
 	prepared: ^Markdown_Prepared,
 	x, y, mouse_x, mouse_y: i32,
 ) -> int {
-	assert(ctx != nil && prepared != nil, "Fit.Markdown_Prepared_Hit_Test: invalid argument")
+	assert(ctx != nil && prepared != nil, "fit.markdown_prepared_hit_test: invalid argument")
 	return ui.markdown_prepared_hit_test(&ctx.inner, &prepared.inner, x, y, mouse_x, mouse_y)
 }
 
-Markdown_Prepared_Source_Y :: proc(
+markdown_prepared_source_y :: proc(
 	ctx: ^Markdown_Context,
 	prepared: ^Markdown_Prepared,
 	offset: int,
 ) -> i32 {
-	assert(ctx != nil && prepared != nil, "Fit.Markdown_Prepared_Source_Y: invalid argument")
+	assert(ctx != nil && prepared != nil, "fit.markdown_prepared_source_y: invalid argument")
 	return ui.markdown_prepared_source_y(&ctx.inner, &prepared.inner, offset)
 }
 
-Markdown_Prepared_Draw :: proc(
+markdown_prepared_draw :: proc(
 	ctx: ^Markdown_Context,
 	prepared: ^Markdown_Prepared,
 	rect: Rect,
@@ -228,51 +201,51 @@ Markdown_Prepared_Draw :: proc(
 	selection_end: int = -1,
 	out_width: ^i32 = nil,
 ) -> i32 {
-	assert(ctx != nil && prepared != nil, "Fit.Markdown_Prepared_Draw: invalid argument")
+	assert(ctx != nil && prepared != nil, "fit.markdown_prepared_draw: invalid argument")
 	ctx.inner.cull_top = ctx.cull_top
 	ctx.inner.cull_bottom = ctx.cull_bottom
 	return ui.markdown_prepared_draw(
 		&ctx.inner,
 		&prepared.inner,
-		to_rect(rect),
-		ui.Color(color),
+		rect,
+		color,
 		selection_start,
 		selection_end,
 		out_width,
 	)
 }
 
-Markdown_Measure :: proc(
+markdown_measure :: proc(
 	ctx: ^Markdown_Context,
 	width: i32,
 	text: string,
 	out_width: ^i32,
 ) -> i32 {
-	assert(ctx != nil, "Fit.Markdown_Measure: nil context")
+	assert(ctx != nil, "fit.markdown_measure: nil context")
 	ctx.inner.cull_top = ctx.cull_top
 	ctx.inner.cull_bottom = ctx.cull_bottom
 	return ui.measure_markdown(&ctx.inner, width, text, out_width)
 }
 
-Markdown_Hit_Test :: proc(
+markdown_hit_test :: proc(
 	ctx: ^Markdown_Context,
 	x, y, width: i32,
 	text: string,
 	mouse_x, mouse_y: i32,
 ) -> int {
-	assert(ctx != nil, "Fit.Markdown_Hit_Test: nil context")
+	assert(ctx != nil, "fit.markdown_hit_test: nil context")
 	ctx.inner.cull_top = ctx.cull_top
 	ctx.inner.cull_bottom = ctx.cull_bottom
 	return ui.hit_test_markdown(&ctx.inner, x, y, width, text, mouse_x, mouse_y)
 }
 
-Markdown_Source_Y :: proc(ctx: ^Markdown_Context, width: i32, text: string, offset: int) -> i32 {
-	assert(ctx != nil, "Fit.Markdown_Source_Y: nil context")
-	assert(offset >= 0 && offset <= len(text), "Fit.Markdown_Source_Y: invalid offset")
+markdown_source_y :: proc(ctx: ^Markdown_Context, width: i32, text: string, offset: int) -> i32 {
+	assert(ctx != nil, "fit.markdown_source_y: nil context")
+	assert(offset >= 0 && offset <= len(text), "fit.markdown_source_y: invalid offset")
 	return ui.markdown_source_y(&ctx.inner, width, text, offset)
 }
 
-Markdown_Draw :: proc(
+markdown_draw :: proc(
 	ctx: ^Markdown_Context,
 	rect: Rect,
 	text: string,
@@ -281,46 +254,34 @@ Markdown_Draw :: proc(
 	selection_end: int = -1,
 	out_width: ^i32 = nil,
 ) -> i32 {
-	assert(ctx != nil, "Fit.Markdown_Draw: nil context")
+	assert(ctx != nil, "fit.markdown_draw: nil context")
 	ctx.inner.cull_top = ctx.cull_top
 	ctx.inner.cull_bottom = ctx.cull_bottom
 	return ui.markdown_draw(
 		&ctx.inner,
-		to_rect(rect),
+		rect,
 		text,
-		ui.Color(color),
+		color,
 		selection_start,
 		selection_end,
 		out_width,
 	)
 }
 
-Markdown_Parse_Inline :: proc(text: string, allocator := context.temp_allocator) -> []Text_Span {
-	return transmute([]Text_Span)ui.parse_inline_spans_with(text, allocator)
+markdown_parse_inline :: proc(text: string, allocator := context.temp_allocator) -> []Text_Span {
+	return ui.parse_inline_spans_with(text, allocator)
 }
 
-Workspace_Reference_Path :: proc(reference: string) -> string {
+workspace_reference_path :: proc(reference: string) -> string {
 	return ui.workspace_reference_path(reference)
 }
 
-Workspace_Has_Path :: proc(workspace_files: []string, reference: string) -> bool {
+workspace_has_path :: proc(workspace_files: []string, reference: string) -> bool {
 	return ui.workspace_has_path_with(workspace_files, reference)
 }
 
 Diff_Row_Kind :: ui.Diff_Row_Kind
-
-Diff_Row :: struct {
-	kind:   Diff_Row_Kind,
-	old_no: int,
-	new_no: int,
-	text:   string,
-}
-#assert(size_of(Diff_Row) == size_of(ui.Diff_Row))
-#assert(align_of(Diff_Row) == align_of(ui.Diff_Row))
-#assert(offset_of(Diff_Row, kind) == offset_of(ui.Diff_Row, kind))
-#assert(offset_of(Diff_Row, old_no) == offset_of(ui.Diff_Row, old_no))
-#assert(offset_of(Diff_Row, new_no) == offset_of(ui.Diff_Row, new_no))
-#assert(offset_of(Diff_Row, text) == offset_of(ui.Diff_Row, text))
+Diff_Row :: ui.Diff_Row
 
 Diff_Parse_Result :: struct {
 	rows:      []Diff_Row,
@@ -329,60 +290,31 @@ Diff_Parse_Result :: struct {
 }
 
 Diff_Layout :: ui.Diff_Layout
+Diff_View_Options :: ui.Diff_View_Options
+Diff_View_Result :: ui.Diff_View_Result
 
-Diff_View_Options :: struct {
-	layout:          Diff_Layout,
-	max_rows:        int,
-	selected:        bool,
-	semantic_label:  string,
-	field_id:        string,
-	minimum_columns: i32,
-}
-
-Diff_View_Result :: struct {
-	next_y:     i32,
-	shown:      int,
-	hidden:     int,
-	used_split: bool,
-}
-
-Diff_Parse_Hunk_Header :: proc(line: string) -> (old_start, new_start: int) {
+diff_parse_hunk_header :: proc(line: string) -> (old_start, new_start: int) {
 	return ui.parse_hunk_header(line)
 }
 
-Surface_Diff_Parse :: proc(surface: ^Surface, text: string) -> Diff_Parse_Result {
+surface_diff_parse :: proc(surface: ^Surface, text: string) -> Diff_Parse_Result {
 	u := surface_ui(surface)
 	parsed := ui.parse_unified_diff(u.frame, text)
 	rows := ui.frame_view_items(u.frame, parsed.rows)
-	return {transmute([]Diff_Row)rows, parsed.truncated, parsed.malformed}
+	return {rows, parsed.truncated, parsed.malformed}
 }
 
-Surface_Diff_View :: proc(
+surface_diff_view :: proc(
 	surface: ^Surface,
 	x, y, width: i32,
 	rows: []Diff_Row,
 	options: Diff_View_Options = {},
 ) -> Diff_View_Result {
 	u := surface_ui(surface)
-	result := ui.diff_view(
-		u.frame,
-		x,
-		y,
-		width,
-		transmute([]ui.Diff_Row)rows,
-		{
-			layout = options.layout,
-			max_rows = options.max_rows,
-			selected = options.selected,
-			semantic_label = options.semantic_label,
-			field_id = options.field_id,
-			minimum_columns = options.minimum_columns,
-		},
-	)
-	return {result.next_y, result.shown, result.hidden, result.used_split}
+	return ui.diff_view(u.frame, x, y, width, rows, options)
 }
 
-Frame_View_Items :: proc(surface: ^Surface, items: $T) -> T {
+frame_view_items :: proc(surface: ^Surface, items: $T) -> T {
 	_ = surface
 	return items
 }

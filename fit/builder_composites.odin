@@ -12,9 +12,9 @@ dropdown_id :: proc(
 	a11y_label: string,
 	options: Control_Options = {},
 ) {
-	assert(parent.builder != nil, "Fit.Dropdown: builder not bound")
-	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "Fit.Dropdown: zero widget")
-	assert(selected != nil && state != nil && a11y_label != "", "Fit.Dropdown: invalid state")
+	assert(parent.builder != nil, "fit.dropdown: builder not bound")
+	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "fit.dropdown: zero widget")
+	assert(selected != nil && state != nil && a11y_label != "", "fit.dropdown: invalid state")
 	builder := parent_select(parent)
 	ui.fit_builder_composite(
 		&builder.inner,
@@ -28,7 +28,7 @@ dropdown_id :: proc(
 				a11y_label = a11y_label,
 			},
 		},
-		to_control_options(options),
+		options,
 	)
 	parent_clear(builder)
 }
@@ -43,7 +43,7 @@ dropdown_string :: proc(
 	a11y_label: string,
 	options: Control_Options = {},
 ) {
-	dropdown_id(parent, Id(parent, key), items, selected, state, a11y_label, options)
+	dropdown_id(parent, id(parent, key), items, selected, state, a11y_label, options)
 }
 
 @(private = "file")
@@ -56,10 +56,10 @@ dropdown_u64 :: proc(
 	a11y_label: string,
 	options: Control_Options = {},
 ) {
-	dropdown_id(parent, Id(parent, key), items, selected, state, a11y_label, options)
+	dropdown_id(parent, id(parent, key), items, selected, state, a11y_label, options)
 }
 
-Dropdown :: proc {
+dropdown :: proc {
 	dropdown_string,
 	dropdown_u64,
 	dropdown_id,
@@ -75,9 +75,9 @@ combobox_id :: proc(
 	placeholder, a11y_label: string,
 	options: Control_Options = {},
 ) {
-	assert(parent.builder != nil, "Fit.Combobox: builder not bound")
-	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "Fit.Combobox: zero widget")
-	assert(state != nil && selected != nil && a11y_label != "", "Fit.Combobox: invalid state")
+	assert(parent.builder != nil, "fit.combobox: builder not bound")
+	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "fit.combobox: zero widget")
+	assert(state != nil && selected != nil && a11y_label != "", "fit.combobox: invalid state")
 	builder := parent_select(parent)
 	ui.fit_builder_composite(
 		&builder.inner,
@@ -92,7 +92,7 @@ combobox_id :: proc(
 				a11y_label = a11y_label,
 			},
 		},
-		to_control_options(options),
+		options,
 	)
 	parent_clear(builder)
 }
@@ -107,7 +107,7 @@ combobox_string :: proc(
 	placeholder, a11y_label: string,
 	options: Control_Options = {},
 ) {
-	combobox_id(parent, Id(parent, key), state, items, selected, placeholder, a11y_label, options)
+	combobox_id(parent, id(parent, key), state, items, selected, placeholder, a11y_label, options)
 }
 
 @(private = "file")
@@ -120,10 +120,10 @@ combobox_u64 :: proc(
 	placeholder, a11y_label: string,
 	options: Control_Options = {},
 ) {
-	combobox_id(parent, Id(parent, key), state, items, selected, placeholder, a11y_label, options)
+	combobox_id(parent, id(parent, key), state, items, selected, placeholder, a11y_label, options)
 }
 
-Combobox :: proc {
+combobox :: proc {
 	combobox_string,
 	combobox_u64,
 	combobox_id,
@@ -138,9 +138,9 @@ tabs_id :: proc(
 	height: i32 = 36,
 	options: Control_Options = {},
 ) {
-	assert(parent.builder != nil, "Fit.Tabs: builder not bound")
-	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "Fit.Tabs: zero widget")
-	assert(active != nil && len(labels) > 0, "Fit.Tabs: invalid state")
+	assert(parent.builder != nil, "fit.tabs: builder not bound")
+	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "fit.tabs: zero widget")
+	assert(active != nil && len(labels) > 0, "fit.tabs: invalid state")
 	builder := parent_select(parent)
 	ui.fit_builder_composite(
 		&builder.inner,
@@ -148,7 +148,7 @@ tabs_id :: proc(
 			kind = .Tabs,
 			tabs = {id = ui.Widget_Id(widget), labels = labels, active = active, height = height},
 		},
-		to_control_options(options),
+		options,
 	)
 	parent_clear(builder)
 }
@@ -162,7 +162,7 @@ tabs_string :: proc(
 	height: i32 = 36,
 	options: Control_Options = {},
 ) {
-	tabs_id(parent, Id(parent, key), labels, active, height, options)
+	tabs_id(parent, id(parent, key), labels, active, height, options)
 }
 
 @(private = "file")
@@ -174,10 +174,10 @@ tabs_u64 :: proc(
 	height: i32 = 36,
 	options: Control_Options = {},
 ) {
-	tabs_id(parent, Id(parent, key), labels, active, height, options)
+	tabs_id(parent, id(parent, key), labels, active, height, options)
 }
 
-Tabs :: proc {
+tabs :: proc {
 	tabs_string,
 	tabs_u64,
 	tabs_id,

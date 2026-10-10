@@ -14,8 +14,8 @@ Test_Driver_Impl :: struct {
 	diagnostics: Frame_Diagnostics,
 }
 
-Test_Driver_Init :: proc(driver: ^Test_Driver) {
-	assert(driver != nil && driver.inner == nil, "Fit.Test_Driver_Init: invalid driver")
+test_driver_init :: proc(driver: ^Test_Driver) {
+	assert(driver != nil && driver.inner == nil, "fit.test_driver_init: invalid driver")
 	impl := new(Test_Driver_Impl)
 	impl.frame = new(ui.Ui_Frame)
 	impl.output = new(ui.Ui_Output)
@@ -28,16 +28,16 @@ Test_Driver_Init :: proc(driver: ^Test_Driver) {
 	driver.inner = impl
 }
 
-Test_Driver_Debug_Frame_Access :: proc(driver: ^Test_Driver) -> Debug_Frame_Access {
-	assert(driver != nil && driver.inner != nil, "Fit test driver access: invalid driver")
+test_driver_debug_frame_access :: proc(driver: ^Test_Driver) -> Debug_Frame_Access {
+	assert(driver != nil && driver.inner != nil, "fit test driver access: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner
-	return Debug_Frame_Access_Get(&impl.builder)
+	return debug_frame_access_get(&impl.builder)
 }
 
-Test_Driver_Destroy :: proc(driver: ^Test_Driver) {
-	assert(driver != nil && driver.inner != nil, "Fit.Test_Driver_Destroy: invalid driver")
+test_driver_destroy :: proc(driver: ^Test_Driver) {
+	assert(driver != nil && driver.inner != nil, "fit.test_driver_destroy: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner
-	assert(!impl.builder.bound, "Fit.Test_Driver_Destroy: frame open")
+	assert(!impl.builder.bound, "fit.test_driver_destroy: frame open")
 	debug_owner_retire(&impl.builder)
 	ui.ui_frame_destroy(impl.frame)
 	ui.ui_runtime_destroy(&impl.runtime)
@@ -47,45 +47,45 @@ Test_Driver_Destroy :: proc(driver: ^Test_Driver) {
 	driver^ = {}
 }
 
-Test_Driver_Set_Storage :: proc(driver: ^Test_Driver, storage: Storage) {
-	assert(driver != nil && driver.inner != nil, "Fit.Test_Driver_Set_Storage: invalid driver")
+test_driver_set_storage :: proc(driver: ^Test_Driver, storage: Storage) {
+	assert(driver != nil && driver.inner != nil, "fit.test_driver_set_storage: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner
-	assert(!impl.builder.bound, "Fit.Test_Driver_Set_Storage: frame open")
-	Set_Storage(&impl.builder, storage)
+	assert(!impl.builder.bound, "fit.test_driver_set_storage: frame open")
+	set_storage(&impl.builder, storage)
 }
 
-Test_Driver_Set_Theme :: proc(driver: ^Test_Driver, theme: Theme) {
-	assert(driver != nil && driver.inner != nil, "Fit test theme: invalid driver")
+test_driver_set_theme :: proc(driver: ^Test_Driver, theme: Theme) {
+	assert(driver != nil && driver.inner != nil, "fit test theme: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner
-	assert(!impl.builder.bound, "Fit test theme: frame open")
+	assert(!impl.builder.bound, "fit test theme: frame open")
 	ui.ui_runtime_set_theme(&impl.runtime, theme.inner)
 }
 
-Test_Driver_Set_Semantics :: proc(driver: ^Test_Driver, enabled: bool) {
-	assert(driver != nil && driver.inner != nil, "Fit.Test_Driver_Set_Semantics: invalid driver")
+test_driver_set_semantics :: proc(driver: ^Test_Driver, enabled: bool) {
+	assert(driver != nil && driver.inner != nil, "fit.test_driver_set_semantics: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner
-	assert(!impl.builder.bound, "Fit.Test_Driver_Set_Semantics: frame open")
+	assert(!impl.builder.bound, "fit.test_driver_set_semantics: frame open")
 	ui.sem_enable(&impl.runtime, enabled)
 }
 
-Test_Driver_Set_Backend_Measure_Cache :: proc(driver: ^Test_Driver, enabled: bool) {
-	assert(driver != nil && driver.inner != nil, "Fit test driver cache: invalid driver")
+test_driver_set_backend_measure_cache :: proc(driver: ^Test_Driver, enabled: bool) {
+	assert(driver != nil && driver.inner != nil, "fit test driver cache: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner
-	assert(!impl.builder.bound, "Fit test driver cache: frame open")
+	assert(!impl.builder.bound, "fit test driver cache: frame open")
 	ui.ui_runtime_set_backend_measure_cache_enabled(&impl.runtime, enabled)
 }
 
-Test_Driver_Frame :: proc(
+test_driver_frame :: proc(
 	driver: ^Test_Driver,
 	input: Test_Input,
 	draw: Draw_Proc,
 	user_data: rawptr = nil,
 ) -> bool {
-	_, ok := Test_Driver_Frame_Timed(driver, input, draw, user_data)
+	_, ok := test_driver_frame_timed(driver, input, draw, user_data)
 	return ok
 }
 
-Test_Driver_Frame_Timed :: proc(
+test_driver_frame_timed :: proc(
 	driver: ^Test_Driver,
 	input: Test_Input,
 	draw: Draw_Proc,
@@ -94,8 +94,8 @@ Test_Driver_Frame_Timed :: proc(
 	Frame_Timing,
 	bool,
 ) {
-	assert(driver != nil && driver.inner != nil, "Fit.Test_Driver_Frame_Timed: invalid driver")
-	assert(draw != nil, "Fit.Test_Driver_Frame_Timed: nil callback")
+	assert(driver != nil && driver.inner != nil, "fit.test_driver_frame_timed: invalid driver")
+	assert(draw != nil, "fit.test_driver_frame_timed: nil callback")
 	impl := cast(^Test_Driver_Impl)driver.inner
 	size := input.screen_size
 	if size.x <= 0 do size.x = 800
@@ -113,14 +113,14 @@ Test_Driver_Frame_Timed :: proc(
 	build_ns := time.duration_nanoseconds(time.tick_since(build_started))
 	assert(
 		impl.builder.inner.prepared.depth == 0,
-		"Fit.Test_Driver_Frame_Timed: unbalanced builder",
+		"fit.test_driver_frame_timed: unbalanced builder",
 	)
 	finalize_started := time.tick_now()
 	measure_started := time.tick_now()
-	size_measured := Measure(&impl.builder)
+	size_measured := measure(&impl.builder)
 	measure_ns := time.duration_nanoseconds(time.tick_since(measure_started))
 	render_started := time.tick_now()
-	Render_At(&impl.builder, {0, 0, size_measured.w, size_measured.h})
+	render_at(&impl.builder, {0, 0, size_measured.w, size_measured.h})
 	layout_render_ns := time.duration_nanoseconds(time.tick_since(render_started))
 	close_started := time.tick_now()
 	builder_close(&impl.builder)
@@ -130,8 +130,8 @@ Test_Driver_Frame_Timed :: proc(
 	frame_finalize_ns := time.duration_nanoseconds(time.tick_since(frame_finalize_started))
 	finalize_ns := time.duration_nanoseconds(time.tick_since(finalize_started))
 	frame_ns := time.duration_nanoseconds(time.tick_since(frame_started))
-	impl.telemetry = test_driver_telemetry(ui.ui_frame_telemetry(impl.frame))
-	impl.diagnostics = test_driver_diagnostics(ui.ui_frame_diagnostics(impl.frame))
+	impl.telemetry = telemetry_from_ui(ui.ui_frame_telemetry(impl.frame))
+	impl.diagnostics = ui.ui_frame_diagnostics(impl.frame)
 	ui.ui_frame_release(impl.frame)
 	return {
 			build_ns,
@@ -145,18 +145,18 @@ Test_Driver_Frame_Timed :: proc(
 		true
 }
 
-Test_Driver_Redraw_Requested :: proc(driver: ^Test_Driver) -> bool {
+test_driver_redraw_requested :: proc(driver: ^Test_Driver) -> bool {
 	assert(
 		driver != nil && driver.inner != nil,
-		"Fit.Test_Driver_Redraw_Requested: invalid driver",
+		"fit.test_driver_redraw_requested: invalid driver",
 	)
 	impl := cast(^Test_Driver_Impl)driver.inner
-	assert(!impl.builder.bound, "Fit.Test_Driver_Redraw_Requested: frame open")
+	assert(!impl.builder.bound, "fit.test_driver_redraw_requested: frame open")
 	return impl.output.platform.request_redraw
 }
 
-Test_Driver_Paint_Summary :: proc(driver: ^Test_Driver) -> Paint_Summary {
-	assert(driver != nil && driver.inner != nil, "Fit.Test_Driver_Paint_Summary: invalid driver")
+test_driver_paint_summary :: proc(driver: ^Test_Driver) -> Paint_Summary {
+	assert(driver != nil && driver.inner != nil, "fit.test_driver_paint_summary: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner
 	main_geometry := test_driver_geometry_count(&impl.output.main)
 	overlay_geometry := test_driver_geometry_count(&impl.output.overlay)
@@ -173,20 +173,20 @@ Test_Driver_Paint_Summary :: proc(driver: ^Test_Driver) -> Paint_Summary {
 	}
 }
 
-Test_Driver_Telemetry :: proc(driver: ^Test_Driver) -> Frame_Telemetry {
-	assert(driver != nil && driver.inner != nil, "Fit.Test_Driver_Telemetry: invalid driver")
+test_driver_telemetry :: proc(driver: ^Test_Driver) -> Frame_Telemetry {
+	assert(driver != nil && driver.inner != nil, "fit.test_driver_telemetry: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner
 	return impl.telemetry
 }
 
-Test_Driver_Diagnostics :: proc(driver: ^Test_Driver) -> Frame_Diagnostics {
-	assert(driver != nil && driver.inner != nil, "Fit.Test_Driver_Diagnostics: invalid driver")
+test_driver_diagnostics :: proc(driver: ^Test_Driver) -> Frame_Diagnostics {
+	assert(driver != nil && driver.inner != nil, "fit.test_driver_diagnostics: invalid driver")
 	impl := cast(^Test_Driver_Impl)driver.inner
 	return impl.diagnostics
 }
 
 @(private = "file")
-test_driver_telemetry :: proc(value: ui.Ui_Frame_Telemetry) -> Frame_Telemetry {
+telemetry_from_ui :: proc(value: ui.Ui_Frame_Telemetry) -> Frame_Telemetry {
 	return {
 		scratch_allocations = value.scratch_allocation_count,
 		scratch_resizes = value.scratch_resize_count,
@@ -254,28 +254,8 @@ test_driver_telemetry :: proc(value: ui.Ui_Frame_Telemetry) -> Frame_Telemetry {
 }
 
 @(private = "file")
-test_driver_diagnostics :: proc(value: ui.Ui_Frame_Diagnostics) -> Frame_Diagnostics {
-	return {
-		input_characters_dropped = value.input_characters_dropped,
-		degenerate_widgets_dropped = value.degenerate_widgets_dropped,
-		layout_overflows = value.layout_overflows,
-		unsupported_glyphs = value.unsupported_glyphs,
-		semantic_nodes_dropped = value.semantic_nodes_dropped,
-		semantic_focus_dropped = value.semantic_focus_dropped,
-		semantic_actions_dropped = value.semantic_actions_dropped,
-		semantic_id_collisions = value.semantic_id_collisions,
-		semantic_text_truncations = value.semantic_text_truncations,
-		main_commands_dropped = value.main_commands_dropped,
-		main_text_bytes_dropped = value.main_text_bytes_dropped,
-		overlay_commands_dropped = value.overlay_commands_dropped,
-		overlay_text_bytes_dropped = value.overlay_text_bytes_dropped,
-		platform_controls_dropped = value.platform_controls_dropped,
-	}
-}
-
-@(private = "file")
 test_driver_geometry_count :: proc(list: ^ui.Paint_List) -> int {
-	assert(list != nil, "Fit test driver: nil paint list")
+	assert(list != nil, "fit test driver: nil paint list")
 	count := 0
 	for index in 0 ..< list.count {
 		kind := list.commands[index].kind
@@ -288,7 +268,7 @@ test_driver_geometry_count :: proc(list: ^ui.Paint_List) -> int {
 
 @(private = "file")
 test_driver_font :: proc(data: rawptr, face: ui.Font_Face, size: i32) -> ui.Font_Id {
-	assert(data != nil && size > 0, "Fit test driver: invalid font")
+	assert(data != nil && size > 0, "fit test driver: invalid font")
 	return ui.Font_Id(size)
 }
 
@@ -299,8 +279,8 @@ test_driver_measure :: proc(
 	text: string,
 	size, spacing: f32,
 ) -> ui.Vec2 {
-	assert(data != nil && font != 0, "Fit test driver: invalid text backend")
-	assert(size >= 0 && spacing >= 0, "Fit test driver: invalid text geometry")
+	assert(data != nil && font != 0, "fit test driver: invalid text backend")
+	assert(size >= 0 && spacing >= 0, "fit test driver: invalid text geometry")
 	return {f32(len(text)) * max(size * 0.5, 1), size}
 }
 

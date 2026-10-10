@@ -81,7 +81,7 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	}
 	for kind in Substrate_Kind {
 		for margin in ([2]bool{false, true}) {
-			theme.substrate = {to_substrate(kind), margin}
+			theme.substrate = {kind, margin}
 			theme.square_corners = margin
 			tokens := theme_tokens(theme)
 			testing.expect_value(t, tokens.substrate, kind)
@@ -121,40 +121,40 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 
 @(test)
 fit_theme_pixel_is_square_and_settable :: proc(t: ^testing.T) {
-	theme := Theme_Pixel()
+	theme := theme_pixel()
 	testing.expect(t, theme.inner.square_corners)
-	testing.expect_value(t, Theme_Validate(theme).code, Theme_Validation_Code.Valid)
-	Theme_Set_Square_Corners(&theme, false)
+	testing.expect_value(t, theme_validate(theme).code, Theme_Validation_Code.Valid)
+	theme_set_square_corners(&theme, false)
 	testing.expect(t, !theme.inner.square_corners)
-	dark := Theme_Dark()
+	dark := theme_dark()
 	testing.expect(t, !dark.inner.square_corners)
-	Theme_Set_Square_Corners(&dark, true)
+	theme_set_square_corners(&dark, true)
 	testing.expect(t, theme_tokens(dark.inner).square_corners)
 }
 
 @(test)
 fit_theme_pixel_selects_pixel_face_and_style :: proc(t: ^testing.T) {
-	theme := Theme_Pixel()
+	theme := theme_pixel()
 	tokens := theme_tokens(theme.inner)
 	testing.expect_value(t, tokens.font_face, Font_Face.Pixel)
 	testing.expect_value(t, tokens.surface_style, Surface_Style.Pixel)
 	testing.expect(t, tokens.bevel_light.a == 255 && tokens.bevel_shade.a == 255)
-	dark := Theme_Dark()
+	dark := theme_dark()
 	testing.expect_value(t, theme_tokens(dark.inner).font_face, Font_Face.Mono)
 	testing.expect_value(t, theme_tokens(dark.inner).surface_style, Surface_Style.Smooth)
-	Theme_Set_Font_Face(&dark, .Pixel)
-	Theme_Set_Surface_Style(&dark, .Pixel)
+	theme_set_font_face(&dark, .Pixel)
+	theme_set_surface_style(&dark, .Pixel)
 	testing.expect_value(t, dark.inner.font_face, ui.Font_Face.Pixel)
 	testing.expect_value(t, dark.inner.surface_style, ui.Surface_Style.Pixel)
 }
 
 @(test)
 fit_theme_pixel_reads_in_mono :: proc(t: ^testing.T) {
-	pixel := Theme_Pixel()
+	pixel := theme_pixel()
 	testing.expect_value(t, theme_tokens(pixel.inner).reading_font_face, Font_Face.Mono)
-	dark := Theme_Dark()
+	dark := theme_dark()
 	testing.expect_value(t, theme_tokens(dark.inner).reading_font_face, Font_Face.Mono)
-	Theme_Set_Reading_Font_Face(&pixel, .Pixel)
+	theme_set_reading_font_face(&pixel, .Pixel)
 	testing.expect_value(t, pixel.inner.reading_font_face, ui.Font_Face.Pixel)
 	testing.expect_value(t, theme_tokens(pixel.inner).reading_font_face, Font_Face.Pixel)
 }

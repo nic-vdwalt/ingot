@@ -1,7 +1,7 @@
 # Fit application shell
 
 `fit.App` is the supported one-window UI host. The caller owns the `App`,
-application state, and persistent widget state. `fit.Run` owns window creation,
+application state, and persistent widget state. `fit.run` owns window creation,
 input capture, UI frame lifetime, layout rendering, accessibility publication,
 graphics submission, frame scratch reset, and teardown ordering.
 
@@ -9,7 +9,7 @@ graphics submission, frame scratch reset, and teardown ordering.
 app: fit.App
 
 main :: proc() {
-	_ = fit.Run(
+	_ = fit.run(
 		&app,
 		{
 			width = 960,
@@ -27,13 +27,13 @@ main :: proc() {
 `Draw` receives an open `fit.Builder` and declares exactly one root. Layout
 constructors return current-build `fit.Parent` values; child containers and
 leaves consume those values, so prepared layout requires no balancing calls.
-`fit.Center` creates a full-window centered root and `fit.Canvas` owns a
+`fit.center` creates a full-window centered root and `fit.canvas` owns a
 full-window explicit-geometry root. The shell renders the description after the
 callback returns.
 
-For a manually coordinated native host, use `fit.Init`, `fit.Start`, one bounded
-`fit.Tick` per host iteration, `fit.Stop`, and `fit.Destroy`. `fit.Set_Theme` and
-`fit.Set_Scale` update shell-owned runtime policy without exposing the runtime.
+For a manually coordinated native host, use `fit.init`, `fit.start`, one bounded
+`fit.tick` per host iteration, `fit.stop`, and `fit.destroy`. `fit.set_theme` and
+`fit.set_scale` update shell-owned runtime policy without exposing the runtime.
 
 ## Existing raylib loops
 
@@ -45,13 +45,13 @@ buffers.
 session: fit.Session
 
 Frame :: proc() {
-	_ = fit.Session_Draw(&session, Draw)
+	_ = fit.session_draw(&session, Draw)
 }
 
 Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	_ = user_data
-	root := fit.Column(builder)
-	fit.Label(root, "Custom loop")
+	root := fit.column(builder)
+	fit.label(root, "Custom loop")
 }
 ```
 

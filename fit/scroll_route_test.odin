@@ -14,8 +14,8 @@ Scroll_Route_Fixture :: struct {
 scroll_route_draw :: proc(builder: ^Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil, "scroll_route_draw: invalid argument")
 	fixture := cast(^Scroll_Route_Fixture)user_data
-	root := Column(builder)
-	panel := Attachment(
+	root := column(builder)
+	panel := attachment(
 		root,
 		{
 			target_kind = .Viewport,
@@ -25,22 +25,22 @@ scroll_route_draw :: proc(builder: ^Builder, user_data: rawptr) {
 			claim = true,
 		},
 	)
-	body := Column(panel, {size = {width = Fixed(200), height = Fixed(100)}})
-	scroll := Scroll(
+	body := column(panel, {size = {width = fixed(200), height = fixed(100)}})
+	scroll_parent := scroll(
 		body,
 		"scroll-route",
 		&fixture.scroll,
-		{axis = fixture.axis, size = {width = Fixed(200), height = Fixed(100)}},
+		{axis = fixture.axis, size = {width = fixed(200), height = fixed(100)}},
 	)
 	if fixture.axis == .Horizontal {
-		content := Row(scroll, {size = {width = Fixed(600), height = Fixed(80)}})
-		Spacer(content, .XL, {size = {width = Fixed(600), height = Fixed(80)}})
+		content := row(scroll_parent, {size = {width = fixed(600), height = fixed(80)}})
+		spacer(content, .XL, {size = {width = fixed(600), height = fixed(80)}})
 	} else {
-		content := Column(scroll)
-		Spacer(content, .XL, {size = {height = Fixed(300)}})
+		content := column(scroll_parent)
+		spacer(content, .XL, {size = {height = fixed(300)}})
 	}
 	if !fixture.cover do return
-	modal := Attachment(
+	modal := attachment(
 		root,
 		{
 			target_kind = .Viewport,
@@ -50,28 +50,28 @@ scroll_route_draw :: proc(builder: ^Builder, user_data: rawptr) {
 			claim = true,
 		},
 	)
-	cover := Column(modal, {size = {width = Fixed(300), height = Fixed(300)}})
-	Spacer(cover, .XL, {size = {width = Fixed(300), height = Fixed(300)}})
+	cover := column(modal, {size = {width = fixed(300), height = fixed(300)}})
+	spacer(cover, .XL, {size = {width = fixed(300), height = fixed(300)}})
 }
 
 @(private = "file")
 scroll_route_offset_after_wheel :: proc(fixture: ^Scroll_Route_Fixture, wheel: Point) -> f32 {
 	assert(fixture != nil, "scroll_route_offset_after_wheel: nil fixture")
 	driver: Test_Driver
-	Test_Driver_Init(&driver)
-	defer Test_Driver_Destroy(&driver)
+	test_driver_init(&driver)
+	defer test_driver_destroy(&driver)
 	idle := Test_Input {
 		screen_size    = {800, 600},
 		dpi_scale      = 1,
 		mouse_position = {100, 50},
 	}
 	for _ in 0 ..< 2 {
-		if !Test_Driver_Frame(&driver, idle, scroll_route_draw, fixture) do return -1
+		if !test_driver_frame(&driver, idle, scroll_route_draw, fixture) do return -1
 	}
 	scrolled := idle
 	scrolled.mouse_wheel = wheel
-	if !Test_Driver_Frame(&driver, scrolled, scroll_route_draw, fixture) do return -1
-	return Scroll_Offset(&fixture.scroll)
+	if !test_driver_frame(&driver, scrolled, scroll_route_draw, fixture) do return -1
+	return scroll_offset(&fixture.scroll)
 }
 
 @(test)

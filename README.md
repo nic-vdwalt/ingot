@@ -82,7 +82,7 @@ app: fit.App
 state: App_State
 
 main :: proc() {
-	_ = fit.Run(&app, {width = 960, height = 640, title = "Ingot app"}, Draw, &state)
+	_ = fit.run(&app, {width = 960, height = 640, title = "Ingot app"}, Draw, &state)
 }
 
 Continue :: proc(user_data: rawptr) {
@@ -94,10 +94,10 @@ Continue :: proc(user_data: rawptr) {
 Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil)
 	state := cast(^App_State)user_data
-	root := fit.Center(builder, {gap = .SM, padding = .LG})
-	fit.Label(root, "Hello from Ingot")
-	fit.Label(root, fmt.tprintf("Button clicks: %d", state.button_clicks))
-	fit.Button(root, "continue", "Continue", fit.action(Continue, state))
+	root := fit.center(builder, {gap = .SM, padding = .LG})
+	fit.label(root, "Hello from Ingot")
+	fit.label(root, fmt.tprintf("Button clicks: %d", state.button_clicks))
+	fit.button(root, "continue", "Continue", fit.action(Continue, state))
 }
 ```
 

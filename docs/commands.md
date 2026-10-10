@@ -11,8 +11,8 @@ The application owns the keymap, chooses the active context, takes the command,
 and changes its own state.
 
 ```odin
-save, save_ok := fit.Command_Id_String("editor.save")
-editor, editor_ok := fit.Command_Context_Id_String("editor")
+save, save_ok := fit.command_id_string("editor.save")
+editor, editor_ok := fit.command_context_id_string("editor")
 assert(save_ok && editor_ok)
 
 bindings := [1]fit.Command_Binding {{
@@ -23,12 +23,12 @@ bindings := [1]fit.Command_Binding {{
 		modifiers = {.Control},
 	},
 }}
-assert(fit.Command_Keymap_Set(&keymap, bindings[:]))
+assert(fit.command_keymap_set(&keymap, bindings[:]))
 
 Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
-	if fit.Command_Take(builder, &keymap, editor) == save do save_document()
-	root := fit.Column(builder)
-	fit.Label(root, "Editor")
+	if fit.command_take(builder, &keymap, editor) == save do save_document()
+	root := fit.column(builder)
+	fit.label(root, "Editor")
 }
 ```
 
@@ -70,9 +70,9 @@ Command :: enum u8 {
 commands: fit.Typed_Commands(Command, 16)
 
 Draw :: proc(builder: ^fit.Builder, _: rawptr) {
-	fit.Typed_Commands_Begin(&commands)
+	fit.typed_commands_begin(&commands)
 	command: Command
-	for fit.Typed_Commands_Take(&commands, &command) {
+	for fit.typed_commands_take(&commands, &command) {
 		switch command {
 		case .Save:
 			save()
@@ -80,10 +80,10 @@ Draw :: proc(builder: ^fit.Builder, _: rawptr) {
 			reset()
 		}
 	}
-	fit.Typed_Commands_End(&commands)
+	fit.typed_commands_end(&commands)
 
-	root := fit.Column(builder)
-	_ = fit.Button_Command(root, "save", "Save", &commands, Command.Save)
+	root := fit.column(builder)
+	_ = fit.button_command(root, "save", "Save", &commands, Command.Save)
 }
 ```
 

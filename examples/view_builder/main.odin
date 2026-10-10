@@ -28,7 +28,7 @@ main :: proc() {
 	seed_document(&state)
 	flags: fit.Window_Flags = {.Resizable, .Vsync}
 	when ODIN_OS == .Darwin do flags += {.High_Dpi}
-	_ = fit.Run(
+	_ = fit.run(
 		&app,
 		{
 			width = 1100,
@@ -48,21 +48,21 @@ main :: proc() {
 draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	data := cast(^State)user_data
 	when SMOKE do smoke_step(data)
-	root := fit.Column(builder, {gap = .SM, padding = .LG})
-	fit.Label(root, "Ingot view builder", {role = .Title})
-	fit.Label(
+	root := fit.column(builder, {gap = .SM, padding = .LG})
+	fit.label(root, "Ingot view builder", {role = .Title})
+	fit.label(
 		root,
 		"The document is caller-owned; Fit rebuilds this editor every frame.",
 		{ink = .Secondary},
 	)
-	actions := fit.Row(root, {gap = .SM})
-	fit.Button(actions, "save", "Save", fit.action(save_action, data))
-	fit.Button(actions, "load", "Load", fit.action(load_action, data))
-	fit.Button(actions, "add", "Add label", fit.action(add_action, data))
-	fit.Button(actions, "delete", "Delete last", fit.action(delete_action, data))
-	fit.Label(root, fmt.tprintf("%d nodes", data.doc.count), {role = .Label})
-	if data.status != "" do fit.Label(root, data.status, {ink = .Secondary})
-	nodes := fit.Column(root, {gap = .XS})
+	actions := fit.row(root, {gap = .SM})
+	fit.button(actions, "save", "Save", fit.action(save_action, data))
+	fit.button(actions, "load", "Load", fit.action(load_action, data))
+	fit.button(actions, "add", "Add label", fit.action(add_action, data))
+	fit.button(actions, "delete", "Delete last", fit.action(delete_action, data))
+	fit.label(root, fmt.tprintf("%d nodes", data.doc.count), {role = .Label})
+	if data.status != "" do fit.label(root, data.status, {ink = .Secondary})
+	nodes := fit.column(root, {gap = .XS})
 	source := view.view_of(&data.doc)
 	walk := view.walk_begin(source)
 	for _ in 0 ..< view.WALK_STEPS_MAX {
@@ -71,7 +71,7 @@ draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 		if step.event != .Enter do continue
 		node := data.doc.nodes[step.node]
 		label := view.view_text(source, node.label_offset, node.label_length)
-		fit.Label(nodes, fmt.tprintf("%*s%v %s", int(step.depth) * 2, "", node.kind, label))
+		fit.label(nodes, fmt.tprintf("%*s%v %s", int(step.depth) * 2, "", node.kind, label))
 	}
 }
 

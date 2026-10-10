@@ -11,14 +11,14 @@ checkbox_id :: proc(
 	checked: ^bool,
 	options: Control_Options = {},
 ) {
-	assert(parent.builder != nil, "Fit.Checkbox: builder not bound")
-	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "Fit.Checkbox: zero widget")
-	assert(label != "" && checked != nil, "Fit.Checkbox: invalid argument")
+	assert(parent.builder != nil, "fit.checkbox: builder not bound")
+	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "fit.checkbox: zero widget")
+	assert(label != "" && checked != nil, "fit.checkbox: invalid argument")
 	builder := parent_select(parent)
 	ui.fit_builder_checkbox(
 		&builder.inner,
 		{id = ui.Widget_Id(widget), label = label, checked = checked},
-		to_control_options(options),
+		options,
 	)
 	parent_clear(builder)
 }
@@ -30,7 +30,7 @@ checkbox_string :: proc(
 	checked: ^bool,
 	options: Control_Options = {},
 ) {
-	checkbox_id(parent, Id(parent, key), label, checked, options)
+	checkbox_id(parent, id(parent, key), label, checked, options)
 }
 
 @(private = "file")
@@ -41,10 +41,10 @@ checkbox_u64 :: proc(
 	checked: ^bool,
 	options: Control_Options = {},
 ) {
-	checkbox_id(parent, Id(parent, key), label, checked, options)
+	checkbox_id(parent, id(parent, key), label, checked, options)
 }
 
-Checkbox :: proc {
+checkbox :: proc {
 	checkbox_string,
 	checkbox_u64,
 	checkbox_id,
@@ -58,14 +58,14 @@ toggle_id :: proc(
 	checked: ^bool,
 	options: Control_Options = {},
 ) {
-	assert(parent.builder != nil, "Fit.Toggle: builder not bound")
-	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "Fit.Toggle: zero widget")
-	assert(label != "" && checked != nil, "Fit.Toggle: invalid argument")
+	assert(parent.builder != nil, "fit.toggle: builder not bound")
+	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "fit.toggle: zero widget")
+	assert(label != "" && checked != nil, "fit.toggle: invalid argument")
 	builder := parent_select(parent)
 	ui.fit_builder_composite(
 		&builder.inner,
 		{kind = .Toggle, toggle = {id = ui.Widget_Id(widget), label = label, checked = checked}},
-		to_control_options(options),
+		options,
 	)
 	parent_clear(builder)
 }
@@ -77,7 +77,7 @@ toggle_string :: proc(
 	checked: ^bool,
 	options: Control_Options = {},
 ) {
-	toggle_id(parent, Id(parent, key), label, checked, options)
+	toggle_id(parent, id(parent, key), label, checked, options)
 }
 
 @(private = "file")
@@ -88,10 +88,10 @@ toggle_u64 :: proc(
 	checked: ^bool,
 	options: Control_Options = {},
 ) {
-	toggle_id(parent, Id(parent, key), label, checked, options)
+	toggle_id(parent, id(parent, key), label, checked, options)
 }
 
-Toggle :: proc {
+toggle :: proc {
 	toggle_string,
 	toggle_u64,
 	toggle_id,
@@ -106,14 +106,14 @@ radio_id :: proc(
 	value: i32,
 	options: Control_Options = {},
 ) {
-	assert(parent.builder != nil, "Fit.Radio: builder not bound")
-	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "Fit.Radio: zero widget")
-	assert(label != "" && selected != nil, "Fit.Radio: invalid argument")
+	assert(parent.builder != nil, "fit.radio: builder not bound")
+	assert(widget != Widget_Id(ui.WIDGET_ID_NONE), "fit.radio: zero widget")
+	assert(label != "" && selected != nil, "fit.radio: invalid argument")
 	builder := parent_select(parent)
 	ui.fit_builder_radio(
 		&builder.inner,
 		{id = ui.Widget_Id(widget), label = label, selected = selected, value = value},
-		to_control_options(options),
+		options,
 	)
 	parent_clear(builder)
 }
@@ -126,7 +126,7 @@ radio_string :: proc(
 	value: i32,
 	options: Control_Options = {},
 ) {
-	radio_id(parent, Id(parent, key), label, selected, value, options)
+	radio_id(parent, id(parent, key), label, selected, value, options)
 }
 
 @(private = "file")
@@ -138,10 +138,10 @@ radio_u64 :: proc(
 	value: i32,
 	options: Control_Options = {},
 ) {
-	radio_id(parent, Id(parent, key), label, selected, value, options)
+	radio_id(parent, id(parent, key), label, selected, value, options)
 }
 
-Radio :: proc {
+radio :: proc {
 	radio_string,
 	radio_u64,
 	radio_id,
@@ -156,9 +156,9 @@ slider_id :: proc(
 	a11y_label: string,
 	options: Control_Options = {},
 ) {
-	assert(parent.builder != nil, "Fit.Slider: builder not bound")
-	assert(widget != Widget_Id(ui.WIDGET_ID_NONE) && value != nil, "Fit.Slider: invalid argument")
-	assert(maximum > minimum && step >= 0 && a11y_label != "", "Fit.Slider: invalid range")
+	assert(parent.builder != nil, "fit.slider: builder not bound")
+	assert(widget != Widget_Id(ui.WIDGET_ID_NONE) && value != nil, "fit.slider: invalid argument")
+	assert(maximum > minimum && step >= 0 && a11y_label != "", "fit.slider: invalid range")
 	builder := parent_select(parent)
 	ui.fit_builder_slider(
 		&builder.inner,
@@ -170,7 +170,7 @@ slider_id :: proc(
 			step = step,
 			a11y_label = a11y_label,
 		},
-		to_control_options(options),
+		options,
 	)
 	parent_clear(builder)
 }
@@ -184,7 +184,7 @@ slider_string :: proc(
 	a11y_label: string,
 	options: Control_Options = {},
 ) {
-	slider_id(parent, Id(parent, key), value, minimum, maximum, step, a11y_label, options)
+	slider_id(parent, id(parent, key), value, minimum, maximum, step, a11y_label, options)
 }
 
 @(private = "file")
@@ -196,10 +196,10 @@ slider_u64 :: proc(
 	a11y_label: string,
 	options: Control_Options = {},
 ) {
-	slider_id(parent, Id(parent, key), value, minimum, maximum, step, a11y_label, options)
+	slider_id(parent, id(parent, key), value, minimum, maximum, step, a11y_label, options)
 }
 
-Slider :: proc {
+slider :: proc {
 	slider_string,
 	slider_u64,
 	slider_id,
@@ -221,9 +221,9 @@ builder_text_input_id :: proc(
 	placeholder: string,
 	options: Builder_Text_Input_Options,
 ) {
-	assert(parent.builder != nil, "Fit.Text_Input: builder not bound")
-	assert(widget != Widget_Id(ui.WIDGET_ID_NONE) && box != nil, "Fit.Text_Input: invalid state")
-	assert(options.semantics.name != "", "Fit.Text_Input: empty accessible label")
+	assert(parent.builder != nil, "fit.text_input: builder not bound")
+	assert(widget != Widget_Id(ui.WIDGET_ID_NONE) && box != nil, "fit.text_input: invalid state")
+	assert(options.semantics.name != "", "fit.text_input: empty accessible label")
 	builder := parent_select(parent)
 	ui.fit_builder_text_input(
 		&builder.inner,
@@ -238,11 +238,7 @@ builder_text_input_id :: proc(
 			max_lines = options.max_lines,
 			focus_request = options.focus_request,
 		},
-		{
-			track = to_track(options.track),
-			size = to_size(options.size),
-			changed = options.submitted,
-		},
+		{track = options.track, size = options.size, changed = options.submitted},
 	)
 	parent_clear(builder)
 }
@@ -255,7 +251,7 @@ builder_text_input_string :: proc(
 	placeholder: string,
 	options: Builder_Text_Input_Options,
 ) {
-	builder_text_input_id(parent, Id(parent, key), box, placeholder, options)
+	builder_text_input_id(parent, id(parent, key), box, placeholder, options)
 }
 
 @(private = "file")
@@ -266,13 +262,13 @@ builder_text_input_u64 :: proc(
 	placeholder: string,
 	options: Builder_Text_Input_Options,
 ) {
-	builder_text_input_id(parent, Id(parent, key), box, placeholder, options)
+	builder_text_input_id(parent, id(parent, key), box, placeholder, options)
 }
 
 // builder_text_input_state binds a declarative text input to caller-owned
 // state (strings.Builder + Text_Input_State) instead of a bundled Input_Box,
 // so app code can reuse buffers it already maintains. Mirrors the imperative
-// Surface_Text_Input_State path through ui.text_input_box.
+// surface_text_input_state path through ui.text_input_box.
 @(private = "file")
 builder_text_input_state :: proc(
 	parent: Parent,
@@ -282,10 +278,10 @@ builder_text_input_state :: proc(
 	placeholder: string,
 	options: Builder_Text_Input_Options,
 ) {
-	assert(parent.builder != nil, "Fit.Text_Input: builder not bound")
-	assert(text != nil && state != nil, "Fit.Text_Input: invalid state")
-	assert(options.semantics.name != "", "Fit.Text_Input: empty accessible label")
-	widget := Id(parent, key)
+	assert(parent.builder != nil, "fit.text_input: builder not bound")
+	assert(text != nil && state != nil, "fit.text_input: invalid state")
+	assert(options.semantics.name != "", "fit.text_input: empty accessible label")
+	widget := id(parent, key)
 	builder := parent_select(parent)
 	ui.fit_builder_text_input(
 		&builder.inner,
@@ -301,25 +297,21 @@ builder_text_input_state :: proc(
 			max_lines = options.max_lines,
 			focus_request = options.focus_request,
 		},
-		{
-			track = to_track(options.track),
-			size = to_size(options.size),
-			changed = options.submitted,
-		},
+		{track = options.track, size = options.size, changed = options.submitted},
 	)
 	parent_clear(builder)
 }
 
-Text_Input :: proc {
+text_input :: proc {
 	builder_text_input_string,
 	builder_text_input_u64,
 	builder_text_input_id,
 	builder_text_input_state,
 }
 
-Progress :: proc(parent: Parent, value: f32, options: Progress_Options = {}) {
-	assert(parent.builder != nil, "Fit.Progress: builder not bound")
-	assert(value >= 0 && value <= 1, "Fit.Progress: value outside 0..1")
+progress :: proc(parent: Parent, value: f32, options: Progress_Options = {}) {
+	assert(parent.builder != nil, "fit.progress: builder not bound")
+	assert(value >= 0 && value <= 1, "fit.progress: value outside 0..1")
 	height := options.height
 	if height == 0 do height = 8
 	builder := parent_select(parent)
@@ -331,19 +323,19 @@ Progress :: proc(parent: Parent, value: f32, options: Progress_Options = {}) {
 			height = height,
 			options = {label = options.label, field_id = options.field_id},
 		},
-		{track = to_track(options.track), size = to_size(options.size)},
+		{track = options.track, size = options.size},
 	)
 	parent_clear(builder)
 }
 
-Separator :: proc(parent: Parent, options: Leaf_Options = {}) {
+separator :: proc(parent: Parent, options: Leaf_Options = {}) {
 	builder := parent_select(parent)
-	ui.fit_builder_separator(&builder.inner, to_leaf_options(options))
+	ui.fit_builder_separator(&builder.inner, options)
 	parent_clear(builder)
 }
 
-Spacer :: proc(parent: Parent, space: Space, options: Leaf_Options = {}) {
+spacer :: proc(parent: Parent, space: Space, options: Leaf_Options = {}) {
 	builder := parent_select(parent)
-	ui.fit_builder_spacer(&builder.inner, space, to_leaf_options(options))
+	ui.fit_builder_spacer(&builder.inner, space, options)
 	parent_clear(builder)
 }
