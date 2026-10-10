@@ -34,14 +34,7 @@ cull_frame :: proc(
 	assert(runtime != nil && frame != nil, "cull_frame: nil argument")
 	assert(output != nil && text_backend != nil, "cull_frame: nil argument")
 	ui_runtime_init(runtime)
-	ui_runtime_set_text_backend(
-		runtime,
-		{
-			data = text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	ui_runtime_set_text_backend(runtime, test_text_backend(text_backend))
 	sem_enable(runtime, true)
 	frame.output = output
 	ui_frame_begin(frame, runtime)

@@ -6,13 +6,9 @@ import "core:testing"
 @(test)
 animated_tabs_emit_one_final_selection :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	sem_enable(&runtime, true)
 	theme := theme_dark()
 	ui_runtime_set_theme(&runtime, theme)
@@ -89,13 +85,9 @@ animated_tabs_emit_one_final_selection :: proc(t: ^testing.T) {
 @(test)
 animated_tabs_bound_geometry_and_snap_when_hidden :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	sem_enable(&runtime, true)
 	theme := theme_dark()
 	ui_runtime_set_theme(&runtime, theme)
@@ -185,14 +177,7 @@ facade_widget_frame :: proc(
 	assert(scale > 0, "facade_widget_frame: non-positive scale")
 	ui_runtime_init(runtime)
 	ui_runtime_set_scale(runtime, scale)
-	ui_runtime_set_text_backend(
-		runtime,
-		{
-			data = text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	ui_runtime_set_text_backend(runtime, test_text_backend(text_backend))
 	// A real output buffer and text backend: these widgets paint, and a
 	// missing sink would abort inside the paint layer before the focus
 	// assertions ran.

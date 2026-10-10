@@ -19,8 +19,13 @@ native binary, installer, or web bundle.
 
 - [x] Record the exact tagged source and build inputs for every committed
   AccessKit and libvterm archive.
-- [ ] Capture the AccessKit 0.22.3 Rust dependency license inventory and ship
-  all required notices with binary distributions.
+- [x] Capture the AccessKit 0.22.3 Rust dependency inventory: upstream
+  `Cargo.lock` and the derived table with upstream's enforced licence policy
+  are in `docs/provenance/accesskit-c-0.22.3.Cargo.lock` and
+  `docs/provenance/accesskit-rust-dependencies.md`.
+- [ ] Generate per-crate licence text with `cargo about generate` against that
+  lockfile (command recorded in `accesskit-rust-dependencies.md`) and ship it
+  with every binary distribution that links AccessKit.
 - [x] Restore and document the exact libvterm 0.3.3 source used by the build
   scripts, including its license.
 - [x] Verify committed artifact checksums against the release manifest.
@@ -37,9 +42,11 @@ native binary, installer, or web bundle.
 
 ## Source provenance
 
-- [ ] Compare `gfx/raymath.odin`, `gfx/rlgl/rlgl.odin`, and related rendering
+- [x] Compare `gfx/raymath.odin`, `gfx/rlgl/rlgl.odin`, and related rendering
   code against the raylib versions that informed their API. If implementation
   or comments were translated, retain raylib's zlib notice and mark changes.
+  Recorded under "API compatibility" in `THIRD_PARTY_NOTICES.md`: names only,
+  no translated implementation; repeat if either file gains non-forwarder code.
 - [x] Retain the modified-work attribution at the top of
   `docs/TIGER_STYLE.md`.
 - [x] Review test certificates, fixtures, and generated data for documented

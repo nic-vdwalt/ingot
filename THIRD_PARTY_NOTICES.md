@@ -40,9 +40,12 @@ b3cb0b7055f3e4cd30d21dca9778f956d49503ef0088d5a7fee8600929e8b70b  accesskit/lib/
 c7e0dff6b97ba5793d5a092d6ef817d5a4ec5ffe409345f5927fc0da4b06cf61  accesskit/include/accesskit.h
 ```
 
-The committed release archives are Rust static libraries. Before distributing
-binary releases, capture and ship the exact 0.22.3 archive's complete
-transitive dependency license inventory.
+The committed release archives are Rust static libraries. The upstream
+lockfile and a derived 162-crate inventory with upstream's enforced licence
+allow-list are in `docs/provenance/accesskit-c-0.22.3.Cargo.lock` and
+`docs/provenance/accesskit-rust-dependencies.md`. Before distributing binary
+releases, generate the per-crate notice text from that lockfile as described
+there and ship it with the binary.
 
 ## libvterm 0.3.3
 
@@ -121,12 +124,25 @@ source reproduces the recorded checksum byte for byte; without it `ar` stamps
 each member with the build time and the manifest would only ever match the one
 machine that produced it.
 
-**`libvterm/lib/windows_amd64/vterm.lib` predates all of these patches** and must be
-rebuilt with `scripts/build-libvterm.bat` on Windows, then have its checksum
-refreshed in the same manifest, which currently marks it
-`"built_from": "upstream-unpatched"`. The hygiene gate verifies each archive
-against its recorded checksum rather than against `vendor/libvterm`, so it
-cannot detect an archive that is merely stale against the source.
+**`libvterm/lib/windows_amd64/vterm.lib` predates all of these patches** and
+the manifest marks it `"built_from": "upstream-unpatched"`. The hygiene gate
+verifies each archive against its recorded checksum rather than against
+`vendor/libvterm`, so it cannot detect an archive that is merely stale against
+the source. `.github/workflows/windows.yml` rebuilds the patched archive with
+the pinned toolchain on every run, tests against it, and publishes it as the
+`windows-libvterm-patched` artifact (`vterm.lib` plus `vterm.lib.sha256`). To
+replace the committed archive:
+
+1. Download `windows-libvterm-patched` from a green run, or run
+   `scripts\build-libvterm.bat` on Windows.
+2. Copy `vterm.lib` over `libvterm/lib/windows_amd64/vterm.lib` and confirm
+   the SHA-256 matches `vterm.lib.sha256` when using the CI artifact.
+3. Run `python3 scripts/record-artifact-checksum.py libvterm/lib/windows_amd64/vterm.lib`;
+   it rewrites the checksum below and in
+   `docs/provenance/third-party-artifacts.json`, sets `built_from` to
+   `patched`, and removes the `stale` note.
+4. Run `python3 scripts/check-repository-hygiene.py` and commit the archive
+   with both manifests.
 
 The MIT License
 
@@ -241,7 +257,16 @@ the applicable upstream notices and identify the modified runtime file.
 ## API compatibility
 
 Parts of `ingot:gfx` intentionally expose a raylib-shaped API to simplify
-migration. API compatibility does not imply that raylib is bundled. Before a
-release, complete the source-comparison item in `docs/oss-release-checklist.md`
-to confirm that no translated raylib implementation requiring its zlib notice
-is present.
+migration. API compatibility does not imply that raylib is bundled.
+
+Comparison record (2026-10-10): `gfx/raymath.odin` and `gfx/rlgl/rlgl.odin`
+were compared against the raylib bindings shipped with the pinned Odin
+toolchain (`vendor/raylib/raymath.odin`, `vendor/raylib/rlgl/rlgl.odin`;
+zlib/libpng licence, Copyright (c) 2013-2026 Ramon Santamaria). Only procedure
+names and parameter shapes coincide. `raymath.odin` holds 31 lines of
+elementary vector arithmetic written directly; `rlgl/rlgl.odin` holds
+forwarders onto `ingot:gfx` plus six OpenGL enum constants whose values come
+from the OpenGL specification. No raylib implementation, comment, or
+documentation text was translated, so raylib's zlib notice is not required for
+these files. Both files carry a header line crediting the API names to raylib.
+Repeat the comparison whenever either file gains code that is not a forwarder.

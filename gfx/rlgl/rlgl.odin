@@ -6,6 +6,11 @@
 // Lets `import rlgl "vendor:raylib/rlgl"` become `import rlgl "ingot:gfx/rlgl"`
 // for that surface.
 //
+// Procedure names and signatures follow raylib's rlgl (zlib/libpng licence,
+// Copyright (c) Ramon Santamaria) for source compatibility; every body here is
+// an original forwarder onto ingot:gfx and no raylib implementation is
+// translated. See THIRD_PARTY_NOTICES.md, "API compatibility".
+//
 // Calls that this renderer cannot honour are absent rather than present as
 // silent no-ops, so a dependency on them is a compile error at the call site.
 package rlgl

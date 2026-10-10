@@ -57,17 +57,9 @@ with_frame :: proc(
 ) {
 	runtime := new(Ui_Runtime)
 	defer free(runtime)
-	ui_runtime_init(runtime)
-	defer ui_runtime_destroy(runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(runtime, &text_backend)
+	defer ui_runtime_destroy(runtime)
 
 	// A real output buffer, so the tests can assert that a dropped widget
 	// emitted no paint commands and left no clip on the stack.

@@ -99,13 +99,9 @@ popup_placement_flips_and_clamps :: proc(t: ^testing.T) {
 @(test)
 popup_ignores_opening_click_and_reports_escape :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	input := Ui_Input {
 		screen_size = {300, 200},
 	}

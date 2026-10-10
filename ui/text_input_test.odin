@@ -289,17 +289,9 @@ ti_key_frame :: proc(config: TI_Key_Frame) -> Ti_Key_Result {
 	assert(config.presses >= 0, "ti_key_frame: negative press count")
 	runtime := new(Ui_Runtime)
 	defer free(runtime)
-	ui_runtime_init(runtime)
-	defer ui_runtime_destroy(runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(runtime, &text_backend)
+	defer ui_runtime_destroy(runtime)
 	output := new(Ui_Output)
 	defer free(output)
 	frame := new(Ui_Frame)
@@ -574,17 +566,9 @@ text_input_backspace_deletes_at_the_caret_not_the_end :: proc(t: ^testing.T) {
 ti_text_input_active :: proc(masked: bool, active: bool) -> bool {
 	runtime := new(Ui_Runtime)
 	defer free(runtime)
-	ui_runtime_init(runtime)
-	defer ui_runtime_destroy(runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(runtime, &text_backend)
+	defer ui_runtime_destroy(runtime)
 	output := new(Ui_Output)
 	defer free(output)
 	frame := new(Ui_Frame)
@@ -700,17 +684,9 @@ ti_clip_frame :: proc(config: TI_Clip_Frame) -> Ti_Clip_Result {
 	assert(len(config.clipboard) <= INPUT_CLIPBOARD_CAP, "ti_clip_frame: clipboard over cap")
 	runtime := new(Ui_Runtime)
 	defer free(runtime)
-	ui_runtime_init(runtime)
-	defer ui_runtime_destroy(runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(runtime, &text_backend)
+	defer ui_runtime_destroy(runtime)
 	output := new(Ui_Output)
 	defer free(output)
 	frame := new(Ui_Frame)
@@ -1101,17 +1077,9 @@ ti_click_frame :: proc(config: TI_Click_Frame) -> Ti_Click_Result {
 	assert(config.height > 0, "ti_click_frame: non-positive height")
 	runtime := new(Ui_Runtime)
 	defer free(runtime)
-	ui_runtime_init(runtime)
-	defer ui_runtime_destroy(runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(runtime, &text_backend)
+	defer ui_runtime_destroy(runtime)
 	output := new(Ui_Output)
 	defer free(output)
 	frame := new(Ui_Frame)
@@ -1318,17 +1286,9 @@ ti_preedit_frame :: proc(config: TI_Preedit_Frame) -> Ti_Preedit_Result {
 	assert(len(config.preedit) <= INPUT_PREEDIT_CAP, "ti_preedit_frame: preedit too long")
 	runtime := new(Ui_Runtime)
 	defer free(runtime)
-	ui_runtime_init(runtime)
-	defer ui_runtime_destroy(runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(runtime, &text_backend)
+	defer ui_runtime_destroy(runtime)
 	output := new(Ui_Output)
 	defer free(output)
 	frame := new(Ui_Frame)

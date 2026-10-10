@@ -1367,6 +1367,7 @@ _stream_slots_init :: proc(
 			// process (a panic here traps the wasm module for good).
 			if geometry != nil do wg.BufferRelease(geometry)
 			if uniform != nil do wg.BufferRelease(uniform)
+			ctx.last_error = .Stream_Allocation
 			fmt.eprintln("gfx: GPU stream buffer allocation failed; device out of memory")
 			return false
 		}

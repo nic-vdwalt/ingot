@@ -35,6 +35,17 @@ LPPROC_THREAD_ATTRIBUTE_LIST :: distinct rawptr
 STILL_ACTIVE :: 259
 PTY_DIMENSION_MAX :: u16(32767)
 
+// Spawn_Error mirrors the Unix enum. ConPTY maps pipe or pseudo-console
+// creation to .Master_Setup and CreateProcess failure to .Exec.
+Spawn_Error :: enum u8 {
+	None,
+	Invalid_Args,
+	Fork,
+	Master_Setup,
+	Exec,
+	Unsupported,
+}
+
 Pty_IO_Status :: enum u8 {
 	Ok,
 	Would_Block,
@@ -177,8 +188,8 @@ conpty_create_process :: proc(
 	return process, bool(ok)
 }
 
-spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
-	if shell == nil || cols == 0 || rows == 0 do return {}, false
+spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, Spawn_Error) {
+	if shell == nil || cols == 0 || rows == 0 do return {}, .Invalid_Args
 	return conpty_spawn_command(string(shell), cols, rows, workdir)
 }
 
@@ -186,9 +197,17 @@ SPAWN_ARGV_MAX :: 256
 
 // spawn_argv runs an arbitrary command on a fresh ConPTY. Arguments
 // containing spaces or quotes are quoted with standard Windows rules.
-spawn_argv :: proc(argv: []cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
-	if len(argv) == 0 || len(argv) > SPAWN_ARGV_MAX || argv[0] == nil do return {}, false
-	if cols == 0 || rows == 0 do return {}, false
+spawn_argv :: proc(
+	argv: []cstring,
+	cols: u16,
+	rows: u16,
+	workdir: cstring = nil,
+) -> (
+	Pty,
+	Spawn_Error,
+) {
+	if len(argv) == 0 || len(argv) > SPAWN_ARGV_MAX || argv[0] == nil do return {}, .Invalid_Args
+	if cols == 0 || rows == 0 do return {}, .Invalid_Args
 	command := argv_to_command_line(argv, context.temp_allocator)
 	return conpty_spawn_command(command, cols, rows, workdir)
 }
@@ -239,11 +258,11 @@ conpty_spawn_command :: proc(
 	workdir: cstring,
 ) -> (
 	Pty,
-	bool,
+	Spawn_Error,
 ) {
-	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, false
+	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, .Invalid_Args
 	pipes, pipes_ok := conpty_create_pipes()
-	if !pipes_ok do return {}, false
+	if !pipes_ok do return {}, .Master_Setup
 	p := Pty {
 		cols = cols,
 		rows = rows,
@@ -254,7 +273,7 @@ conpty_spawn_command :: proc(
 	}
 	if CreatePseudoConsole(size, pipes.input_read, pipes.output_write, 0, &p.hpc) != 0 {
 		conpty_close_pipes(&pipes)
-		return {}, false
+		return {}, .Master_Setup
 	}
 	win32.CloseHandle(pipes.input_read)
 	pipes.input_read = nil
@@ -264,20 +283,20 @@ conpty_spawn_command :: proc(
 	if !attributes_ok {
 		ClosePseudoConsole(p.hpc)
 		conpty_close_pipes(&pipes)
-		return {}, false
+		return {}, .Master_Setup
 	}
 	process, process_ok := conpty_create_process(command, workdir, attributes)
 	conpty_destroy_attribute_list(attributes)
 	if !process_ok {
 		ClosePseudoConsole(p.hpc)
 		conpty_close_pipes(&pipes)
-		return {}, false
+		return {}, .Exec
 	}
 	p.pipe_in_w = pipes.input_write
 	p.pipe_out_r = pipes.output_read
 	p.hProcess = process.hProcess
 	p.hThread = process.hThread
-	return p, true
+	return p, .None
 }
 
 when !INGOT_PTY_SIM {

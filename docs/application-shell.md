@@ -31,6 +31,13 @@ leaves consume those values, so prepared layout requires no balancing calls.
 full-window explicit-geometry root. The shell renders the description after the
 callback returns.
 
+`fit.run`, `fit.init`, `fit.start`, `fit.stop`, and `fit.destroy` return false
+on failure and record why. `fit.last_error` reports the `fit.Error` for the last
+lifecycle call; when it is `.Graphics` or `.Close_Refused`,
+`fit.last_graphics_error` reports the `fit.Graphics_Error` the graphics context
+recorded (window, instance, surface, adapter, device, swapchain, stream
+allocation, or refused close). Read both before releasing the app.
+
 For a manually coordinated native host, use `fit.init`, `fit.start`, one bounded
 `fit.tick` per host iteration, `fit.stop`, and `fit.destroy`. `fit.set_theme` and
 `fit.set_scale` update shell-owned runtime policy without exposing the runtime.
@@ -55,7 +62,7 @@ Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 }
 ```
 
-`Session_Draw` returns false when no graphics frame was acquired. On success,
+`session_draw` returns false when no graphics frame was acquired. On success,
 the builder is borrowed only for the callback; the session renders the declared
 root, finalizes semantics and platform output, submits graphics, invalidates the
 frame, and resets temporary storage before returning.

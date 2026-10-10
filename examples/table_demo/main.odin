@@ -194,13 +194,13 @@ row_less :: proc(a, b: Row, column: int) -> bool {
 // save_layout encodes the caller-owned layout and writes it through prefs.
 save_layout :: proc(data: ^App_State) {
 	blob := ui.table_layout_encode(&data.table, context.temp_allocator)
-	_ = prefs.write(APP_NAME, LAYOUT_FILE, blob)
+	_ = prefs.write(APP_NAME, LAYOUT_FILE, blob) // layout persistence is best-effort
 }
 
 // load_layout reads the layout file and decodes it; on a missing or drifted
 // file it falls back to a fresh seed so the table always renders.
 load_layout :: proc(data: ^App_State) {
-	if bytes, ok := prefs.read(APP_NAME, LAYOUT_FILE, context.temp_allocator); ok {
+	if bytes, err := prefs.read(APP_NAME, LAYOUT_FILE, context.temp_allocator); err == .None {
 		if ui.table_layout_decode(bytes, &data.table, data.columns[:]) do return
 	}
 	data.table.initialized = false // force a clean reseed on missing/drifted file

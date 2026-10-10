@@ -111,6 +111,7 @@ when !INGOT_GFX_SDL3 {
 		// tigerstyle: allow-unbounded-loop -- adapter callback ends synchronous device setup
 		for !ares.done {wg.InstanceProcessEvents(ctx.instance)}
 		if ares.status != .Success || ares.adapter == nil {
+			ctx.last_error = .Adapter
 			fmt.eprintln("gfx: adapter request failed")
 			_abandon_window_context(ctx)
 			return
@@ -145,6 +146,7 @@ when !INGOT_GFX_SDL3 {
 		// tigerstyle: allow-unbounded-loop -- device callback ends synchronous device setup
 		for !dres.done {wg.InstanceProcessEvents(ctx.instance)}
 		if dres.status != .Success || dres.device == nil {
+			ctx.last_error = .Device
 			fmt.eprintln("gfx: device request failed")
 			_abandon_window_context(ctx)
 			return
@@ -152,6 +154,7 @@ when !INGOT_GFX_SDL3 {
 		ctx.device = dres.device
 		ctx.queue = wg.DeviceGetQueue(ctx.device)
 		if ctx.queue == nil {
+			ctx.last_error = .Device
 			fmt.eprintln("gfx: device returned no queue")
 			_abandon_window_context(ctx)
 			return

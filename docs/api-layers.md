@@ -88,39 +88,39 @@ theme := fit.theme_from_palette({
 fit.set_theme(&app, theme)
 ```
 
-Use `Theme_Set_Color` for an advanced single-role override. Validate editable
-palettes with `Theme_Validate`, or use `Try_Set_Theme` to reject an invalid value
+Use `theme_set_color` for an advanced single-role override. Validate editable
+palettes with `theme_validate`, or use `try_set_theme` to reject an invalid value
 without changing the active theme.
 
 The builder is bounded and immediate. Root containers return an opaque
 current-build `fit.Parent`; child containers and leaves consume Parent values.
-There is no prepared-container open state or balancing call. `Scope` returns a
-Parent with a derived component identity and no additional layout node. `Center`
+There is no prepared-container open state or balancing call. `scope` returns a
+Parent with a derived component identity and no additional layout node. `center`
 is the root-only full-window centering convenience. Parent values are invalid
 outside the draw that created them and must never be retained.
 
 Responsive Flow and track Grid are part of this same declaration model. Their
-track slices and `Grid_Cell` values are borrowed current-build inputs; they do
+track slices and `grid_cell` values are borrowed current-build inputs; they do
 not create retained layout or widget state. Descend to `fit.Surface` or
 `ingot:ui` only when the application owns explicit geometry or host lifecycle.
 
-`Render` consumes the declaration synchronously and dispatches activated Builder
+`render` consumes the declaration synchronously and dispatches activated Builder
 actions before returning. Actions run in the activating frame but cannot change
-the description already being rendered. `Button_Delayed` plus `Signal` is the
+the description already being rendered. `button_delayed` plus `Signal` is the
 advanced later-build path; borrowed Surface and Region controls return
-interaction directly inside their render callback. `Measure` plus `Render_At`
+interaction directly inside their render callback. `measure` plus `render_at`
 supports caller-owned placement without introducing a
-retained widget tree. A `Custom` render callback receives a borrowed
+retained widget tree. A `custom` render callback receives a borrowed
 `fit.Surface` for same-frame interaction and explicit geometry; the Surface is
 valid only for that callback and must not be retained.
 
-`Canvas` is the root convenience for applications whose whole content uses
-explicit geometry. `Canvas_Leaf` provides the same borrowed Surface callback in
+`canvas` is the root convenience for applications whose whole content uses
+explicit geometry. `canvas_leaf` provides the same borrowed Surface callback in
 a measured Builder slot, allowing ordinary declarative composition around
-bounded explicit-geometry islands. Use `Px(surface, value)` only for logical
+bounded explicit-geometry islands. Use `px(surface, value)` only for logical
 design constants; rectangles
-returned by layout and render callbacks are already physical. `Region_Open` and
-`Region_Close` may own one optional identity scope for a bounded region.
+returned by layout and render callbacks are already physical. `region_open` and
+`region_close` may own one optional identity scope for a bounded region.
 
 Explicit drawing keeps the borrowed Surface visible at each paint or interaction
 call. Begun layout helpers instead bind that Surface to caller-owned state until
@@ -166,7 +166,10 @@ For caller-owned scheduling, use the `fit.App` lifecycle explicitly:
 
 ```odin
 main :: proc() {
-	if !fit.init(&app, {width = 720, height = 480, title = "App"}, {draw = Draw}) do return
+	if !fit.init(&app, {width = 720, height = 480, title = "App"}, {draw = Draw}) {
+		fmt.eprintfln("init: %v (%v)", fit.last_error(&app), fit.last_graphics_error(&app))
+		return
+	}
 	defer fit.destroy(&app)
 	if !fit.start(&app) do return
 	for fit.get_state(&app) == .Running {
@@ -189,9 +192,9 @@ Destruction resets callback bindings but retains caller-configured Builder
 storage for reuse. That storage remains caller-owned and must outlive its use.
 
 `Session` integrates into an externally owned graphics loop and does not close
-that graphics context. `Session_Destroy` clears the wrapper, including Builder
+that graphics context. `session_destroy` clears the wrapper, including Builder
 storage bindings; rebind custom storage after reinitialization. Its draw callback
-and user data are borrowed for `Session_Draw` only. A successful draw call may
+and user data are borrowed for `session_draw` only. A successful draw call may
 skip the callback when no graphics frame is available; success does not promise
 that a frame was presented. Callback bindings are cleared on that path too.
 
@@ -203,14 +206,14 @@ after initial DPI setup and observe subsequent scale changes.
 
 ### Theme snapshots
 
-`Get_Theme_Tokens` / `Surface_Theme_Tokens` returns a value snapshot of selected
+`get_theme_tokens` / `surface_theme_tokens` returns a value snapshot of selected
 active-theme colors and substrate settings. It is not a mirror of every backend
 theme field. Fetch it again after changing the theme or window appearance; an
 existing snapshot does not update itself. Active backgrounds are distinct from
 the source swatches used to derive windowed and fullscreen appearance.
 
-Use `Theme_Get_Color` for named theme roles, `Theme_Pigment` for pigments, and
-`Surface_Reduced_Motion` for the active reduced-motion preference. New backend
+Use `theme_get_color` for named theme roles, `theme_pigment` for pigments, and
+`surface_reduced_motion` for the active reduced-motion preference. New backend
 fields do not automatically become public snapshot fields.
 
 ## Boundary maintenance contract
@@ -219,14 +222,42 @@ fields do not automatically become public snapshot fields.
 layout, and `ui_gfx` owns graphics integration. New overloads adapt arguments to
 one canonical implementation; they must not duplicate widget behavior.
 
-Boundary types have different contracts:
+Boundary types fall into two categories, and the category decides whether a
+`fit` type may alias its `ui` counterpart:
 
-- Intentional aliases share one definition and use the existing API-layer
-  allowlist. Do not replace distinct consumer types with aliases for convenience.
-- Distinct enums map by meaning, not declaration order. Test every public case
-  and each flag individually as well as in combinations.
-- Value projections expose a selected public field set, not every backend field.
-- Binary storage boundaries retain their size, alignment, and layout checks.
+- **Vocabulary** may alias. A `fit` type is vocabulary when it is closed value
+  data: every field is itself consumer vocabulary, the `ui` name carries no
+  engine, host, or renderer prefix, and `fit` would never want a different
+  shape. `Color`, `Rect`, `Track`, `Space`, `Ink`, `Icon`, `Theme_Role`,
+  `Pointer_Event`, `Table_Column`, `Modal_Close_Reason`, and `Action` are
+  vocabulary. Each alias is listed in `FIT_PUBLIC_ALIAS_ALLOW` in
+  `scripts/check_ui_api_layers.py`; adding one is a reviewed allowlist edit.
+  Aliasing buys literal compatibility with `ui` and removes a converter.
+- **Engine, host, and renderer** types must be distinct projections or mapped
+  enums, never aliases. These are `ui.Prepared_*` (layout engine), `ui.Ui_*`
+  (frame internals), `ui_gfx.*` (managed host), `gfx.*` (renderer), and any
+  `fit` type that embeds one of them. `State`, `Frame_Pacing`, `Error`,
+  `Graphics_Error`, `Session_Config`, `Frame_Diagnostics`, `Renderer_Peaks`,
+  `Size_Options`, `Transition`, `Container_*`, `Flow_Options`, `Grid_Options`,
+  `Attachment_Options`, and every `*_Options` that carries a `Size_Options` are
+  in this category. `FIT_ENGINE_TYPE` in `scripts/check_ui_api_layers.py`
+  rejects a public alias to any of those namespaces regardless of the
+  allowlist. Projecting buys insulation: the engine can add, rename, or remove
+  backend fields and members without changing what a `fit` consumer compiles
+  against, and `fit` may expose a selected field set rather than every backend
+  field.
+
+Within the second category:
+
+- Distinct enums map by meaning, not declaration order. Where the backing type
+  and ordinals are identical the conversion casts through the backing integer
+  and a `#assert` beside the declaration pins size and member count; a contract
+  test in `fit/boundary_contract_test.odin` still checks every public member
+  and, for flags, each bit individually as well as in combinations.
+- Value projections copy field by field, and a contract test asserts every
+  field of a fully populated source reaches the target.
+- Binary storage boundaries (`Storage_Node`) retain their size, alignment, and
+  layout checks and are the one opaque exception to the engine rule.
 
 Builder actions dispatch in the activating render; delayed signals are consumed
 by a later build. Legacy bool outputs and borrowed Surface controls retain their

@@ -1,6 +1,6 @@
 # Fit: explicit state, simple composition
 
-Start with `ingot:fit`: `Run` owns the host, its `Draw` callback receives a
+Start with `ingot:fit`: `run` owns the host, its `Draw` callback receives a
 Builder, and containers return current-build Parents. Use ordinary procedures
 for components. No retained behavioral widget tree or binding layer is needed.
 See the [minimal application](../README.md#quick-start).
@@ -14,7 +14,7 @@ Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 }
 ```
 
-`State` and `Save` belong to the application. Pass `&state` to `Run`; check its
+`State` and `Save` belong to the application. Pass `&state` to `run`; check its
 boolean result. A raw callback context is an explicit borrowed pointer, not a
 closure allocation. Keep its cast at the callback boundary.
 
@@ -34,10 +34,10 @@ synchronous interaction; preserve bounded work and event-driven sleep.
 
 | Mechanism | Delivery | Ownership / recommendation |
 |---|---|---|
-| `Button` + `action` | Activating render, after declaration | Default for an operation; caller owns context through dispatch |
+| `button` + `action` | Activating render, after declaration | Default for an operation; caller owns context through dispatch |
 | Checkbox/slider value pointer | During rendering | Default for a value; caller owns backing storage |
-| `Button_Delayed` + `Signal` | Observed/consumed by a later build | Optional one-shot latch; caller owns Signal |
-| `Button_Command` | Collected at next `Typed_Commands_Begin` | Optional bounded typed queue for converging input sources |
+| `button_delayed` + `Signal` | Observed/consumed by a later build | Optional one-shot latch; caller owns Signal |
+| `button_command` | Collected at next `typed_commands_begin` | Optional bounded typed queue for converging input sources |
 | Surface interaction return | Inside its render callback | Advanced explicit-geometry code; Surface is borrowed |
 
 A later declaration in the same Draw still reads pre-render state. See
@@ -74,7 +74,7 @@ draw_preference :: proc(parent: fit.Parent, stable_key: u64, data: ^Workspace_Pr
 ```
 
 The application stores each `Workspace_Preference` and supplies its stable domain
-key. `Scope` changes identity without adding layout. Ordinary Row/Column nesting
+key. `scope` changes identity without adding layout. Ordinary Row/Column nesting
 does not create identity scopes. Local keys can repeat across scoped components;
 labels are presentation, not identity. Do not derive keys from list position,
 addresses, or source locations. Reordering changes placement, not ownership.
@@ -84,9 +84,9 @@ cleanup; a combobox's interaction state does. The example's `destroy_state`
 pairs resource-bearing cleanup with application ownership. Headless tests call
 it explicitly and use Odin's test memory tracker.
 
-The example uses `Run`: native return ends its application lifetime, so cleanup
-runs there. In the browser, Run returns after asynchronous startup; state remains
-live, and native post-Run cleanup must not execute then. An embedding that removes
+The example uses `run`: native return ends its application lifetime, so cleanup
+runs there. In the browser, `run` returns after asynchronous startup; state remains
+live, and native post-`run` cleanup must not execute then. An embedding that removes
 or replaces browser applications must use an explicit host lifecycle and its
 shutdown callback to call its owner cleanup; page-lifetime globals are not a
 reusable multi-app teardown recipe. See [application shell](application-shell.md).
@@ -113,7 +113,7 @@ Draw N+1: collect those flags
 - `.Accepted` means an activation slot was reserved, not that a click occurred.
 - `.Full` means no control was declared by that call. Handle it without automatic
   growth or retries. The example displays failure/drop status on the next build.
-- `Typed_Commands_Dropped` reports ready and activation saturation separately;
+- `typed_commands_dropped` reports ready and activation saturation separately;
   Reset clears pending work but preserves these counters.
 - Begin freezes the drain. Entries appended afterwards wait for a later drain.
 - End discards unread entries in the frozen drain, retaining post-snapshot
@@ -124,15 +124,25 @@ The example tests invoke its actual Draw, activate via keyboard, collect on the
 following build, and exercise saturation. `fit/typed_command_test.odin` covers
 FIFO, partial drains, capacity boundaries, and persistent drop diagnostics.
 
+## When the shell fails
+
+Every `fit` lifecycle procedure returns a plain `bool`; the reason lives on the
+app. After a false `fit.run`, `fit.init`, `fit.start`, `fit.stop`, or
+`fit.destroy`, read `fit.last_error` (a `fit.Error`: `.Invalid_State`,
+`.Context_Not_Live`, `.Graphics`, or `.Close_Refused`) and, for the graphics
+cases, `fit.last_graphics_error` (a `fit.Graphics_Error` such as `.Adapter` or
+`.Device`). `examples/hello` prints both when `fit.run` fails. A refused destroy
+leaves the app intact so the call can be retried.
+
 ## Test and diagnose without a window
 
-Use `Test_Driver_Init`, `Test_Driver_Frame`, and `Test_Driver_Destroy` with the
+Use `test_driver_init`, `test_driver_frame`, and `test_driver_destroy` with the
 same Draw and caller state used by the app. Enable semantics explicitly with
-`Test_Driver_Set_Semantics`. Test input sequences, not only one successful frame.
+`test_driver_set_semantics`. Test input sequences, not only one successful frame.
 
-After each frame inspect `Test_Driver_Diagnostics`, `Test_Driver_Paint_Summary`,
-`Test_Driver_Redraw_Requested`, and, when telemetry is enabled,
-`Test_Driver_Telemetry`. Successful frame execution does not mean zero drops.
+After each frame inspect `test_driver_diagnostics`, `test_driver_paint_summary`,
+`test_driver_redraw_requested`, and, when telemetry is enabled,
+`test_driver_telemetry`. Successful frame execution does not mean zero drops.
 A duplicate focus ID is programmer misuse and can assert before a semantic
 snapshot is produced; semantic collision counters are not universal ID checking
 when semantics are disabled. The DX tests deliberately inject duplicate semantic
@@ -159,9 +169,9 @@ Failures identify the counter, expected/observed counts, frame index, and seed.
 
 ## Small custom-geometry islands
 
-`examples/builder_controls/custom_preview.odin` is a `Canvas_Leaf` render
+`examples/builder_controls/custom_preview.odin` is a `canvas_leaf` render
 callback beside ordinary controls. It receives a borrowed Surface and physical
-rectangle, brackets clipping, resolves colors from theme tokens, and uses `Px`
+rectangle, brackets clipping, resolves colors from theme tokens, and uses `px`
 only for a logical inset constant. It bounds the inset by the available rectangle.
 It returns false because painting the preview does not activate a control.
 

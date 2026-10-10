@@ -10,6 +10,19 @@ package prefs
 import "core:fmt"
 import "core:os"
 
+// Prefs_Error is the operating-error result of every prefs procedure. .None is
+// first so `or_return` composes; every other value names the step that failed.
+Prefs_Error :: enum u8 {
+	None,
+	No_Data_Dir,
+	Invalid_Name,
+	Create_Dir,
+	Open,
+	Write,
+	Missing,
+	Read,
+}
+
 // user_home returns an allocator-owned current-user home directory.
 // HOME is set on macOS/Linux; Windows uses USERPROFILE.
 user_home :: proc(allocator := context.temp_allocator) -> string {
@@ -21,41 +34,54 @@ user_home :: proc(allocator := context.temp_allocator) -> string {
 // data_dir returns the per-app prefs directory (without creating it):
 //   unix:    ~/.local/share/<app>
 //   windows: %APPDATA%\<app>  (falls back to ~/.local/share/<app>)
-data_dir :: proc(app: string, allocator := context.temp_allocator) -> (dir: string, ok: bool) {
-	if len(app) == 0 do return "", false
+data_dir :: proc(
+	app: string,
+	allocator := context.temp_allocator,
+) -> (
+	dir: string,
+	err: Prefs_Error,
+) {
+	if len(app) == 0 do return "", .Invalid_Name
 	when ODIN_OS == .Windows {
 		// The returned path owns its storage; environment scratch ends with this frame.
 		if ad := os.get_env("APPDATA", context.temp_allocator); len(ad) > 0 {
-			return fmt.aprintf("%s/%s", ad, app, allocator = allocator), true
+			return fmt.aprintf("%s/%s", ad, app, allocator = allocator), .None
 		}
 	}
 	// The returned path owns its storage; home is only needed while formatting it.
 	home := user_home(context.temp_allocator)
-	if len(home) == 0 do return "", false
-	return fmt.aprintf("%s/.local/share/%s", home, app, allocator = allocator), true
+	if len(home) == 0 do return "", .No_Data_Dir
+	return fmt.aprintf("%s/.local/share/%s", home, app, allocator = allocator), .None
 }
 
 // path returns data_dir(app)/file.
-path :: proc(app, file: string, allocator := context.temp_allocator) -> (p: string, ok: bool) {
-	if len(file) == 0 do return "", false
+path :: proc(
+	app, file: string,
+	allocator := context.temp_allocator,
+) -> (
+	p: string,
+	err: Prefs_Error,
+) {
+	if len(file) == 0 do return "", .Invalid_Name
 	dir := data_dir(app, allocator) or_return
 	p = fmt.aprintf("%s/%s", dir, file, allocator = allocator)
 	assert(len(p) > len(dir))
-	return p, true
+	return p, .None
 }
 
 // write creates the app data directory (with parents) and atomically replaces
 // path(app, file). Writing a unique sibling first preserves the last valid
 // snapshot and prevents concurrent writers from sharing staging storage.
-write :: proc(app, file: string, data: []u8) -> bool {
-	if len(app) == 0 || len(file) == 0 do return false
-	dir := data_dir(app, context.allocator) or_return
+write :: proc(app, file: string, data: []u8) -> Prefs_Error {
+	if len(app) == 0 || len(file) == 0 do return .Invalid_Name
+	dir, dir_err := data_dir(app, context.allocator)
+	if dir_err != .None do return dir_err
 	defer delete(dir)
-	if !make_dirs_all_checked(dir) do return false
+	if !make_dirs_all_checked(dir) do return .Create_Dir
 	p := fmt.aprintf("%s/%s", dir, file)
 	defer delete(p)
 	temp, create_err := os.create_temp_file(dir, ".prefs-*.tmp")
-	if create_err != nil do return false
+	if create_err != nil do return .Open
 	tmp := fmt.aprintf("%s", os.name(temp))
 	defer delete(tmp)
 	written, write_err := os.write(temp, data)
@@ -65,27 +91,35 @@ write :: proc(app, file: string, data: []u8) -> bool {
 	if write_err != nil || written != len(data) || sync_err != nil {
 		_ = os.close(temp)
 		_ = os.remove(tmp)
-		return false
+		return .Write
 	}
 	if os.close(temp) != nil {
 		_ = os.remove(tmp)
-		return false
+		return .Write
 	}
 	if os.rename(tmp, p) != nil {
 		_ = os.remove(tmp)
-		return false
+		return .Write
 	}
 	assert(os.is_file(p))
-	return true
+	return .None
 }
 
-// read loads path(app, file); ok = false when missing or unreadable.
-read :: proc(app, file: string, allocator := context.temp_allocator) -> (data: []u8, ok: bool) {
-	if len(app) == 0 || len(file) == 0 do return nil, false
+// read loads path(app, file); .Missing when the file does not exist, .Read
+// when it exists but cannot be read.
+read :: proc(
+	app, file: string,
+	allocator := context.temp_allocator,
+) -> (
+	data: []u8,
+	err: Prefs_Error,
+) {
+	if len(app) == 0 || len(file) == 0 do return nil, .Invalid_Name
 	p := path(app, file) or_return
-	d, err := os.read_entire_file(p, allocator)
-	if err != nil do return nil, false
-	return d, true
+	if !os.exists(p) do return nil, .Missing
+	d, read_err := os.read_entire_file(p, allocator)
+	if read_err != nil do return nil, .Read
+	return d, .None
 }
 
 make_dirs_all_checked :: proc(path: string) -> bool {

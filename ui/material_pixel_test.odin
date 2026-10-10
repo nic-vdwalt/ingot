@@ -85,13 +85,9 @@ frame_text_size_is_identity_for_mono :: proc(t: ^testing.T) {
 @(test)
 font_face_change_bumps_font_epoch :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	ui_runtime_set_theme(&runtime, theme_dark())
 	epoch := runtime.font_epoch
 	ui_runtime_set_theme(&runtime, theme_terra())
@@ -203,13 +199,9 @@ reading_face_change_defers_reset :: proc(t: ^testing.T) {
 @(test)
 pixel_surfaces_paint_only_rectangles :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	ui_runtime_set_theme(&runtime, theme_pixel())
 	output := new(Ui_Output)
 	defer free(output)

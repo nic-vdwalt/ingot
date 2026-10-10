@@ -16,14 +16,7 @@ table_test_frame :: proc(
 	assert(runtime != nil && frame != nil, "table_test_frame: nil argument")
 	assert(output != nil && text_backend != nil && input != nil, "table_test_frame: nil argument")
 	ui_runtime_init(runtime)
-	ui_runtime_set_text_backend(
-		runtime,
-		{
-			data = text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	ui_runtime_set_text_backend(runtime, test_text_backend(text_backend))
 	frame.output = output
 	ui_frame_begin(frame, runtime, input)
 }

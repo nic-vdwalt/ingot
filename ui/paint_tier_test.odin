@@ -103,13 +103,9 @@ passive_overlay_groups_stamp_their_declared_tier :: proc(t: ^testing.T) {
 @(test)
 modal_paints_backdrop_and_panel_into_the_modal_tier :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	output := new(Ui_Output)
 	defer free(output)
 	frame: Ui_Frame

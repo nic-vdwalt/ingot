@@ -7,6 +7,19 @@ package prefs
 
 import "core:fmt"
 
+// Prefs_Error mirrors the native enum; the browser store cannot fail to
+// create a directory or open a file, so those members are never produced here.
+Prefs_Error :: enum u8 {
+	None,
+	No_Data_Dir,
+	Invalid_Name,
+	Create_Dir,
+	Open,
+	Write,
+	Missing,
+	Read,
+}
+
 foreign import store "ingot_store"
 @(default_calling_convention = "c")
 foreign store {
@@ -27,48 +40,68 @@ store_len :: proc(n: int) -> (length: i32, ok: bool) {
 }
 
 // data_dir returns the logical key prefix for an app (parity with native).
-data_dir :: proc(app: string, allocator := context.temp_allocator) -> (dir: string, ok: bool) {
-	return app, len(app) > 0
+data_dir :: proc(
+	app: string,
+	allocator := context.temp_allocator,
+) -> (
+	dir: string,
+	err: Prefs_Error,
+) {
+	if len(app) == 0 do return "", .Invalid_Name
+	return app, .None
 }
 
 // path returns the localStorage key "app/file" (parity with native path()).
-path :: proc(app, file: string, allocator := context.temp_allocator) -> (p: string, ok: bool) {
-	if len(app) == 0 || len(file) == 0 do return "", false
+path :: proc(
+	app, file: string,
+	allocator := context.temp_allocator,
+) -> (
+	p: string,
+	err: Prefs_Error,
+) {
+	if len(app) == 0 || len(file) == 0 do return "", .Invalid_Name
 	p = fmt.aprintf("%s/%s", app, file, allocator = allocator)
 	assert(len(p) > len(app))
-	return p, true
+	return p, .None
 }
 
 // write stores `data` under key "app/file".
-write :: proc(app, file: string, data: []u8) -> bool {
-	key, ok := path(app, file)
-	if !ok do return false
+write :: proc(app, file: string, data: []u8) -> Prefs_Error {
+	key := path(app, file) or_return
 	kb := transmute([]byte)key
-	key_len := store_len(len(kb)) or_return
-	data_len := store_len(len(data)) or_return
+	key_len, key_ok := store_len(len(kb))
+	if !key_ok do return .Invalid_Name
+	data_len, data_ok := store_len(len(data))
+	if !data_ok do return .Write
 	ensure(int(key_len) == len(kb), "write: key length mismatch")
 	ensure(int(data_len) == len(data), "write: data length mismatch")
 	ingot_store_set(raw_data(kb), key_len, raw_data(data), data_len)
-	return true
+	return .None
 }
 
-// read loads the value under key "app/file"; ok=false when absent.
-read :: proc(app, file: string, allocator := context.temp_allocator) -> (data: []u8, ok: bool) {
-	key, key_ok := path(app, file)
-	if !key_ok do return nil, false
+// read loads the value under key "app/file"; .Missing when absent.
+read :: proc(
+	app, file: string,
+	allocator := context.temp_allocator,
+) -> (
+	data: []u8,
+	err: Prefs_Error,
+) {
+	key := path(app, file) or_return
 	kb := transmute([]byte)key
-	key_len := store_len(len(kb)) or_return
+	key_len, key_ok := store_len(len(kb))
+	if !key_ok do return nil, .Invalid_Name
 	// Probe length first, then allocate exactly and copy.
 	n := ingot_store_get(raw_data(kb), key_len, nil, 0)
-	if n < 0 do return nil, false
-	if n == 0 do return make([]byte, 0, allocator), true
+	if n < 0 do return nil, .Missing
+	if n == 0 do return make([]byte, 0, allocator), .None
 	ensure(n > 0, "read: validated length must be positive")
 	buf := make([]byte, int(n), allocator)
 	got := ingot_store_get(raw_data(kb), key_len, raw_data(buf), n)
 	if got != n {
 		delete(buf, allocator)
-		return nil, false
+		return nil, .Read
 	}
 	ensure(len(buf) == int(n), "read: copied length mismatch")
-	return buf, true
+	return buf, .None
 }

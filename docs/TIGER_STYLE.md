@@ -178,6 +178,22 @@ nobody modelled. Writing to these rules is what makes the harnesses in
   user-input failures must continue through the package's documented recovery or
   result path.
 
+- **Report operating errors with a typed reason, never only `bool` plus
+  stderr.** A caller must be able to branch on *why* something failed without
+  parsing a log line. Two shapes are allowed:
+  - Stateless procedures return an `enum u8` whose first member is `None`
+    (`prefs.Prefs_Error`, `pty.Spawn_Error`, `net.Http_Error`,
+    `asset.Cooked_Mesh_Fault`), so `or_return` composes and the zero value
+    means success.
+  - Stateful objects whose `bool` lifecycle contract is frozen record the reason
+    on the object and expose an accessor (`gfx.context_error`,
+    `ui_gfx.app_error`, `fit.last_error`, `net.ws_error`). The value is set
+    before any diagnostic is printed and reset only by the next successful
+    initialising call, so a reader never sees the message without the code.
+
+  `fmt.eprint*` is a courtesy for humans watching a terminal; it is never the
+  only signal. New failure paths that print must also record a code.
+
 - **Explicitly pass options at the call site** instead of leaning on zero-value
   defaults for *behaviour*. If a default ever changes, silent call sites become
   latent bugs.

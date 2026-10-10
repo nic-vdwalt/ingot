@@ -35,6 +35,18 @@ Pty_IO_Status :: enum u8 {
 	Failed,
 }
 
+// Spawn_Error is why spawn/spawn_argv returned an empty Pty. .None is first so
+// `or_return` composes. .Exec is reserved for hosts that can observe an exec
+// failure synchronously; on Unix the child exits instead.
+Spawn_Error :: enum u8 {
+	None,
+	Invalid_Args,
+	Fork,
+	Master_Setup,
+	Exec,
+	Unsupported,
+}
+
 Pty :: struct {
 	master_fd: c.int,
 	child_pid: c.int,
@@ -98,13 +110,13 @@ when ODIN_OS == .Darwin {
 	errno_ptr :: proc() -> ^c.int {return __errno_location()}
 }
 
-spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
-	if shell == nil || cols == 0 || rows == 0 do return {}, false
-	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, false
+spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, Spawn_Error) {
+	if shell == nil || cols == 0 || rows == 0 do return {}, .Invalid_Args
+	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, .Invalid_Args
 	master_fd: c.int
 	pid := forkpty(&master_fd, nil, nil, nil)
 
-	if pid < 0 do return {}, false
+	if pid < 0 do return {}, .Fork
 
 	if pid == 0 {
 		if workdir != nil do chdir(workdir)
@@ -132,20 +144,28 @@ spawn :: proc(shell: cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (
 		_exit(1)
 	}
 
-	if !master_setup(master_fd, cols, rows) do return {}, false
-	return Pty{master_fd = master_fd, child_pid = pid}, true
+	if !master_setup(master_fd, cols, rows) do return {}, .Master_Setup
+	return Pty{master_fd = master_fd, child_pid = pid}, .None
 }
 
 SPAWN_ARGV_MAX :: 256
 
 // spawn_argv runs an arbitrary command (argv[0] resolved via PATH) directly
 // on a fresh PTY, without a shell. TERM/COLORTERM are exported so children
-// detect a color-capable terminal. Returns false on invalid input or fork
-// failure.
-spawn_argv :: proc(argv: []cstring, cols: u16, rows: u16, workdir: cstring = nil) -> (Pty, bool) {
-	if len(argv) == 0 || len(argv) > SPAWN_ARGV_MAX || argv[0] == nil do return {}, false
-	if cols == 0 || rows == 0 do return {}, false
-	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, false
+// detect a color-capable terminal. Returns .Invalid_Args on bad input and
+// .Fork when the PTY pair or child could not be created.
+spawn_argv :: proc(
+	argv: []cstring,
+	cols: u16,
+	rows: u16,
+	workdir: cstring = nil,
+) -> (
+	Pty,
+	Spawn_Error,
+) {
+	if len(argv) == 0 || len(argv) > SPAWN_ARGV_MAX || argv[0] == nil do return {}, .Invalid_Args
+	if cols == 0 || rows == 0 do return {}, .Invalid_Args
+	if cols > PTY_DIMENSION_MAX || rows > PTY_DIMENSION_MAX do return {}, .Invalid_Args
 	// Build the null-terminated exec vector before forking: allocating
 	// between fork and exec is unsafe in a multithreaded parent.
 	@(static) exec_argv: [SPAWN_ARGV_MAX + 1]cstring
@@ -154,7 +174,7 @@ spawn_argv :: proc(argv: []cstring, cols: u16, rows: u16, workdir: cstring = nil
 	master_fd: c.int
 	pid := forkpty(&master_fd, nil, nil, nil)
 
-	if pid < 0 do return {}, false
+	if pid < 0 do return {}, .Fork
 
 	if pid == 0 {
 		if workdir != nil do chdir(workdir)
@@ -164,8 +184,8 @@ spawn_argv :: proc(argv: []cstring, cols: u16, rows: u16, workdir: cstring = nil
 		_exit(127)
 	}
 
-	if !master_setup(master_fd, cols, rows) do return {}, false
-	return Pty{master_fd = master_fd, child_pid = pid}, true
+	if !master_setup(master_fd, cols, rows) do return {}, .Master_Setup
+	return Pty{master_fd = master_fd, child_pid = pid}, .None
 }
 
 @(private)

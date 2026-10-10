@@ -9,25 +9,102 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
-### Changed
+This release renames the whole public `ingot:fit` procedure surface. Every
+consumer of `ingot:fit` must update call sites; see **Removed** below.
+
+### Removed
 
 - **Breaking:** every public `ingot:fit` procedure is renamed from PascalCase
   to snake_case with no deprecated forwarders, matching `docs/TIGER_STYLE.md`
   and the `0.3.0` `ingot:gfx` rename. The mapping is mechanical: lowercase the
   name (`fit.Run` → `fit.run`, `fit.Virtual_List_Begin` →
-  `fit.virtual_list_begin`, `fit.Fixed` → `fit.fixed`). Types, constants, and
-  argument lists are unchanged. `scripts/check_ui_api_layers.py` now inspects
-  snake_case public declarations in `fit` for leaked `ui` types as well.
-- `ingot:fit` value types with the same shape as their `ingot:ui`/`ingot:ui_gfx`
-  counterpart are now aliases (`fit.Rect :: ui.Rect_I32`, `fit.State ::
-  ui_gfx.App_State`, `fit.Button_Options :: ui.Fit_Button_Options`, …); field
-  and member names are unchanged, so consumer literals compile as before. Enum
-  boundaries (`Key`, `Mouse_Button`, `Cursor`, `Window_Flags`,
-  `Semantic_Role`) convert by `transmute`, pinned by `#assert` beside each
-  declaration and by `fit/boundary_contract_test.odin`. `fit/convert.odin` and
-  `fit/convert_boundary.odin` shrink from 745 lines to 151.
-- `ui.Fit_Action.userdata` is renamed `user_data`, matching the `fit.Action`
-  field it now aliases.
+  `fit.virtual_list_begin`, `fit.Fixed` → `fit.fixed`). Type names, constants,
+  and argument lists are unchanged, so a case-preserving search for `fit\.[A-Z]`
+  finds every call site. The usual one-release compatibility window is skipped
+  for the same reason as the `0.3.0` `ingot:gfx` rename: every in-repository
+  consumer (examples, benchmarks, `artifacts/readme-example`) was migrated in
+  the same commit, and forwarders would have kept a second PascalCase
+  vocabulary alive for the very names the rule removes.
+  `scripts/check_ui_api_layers.py` now inspects snake_case public declarations
+  in `fit` for leaked `ui` types as well.
+- **Breaking:** `ui.Fit_Action.userdata` is renamed `user_data`, matching the
+  `fit.Action` field it now aliases. Only code that names the field directly
+  (`ui.Fit_Action{userdata = …}` or `action.userdata`) is affected; `fit.action`
+  callers are unchanged.
+
+### Added
+
+- Typed operating errors along the application lifecycle. `gfx.Context_Error`
+  and `gfx.context_error` record why `context_init` or `context_close` failed
+  (window, instance, surface, adapter, device, device lost, swapchain, stream
+  allocation, refused close); every path that printed a `gfx:` diagnostic now
+  sets the code first. `ui_gfx.App_Error`, `ui_gfx.app_error`, and
+  `ui_gfx.app_graphics_error` do the same for `app_init`/`app_start`/
+  `app_stop`/`app_destroy`. `fit.Error`, `fit.Graphics_Error`,
+  `fit.last_error`, and `fit.last_graphics_error` expose them through the
+  facade without new `ui_gfx` imports. All existing `bool` signatures are
+  unchanged; `examples/hello` prints both codes when `fit.run` fails.
+- `term.term_start` and `term.term_start_argv` accept an optional
+  `spawn_error: ^pty.Spawn_Error` out-parameter that receives the PTY spawn
+  reason when they return `nil`.
+- `docs/TIGER_STYLE.md` states the operating-error reporting rule (typed enum
+  with `None` first for stateless procedures; sticky recorded reason plus
+  accessor for stateful objects whose `bool` contract is frozen).
+- `scripts/record-artifact-checksum.py` rewrites a rebuilt third-party
+  archive's checksum in `docs/provenance/third-party-artifacts.json` and
+  `THIRD_PARTY_NOTICES.md`; `.github/workflows/windows.yml` publishes the
+  patched `vterm.lib` it builds as the `windows-libvterm-patched` artifact so
+  the committed, still-unpatched archive can be replaced from a green run.
+- `docs/provenance/accesskit-c-0.22.3.Cargo.lock` and
+  `docs/provenance/accesskit-rust-dependencies.md` inventory the 162 Rust
+  crates inside the committed AccessKit archives with upstream's enforced
+  licence allow-list.
+- `ui` tests share `test_text_backend` and `test_runtime_init`
+  (`ui/font_test.odin`) instead of repeating the measuring-stub literal.
+
+### Changed
+
+- **Breaking:** `prefs.data_dir`, `prefs.path`, `prefs.read`, and
+  `prefs.write` return `prefs.Prefs_Error` (`None`, `No_Data_Dir`,
+  `Invalid_Name`, `Create_Dir`, `Open`, `Write`, `Missing`, `Read`) instead of
+  `bool`, on both native and web targets. `read` distinguishes a missing file
+  (`.Missing`) from an unreadable one (`.Read`). Replace `ok` checks with
+  `err == .None`.
+- **Breaking:** `pty.spawn` and `pty.spawn_argv` return `(Pty,
+  pty.Spawn_Error)` (`None`, `Invalid_Args`, `Fork`, `Master_Setup`, `Exec`,
+  `Unsupported`) instead of `(Pty, bool)` on Unix and Windows.
+- `ui_gfx.session_draw` returns `false` again when no graphics frame was
+  acquired, as `docs/application-shell.md` has always stated; `app_tick`
+  ignores the value, so a skipped frame still never stops the app loop.
+- `gfx/raymath.odin` and `gfx/rlgl/rlgl.odin` carry a header crediting their
+  procedure names to raylib; the source comparison recorded in
+  `THIRD_PARTY_NOTICES.md` found no translated implementation, closing that
+  release-checklist item.
+- `ingot:fit` boundary types now follow a two-category rule, recorded in
+  [API layers](docs/api-layers.md#boundary-maintenance-contract). Shared
+  value vocabulary aliases its `ingot:ui` definition (`fit.Rect ::
+  ui.Rect_I32`, `fit.Color :: ui.Color`, `fit.Track :: ui.Track`,
+  `fit.Action :: ui.Fit_Action`, enums such as `Space`, `Ink`, `Theme_Role`,
+  and `Modal_Close_Reason`); each alias is listed in
+  `scripts/check_ui_api_layers.py`, and adding one is a reviewed allowlist
+  edit. Engine, host, and renderer types stay distinct `fit` projections or
+  mapped enums: `State`, `Frame_Pacing`, `Error`, `Graphics_Error`,
+  `Session_Config`, `Frame_Diagnostics`, `Renderer_Peaks`, `Transition`,
+  `Size_Options`, `Container_Surface`, `Container_Effects`,
+  `Container_Options`, `Flow_Options`, `Grid_Options`, `Attachment_Options`,
+  `Label_Options`, `Button_Options`, `Control_Options`, `Leaf_Options`, and
+  `Custom_Options`. The script rejects a public `fit` alias of `ui.Prepared_*`,
+  `ui.Ui_*`, `ui_gfx.*`, or `gfx.*` regardless of the allowlist, so the engine
+  can change those types without changing what a `fit` consumer compiles
+  against. Consumer impact: field and member names are unchanged, so existing
+  `fit` literals compile as before; assigning a `fit` option or lifecycle
+  value directly to a `ui`/`ui_gfx` parameter no longer compiles, which only
+  affects code that mixes the two packages. Enum boundaries (`Key`,
+  `Mouse_Button`, `Cursor`, `Window_Flags`, `Semantic_Role`, `State`,
+  `Frame_Pacing`, `Error`, `Graphics_Error`) convert through their backing
+  integer, pinned by `#assert` beside each declaration and by
+  `fit/boundary_contract_test.odin`, which also checks every field of each
+  projected struct.
 - Pin Odin to `dev-2026-10:93f71c2`, upstream commit
   `93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d` (PR #7842), fixing the October
   release's macOS Objective-C compiler assertion (#7793). CI rebuilds this

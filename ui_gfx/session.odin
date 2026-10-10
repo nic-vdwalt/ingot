@@ -89,8 +89,11 @@ session_draw :: proc(session: ^Session, draw: Session_Draw_Proc, userdata: rawpt
 	assert(!session.graphics_open && !session.adapter.graphics_open)
 	graphics_frame: rl.Frame
 	if !rl.frame_begin(&graphics_frame, session.adapter.gfx_context) {
+		// Why false: the contract in docs/application-shell.md is "no graphics
+		// frame acquired"; app_tick deliberately ignores this value so a
+		// skipped frame never stops the app loop.
 		rl.frame_end(&graphics_frame)
-		return true
+		return false
 	}
 	session.graphics_open = true
 	session.adapter.graphics_open = true

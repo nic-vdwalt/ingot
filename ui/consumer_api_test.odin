@@ -6,17 +6,9 @@ import "core:testing"
 @(test)
 consumer_api_baseline_compiles :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	defer ui_frame_destroy(&frame)
 	output := new(Ui_Output)

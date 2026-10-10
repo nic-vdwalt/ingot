@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import fit "ingot:fit"
 
 State :: struct {
@@ -22,7 +23,7 @@ toggle_list :: proc(user_data: rawptr) {
 main :: proc() {
 	flags: fit.Window_Flags = {.Resizable, .Vsync}
 	when ODIN_OS == .Darwin do flags += {.High_Dpi}
-	_ = fit.run(
+	ok := fit.run(
 		&app,
 		{
 			width = 720,
@@ -37,6 +38,13 @@ main :: proc() {
 		draw,
 		&state,
 	)
+	if !ok {
+		fmt.eprintfln(
+			"hello: run failed (%v, graphics %v)",
+			fit.last_error(&app),
+			fit.last_graphics_error(&app),
+		)
+	}
 }
 
 draw :: proc(builder: ^fit.Builder, user_data: rawptr) {

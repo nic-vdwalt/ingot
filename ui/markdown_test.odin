@@ -17,17 +17,9 @@ when #config(INGOT_MARKDOWN_BENCHMARK, false) {
 	@(test)
 	markdown_repeated_frame_baseline :: proc(t: ^testing.T) {
 		runtime: Ui_Runtime
-		ui_runtime_init(&runtime)
-		defer ui_runtime_destroy(&runtime)
 		text_backend: Test_Text_Backend_State
-		ui_runtime_set_text_backend(
-			&runtime,
-			{
-				data = &text_backend,
-				font_for_size = test_text_font_for_size,
-				measure = test_text_measure,
-			},
-		)
+		test_runtime_init(&runtime, &text_backend)
+		defer ui_runtime_destroy(&runtime)
 		frame: Ui_Frame
 		defer ui_frame_destroy(&frame)
 		output := new(Ui_Output)
@@ -79,13 +71,9 @@ when #config(INGOT_MARKDOWN_BENCHMARK, false) {
 @(test)
 markdown_owned_layout_matches_extents_and_survives_frames :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	defer ui_frame_destroy(&frame)
 	output := new(Ui_Output)
@@ -597,13 +585,9 @@ markdown_prepared_matches_legacy_queries :: proc(t: ^testing.T) {
 @(test)
 markdown_table_cells_render_inline_spans_and_row_chrome :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	defer ui_frame_destroy(&frame)
 	output := new(Ui_Output)
@@ -649,13 +633,9 @@ markdown_table_cells_render_inline_spans_and_row_chrome :: proc(t: ^testing.T) {
 @(test)
 markdown_table_columns_respect_longest_word :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	defer ui_frame_destroy(&frame)
 	output := new(Ui_Output)

@@ -109,6 +109,12 @@ Session :: struct {
 State :: ui_gfx.App_State
 Frame_Pacing :: ui_gfx.App_Frame_Pacing
 
+// Error is why the last fit.init/start/stop/destroy/run returned false; read
+// it with fit.last_error. Graphics_Error refines .Graphics and .Close_Refused
+// with the gfx reason through fit.last_graphics_error.
+Error :: ui_gfx.App_Error
+Graphics_Error :: gfx.Context_Error
+
 Window_Flag :: enum i32 {
 	Fullscreen          = 1,
 	Resizable           = 2,

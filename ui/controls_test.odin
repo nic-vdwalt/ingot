@@ -11,10 +11,7 @@ control_motion_does_not_delay_values_or_semantics :: proc(t: ^testing.T) {
 	theme := theme_dark()
 	ui_runtime_set_theme(&runtime, theme)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	ui_runtime_set_text_backend(&runtime, test_text_backend(&backend))
 	sem_enable(&runtime, true)
 	output := new(Ui_Output)
 	defer free(output)
@@ -99,10 +96,7 @@ toggle_keyboard_updates_semantics_before_motion_settles :: proc(t: ^testing.T) {
 	ui_runtime_set_theme(&runtime, theme)
 	sem_enable(&runtime, true)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	ui_runtime_set_text_backend(&runtime, test_text_backend(&backend))
 	output := new(Ui_Output)
 	defer free(output)
 	frame := Ui_Frame {
@@ -234,13 +228,9 @@ geometry_tokens_follow_mid_frame_scale_change :: proc(t: ^testing.T) {
 @(test)
 toggle_spec_measures_and_emits_checked_semantics :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	sem_enable(&runtime, true)
 	output := new(Ui_Output)
 	defer free(output)
@@ -339,13 +329,9 @@ slider_pointer_mapping_uses_pane_local_coordinates :: proc(t: ^testing.T) {
 @(test)
 control_interaction_rect_preserves_visual_geometry :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	sem_enable(&runtime, true)
 	output := new(Ui_Output)
 	defer free(output)
@@ -474,10 +460,7 @@ checkbox_and_radio_labels_stay_inside_their_rect :: proc(t: ^testing.T) {
 	state := Test_Text_Backend_State {
 		advance = 8,
 	}
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	ui_runtime_set_text_backend(&runtime, test_text_backend(&state))
 	// Truncation measures through the Text_System, drawing through the text
 	// backend. Give both the same fixed advance: with the default estimator
 	// (len * size / 2) the two disagree, and this test would only pass at the
@@ -523,10 +506,7 @@ control_labels_default_to_button_label_size :: proc(t: ^testing.T) {
 	state := Test_Text_Backend_State {
 		advance = 8,
 	}
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	ui_runtime_set_text_backend(&runtime, test_text_backend(&state))
 	output := new(Ui_Output)
 	defer free(output)
 	frame: Ui_Frame

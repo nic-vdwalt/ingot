@@ -308,7 +308,10 @@ term_free_emulator :: proc(ts: ^Term_Instance) {
 }
 
 // term_start allocates and initialises a new Term_Instance, spawning the
-// default shell inside a PTY sized (cols × rows).  Returns nil on failure.
+// default shell inside a PTY sized (cols × rows).  Returns nil on failure;
+// when spawn_error is non-nil it receives the pty.Spawn_Error (.None when the
+// emulator itself failed to initialise) because the instance is released
+// before returning and cannot carry the reason.
 // default_fg/default_bg are RGB triples used as the terminal's default pen
 // (pick values matching the host app's theme).
 term_start :: proc(
@@ -317,7 +320,9 @@ term_start :: proc(
 	default_fg: [3]u8 = {220, 220, 220},
 	default_bg: [3]u8 = {27, 27, 27},
 	wake: proc "contextless" () = nil,
+	spawn_error: ^pty.Spawn_Error = nil,
 ) -> ^Term_Instance {
+	if spawn_error != nil do spawn_error^ = .None
 	ts := new(Term_Instance)
 	if !term_init_emulator(ts, cols, rows, default_fg, default_bg) {
 		free(ts)
@@ -327,8 +332,9 @@ term_start :: proc(
 	// Spawn PTY shell.
 	shell := pty.get_default_shell()
 	workdir := strings.clone_to_cstring(workspace_path, context.temp_allocator)
-	p, ok := pty.spawn(shell, cols, rows, workdir)
-	if !ok {
+	p, err := pty.spawn(shell, cols, rows, workdir)
+	if err != .None {
+		if spawn_error != nil do spawn_error^ = err
 		term_free_emulator(ts)
 		free(ts)
 		return nil
@@ -338,7 +344,8 @@ term_start :: proc(
 
 // term_start_argv is term_start for an arbitrary command instead of the
 // default shell: argv[0] is resolved via PATH and executed directly on the
-// PTY (no shell, no login startup noise). Returns nil on failure.
+// PTY (no shell, no login startup noise). Returns nil on failure; spawn_error,
+// when non-nil, receives the pty.Spawn_Error as for term_start.
 term_start_argv :: proc(
 	argv: []cstring,
 	workspace_path: string,
@@ -346,8 +353,10 @@ term_start_argv :: proc(
 	default_fg: [3]u8 = {220, 220, 220},
 	default_bg: [3]u8 = {27, 27, 27},
 	wake: proc "contextless" () = nil,
+	spawn_error: ^pty.Spawn_Error = nil,
 ) -> ^Term_Instance {
 	assert(len(argv) > 0, "term_start_argv: empty argv")
+	if spawn_error != nil do spawn_error^ = .None
 	ts := new(Term_Instance)
 	if !term_init_emulator(ts, cols, rows, default_fg, default_bg) {
 		free(ts)
@@ -355,8 +364,9 @@ term_start_argv :: proc(
 	}
 
 	workdir := strings.clone_to_cstring(workspace_path, context.temp_allocator)
-	p, ok := pty.spawn_argv(argv, cols, rows, workdir)
-	if !ok {
+	p, err := pty.spawn_argv(argv, cols, rows, workdir)
+	if err != .None {
+		if spawn_error != nil do spawn_error^ = err
 		term_free_emulator(ts)
 		free(ts)
 		return nil

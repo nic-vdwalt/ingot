@@ -198,10 +198,28 @@ Context_Lifecycle :: enum u8 {
 	Closing,
 }
 
+// Context_Error records why the most recent lifecycle call on a Context
+// failed. It is sticky: context_init clears it before trying, every failure
+// path sets it before returning, and nothing else resets it, so a caller that
+// saw false from context_init or context_close can read the reason afterwards.
+Context_Error :: enum u8 {
+	None,
+	Window,
+	Instance,
+	Surface,
+	Adapter,
+	Device,
+	Device_Lost,
+	Swapchain,
+	Stream_Allocation,
+	Close_Refused,
+}
+
 Context :: struct {
 	id:                          u32,
 	epoch:                       u64,
 	lifecycle:                   Context_Lifecycle,
+	last_error:                  Context_Error,
 	win:                         Window_Handle,
 	instance:                    wg.Instance,
 	surface:                     wg.Surface,
@@ -504,8 +522,17 @@ context_init :: proc(ctx: ^Context, width, height: i32, title: cstring) -> bool 
 	when ODIN_OS == .JS {
 		if ctx != &default_context_storage do return false
 	}
+	ctx.last_error = .None
 	_init_window_context(ctx, width, height, title)
 	return context_live(ctx)
+}
+
+// context_error reports why the last context_init or context_close on ctx
+// failed, or .None. The value survives _close_window_context's storage reset
+// so a refused close and an abandoned init both stay readable.
+context_error :: proc(ctx: ^Context) -> Context_Error {
+	assert(ctx != nil, "context_error: nil context")
+	return ctx.last_error
 }
 
 // context_close retires every backend callback registration before releasing
@@ -516,7 +543,10 @@ context_close :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "context_close: nil context")
 	closed := _close_window_context(ctx)
 	if !closed {
+		ctx.last_error = .Close_Refused
 		fmt.eprintln("gfx: context_close refused; backend callbacks outstanding, storage retained")
+	} else {
+		ctx.last_error = .None
 	}
 	return closed
 }
@@ -659,6 +689,7 @@ _init_window_context :: proc(ctx: ^Context, width, height: i32, title: cstring) 
 	ctx.epoch += 1
 	ctx.lifecycle = .Starting
 	if !platform_create_window(ctx, width, height, title, ctx.config_flags) {
+		ctx.last_error = .Window
 		fmt.eprintln("gfx: window creation failed")
 		ctx.lifecycle = .Empty
 		return
@@ -666,12 +697,14 @@ _init_window_context :: proc(ctx: ^Context, width, height: i32, title: cstring) 
 
 	ctx.instance = wg.CreateInstance()
 	if ctx.instance == nil {
+		ctx.last_error = .Instance
 		fmt.eprintln("gfx: WebGPU instance creation failed")
 		_abandon_window_context(ctx)
 		return
 	}
 	ctx.surface = platform_create_surface(ctx, ctx.instance)
 	if ctx.surface == nil {
+		ctx.last_error = .Surface
 		fmt.eprintln("gfx: WebGPU surface creation failed")
 		_abandon_window_context(ctx)
 		return
@@ -718,12 +751,14 @@ _surface_alpha_mode :: proc(
 _gpu_finish :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_gpu_finish: nil context")
 	if ctx.surface == nil || ctx.adapter == nil || ctx.device == nil || ctx.queue == nil {
+		ctx.last_error = .Swapchain
 		fmt.eprintln("gfx: incomplete GPU state; cannot configure swapchain")
 		_abandon_window_context(ctx)
 		return false
 	}
 	width, height := ctx.pending_w, ctx.pending_h
 	if width <= 0 || height <= 0 {
+		ctx.last_error = .Swapchain
 		fmt.eprintln("gfx: invalid pending window dimensions")
 		_abandon_window_context(ctx)
 		return false
@@ -731,6 +766,7 @@ _gpu_finish :: proc(ctx: ^Context) -> bool {
 
 	caps, status := wg.SurfaceGetCapabilities(ctx.surface, ctx.adapter)
 	if status != .Success || caps.formatCount == 0 || caps.formats == nil {
+		ctx.last_error = .Swapchain
 		fmt.eprintln("gfx: surface reports no supported formats; cannot configure swapchain")
 		_abandon_window_context(ctx)
 		return false
@@ -849,10 +885,12 @@ _close_window_context :: proc(ctx: ^Context) -> bool {
 	context_id := ctx.id
 	flags := ctx.config_flags
 	closing_epoch := ctx.epoch
+	last_error := ctx.last_error
 	mem.zero(ctx, size_of(Context))
 	ctx.id = context_id
 	ctx.epoch = closing_epoch
 	ctx.config_flags = flags
+	ctx.last_error = last_error
 	return true
 }
 

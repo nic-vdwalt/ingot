@@ -107,17 +107,25 @@ save :: proc(data: ^State) {
 	}
 	buffer := make([]u8, view.view_encoded_size(source), context.temp_allocator)
 	written, encoded := view.view_encode(source, buffer)
-	if !encoded || !prefs.write(APP_NAME, VIEW_FILE, buffer[:written]) {
-		data.status = "save failed"
+	if !encoded {
+		data.status = "save failed: encode"
+		return
+	}
+	if err := prefs.write(APP_NAME, VIEW_FILE, buffer[:written]); err != .None {
+		data.status = fmt.bprintf(data.status_buf[:], "save failed: %v", err)
 		return
 	}
 	data.status = fmt.bprintf(data.status_buf[:], "saved %d bytes", written)
 }
 
 load :: proc(data: ^State) {
-	bytes, ok := prefs.read(APP_NAME, VIEW_FILE)
-	if !ok {
+	bytes, err := prefs.read(APP_NAME, VIEW_FILE)
+	if err == .Missing {
 		data.status = "no saved document"
+		return
+	}
+	if err != .None {
+		data.status = fmt.bprintf(data.status_buf[:], "load failed: %v", err)
 		return
 	}
 	loaded := new(view.View_Doc, context.temp_allocator)

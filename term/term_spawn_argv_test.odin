@@ -71,7 +71,7 @@ when !pty.INGOT_PTY_SIM {
 
 	@(test)
 	spawn_argv_rejects_empty_argv :: proc(t: ^testing.T) {
-		_, ok := pty.spawn_argv(nil, 80, 24)
-		testing.expect(t, !ok, "empty argv must fail")
+		_, spawn_err := pty.spawn_argv(nil, 80, 24)
+		testing.expect_value(t, spawn_err, pty.Spawn_Error.Invalid_Args)
 	}
 }

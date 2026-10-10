@@ -63,6 +63,18 @@ App_Callbacks :: struct {
 	shutdown: App_Shutdown_Proc,
 }
 
+// App_Error records why the last lifecycle call on an App returned false. It
+// is reset to .None by a successful app_init_context and otherwise sticky,
+// mirroring gfx.Context_Error. When the value is .Graphics or .Close_Refused
+// the graphics reason is available through app_graphics_error.
+App_Error :: enum u8 {
+	None,
+	Invalid_State,
+	Context_Not_Live,
+	Graphics,
+	Close_Refused,
+}
+
 App :: struct {
 	gfx_context: ^gfx.Context,
 	session:     Session,
@@ -71,9 +83,24 @@ App :: struct {
 	callbacks:   App_Callbacks,
 	userdata:    rawptr,
 	state:       App_State,
+	last_error:  App_Error,
 	// Set once the shutdown callback and session ran, so a destroy retried
 	// after a refused context close does not run them twice.
 	torn_down:   bool,
+}
+
+app_error :: proc(app: ^App) -> App_Error {
+	assert(app != nil, "app_error: nil app")
+	return app.last_error
+}
+
+// app_graphics_error reports the gfx reason behind a .Graphics or
+// .Close_Refused app error. Before app_init_context ran, or after a
+// successful app_destroy cleared the context pointer, it is .None.
+app_graphics_error :: proc(app: ^App) -> gfx.Context_Error {
+	assert(app != nil, "app_graphics_error: nil app")
+	if app.gfx_context == nil do return .None
+	return gfx.context_error(app.gfx_context)
 }
 
 @(private)
@@ -109,7 +136,12 @@ app_init_context :: proc(
 	window_flags := config.flags
 	when ODIN_OS == .Windows do window_flags += {.WINDOW_HIDDEN}
 	gfx.context_set_config_flags(gfx_context, window_flags)
-	if !gfx.context_init(gfx_context, config.width, config.height, config.title) do return false
+	app.last_error = .None
+	if !gfx.context_init(gfx_context, config.width, config.height, config.title) {
+		app.gfx_context = gfx_context
+		app.last_error = .Graphics
+		return false
+	}
 	if config.event_waiting do gfx.context_set_frame_strategy(gfx_context, .Event_Driven)
 	session_init_context(&app.session, gfx_context, config.session)
 	when ODIN_OS == .Windows {
@@ -148,7 +180,11 @@ app_frame_draw :: proc(session: ^Session, frame: ^ui.Ui_Frame, userdata: rawptr)
 }
 
 app_start :: proc(app: ^App) -> bool {
-	if app == nil || app.state != .Ready do return false
+	if app == nil do return false
+	if app.state != .Ready {
+		app.last_error = .Invalid_State
+		return false
+	}
 	// context_live, not context_ready: on the web the GPU device is still
 	// resolving on the browser event loop at this point and readiness is
 	// necessarily false. Requiring readiness here made app_run treat every
@@ -156,7 +192,10 @@ app_start :: proc(app: ^App) -> bool {
 	// cancelled the in-flight adapter request - a black canvas, silently,
 	// for every ui_gfx.App app in a browser. Frames simply do not run until
 	// the device lands; gfx.step gates the callback on that.
-	if !gfx.context_live(app.gfx_context) do return false
+	if !gfx.context_live(app.gfx_context) {
+		app.last_error = .Context_Not_Live
+		return false
+	}
 	app.state = .Running
 	assert(app.session.initialized, "app_start: session not initialized")
 	assert(app.gfx_context == app.session.adapter.gfx_context, "app_start: context mismatch")
@@ -172,7 +211,11 @@ app_tick :: proc(app: ^App) -> bool {
 }
 
 app_stop :: proc(app: ^App) -> bool {
-	if app == nil || app.state != .Running do return false
+	if app == nil do return false
+	if app.state != .Running {
+		app.last_error = .Invalid_State
+		return false
+	}
 	assert(!app.session.frame_open, "app_stop: frame open")
 	app.state = .Stopped
 	assert(app.state == .Stopped)
@@ -222,7 +265,10 @@ app_destroy :: proc(app: ^App) -> bool {
 		session_destroy(&app.session)
 		app.torn_down = true
 	}
-	if !gfx.context_close(app.gfx_context) do return false
+	if !gfx.context_close(app.gfx_context) {
+		app.last_error = .Close_Refused
+		return false
+	}
 	app^ = {}
 	return true
 }

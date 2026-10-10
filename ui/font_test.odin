@@ -23,6 +23,26 @@ test_text_measure :: proc(data: rawptr, font: Font_Id, text: string, size, spaci
 	return {f32(len(text)) * advance, size}
 }
 
+// test_text_backend is the shared measuring stub every ui test installs; the
+// backend borrows state, so the caller keeps it alive for the runtime's life.
+test_text_backend :: proc(state: ^Test_Text_Backend_State) -> Text_Backend {
+	assert(state != nil, "test_text_backend: nil state")
+	backend := Text_Backend {
+		data          = state,
+		font_for_size = test_text_font_for_size,
+		measure       = test_text_measure,
+	}
+	assert(text_backend_valid(backend), "test_text_backend: invalid backend")
+	return backend
+}
+
+test_runtime_init :: proc(runtime: ^Ui_Runtime, state: ^Test_Text_Backend_State) {
+	assert(runtime != nil && state != nil, "test_runtime_init: nil argument")
+	ui_runtime_init(runtime)
+	ui_runtime_set_text_backend(runtime, test_text_backend(state))
+	assert(runtime.initialized, "test_runtime_init: runtime not initialized")
+}
+
 @(private = "file")
 test_text_metrics :: proc(data: rawptr, font: Font_Id, size: f32) -> (Text_Metrics, bool) {
 	assert(data != nil && font != 0, "test_text_metrics: invalid backend state")
@@ -63,13 +83,9 @@ text_caret_policy_is_typographic_and_deterministic :: proc(t: ^testing.T) {
 @(test)
 test_draw_text_frame_copies_text_with_backend_font :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	state: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &state)
+	defer ui_runtime_destroy(&runtime)
 	output := new(Ui_Output)
 	defer free(output)
 	frame: Ui_Frame
@@ -91,13 +107,9 @@ test_draw_text_frame_copies_text_with_backend_font :: proc(t: ^testing.T) {
 @(test)
 test_target_codepoint_uses_backend_font_without_pane_translation :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	state: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &state)
+	defer ui_runtime_destroy(&runtime)
 	output := new(Ui_Output)
 	defer free(output)
 	frame: Ui_Frame
@@ -118,13 +130,9 @@ test_target_codepoint_uses_backend_font_without_pane_translation :: proc(t: ^tes
 @(test)
 test_measure_text_frame_uses_backend_font :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	state: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &state)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	ui_frame_begin(&frame, &runtime)
 	width := measure_text_frame(&frame, "Gallery", 16)
@@ -138,13 +146,9 @@ test_measure_text_frame_uses_backend_font :: proc(t: ^testing.T) {
 @(test)
 text_backend_measure_cache_reuses_and_invalidates :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	first: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &first, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &first)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	ui_frame_begin(&frame, &runtime)
 	width_a := measure_text_string_frame(&frame, "stable", 16)
@@ -155,10 +159,7 @@ text_backend_measure_cache_reuses_and_invalidates :: proc(t: ^testing.T) {
 	second := Test_Text_Backend_State {
 		advance = 11,
 	}
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &second, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	ui_runtime_set_text_backend(&runtime, test_text_backend(&second))
 	ui_frame_begin(&frame, &runtime)
 	width_c := measure_text_string_frame(&frame, "stable", 16)
 	ui_frame_end(&frame)
@@ -170,13 +171,9 @@ text_backend_measure_cache_reuses_and_invalidates :: proc(t: ^testing.T) {
 @(test)
 test_backend_measure_l0_is_exact_and_bounded :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	state: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &state)
+	defer ui_runtime_destroy(&runtime)
 	labels := [?]string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight"}
 	frame: Ui_Frame
 	ui_frame_begin(&frame, &runtime)
@@ -195,13 +192,9 @@ test_backend_measure_l0_is_exact_and_bounded :: proc(t: ^testing.T) {
 @(test)
 text_backend_measure_cache_runtime_policy_isolated :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	state: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &state)
+	defer ui_runtime_destroy(&runtime)
 	ui_runtime_set_backend_measure_cache_enabled(&runtime, false)
 	measure_cache_telemetry_reset_with(&runtime.text)
 	frame: Ui_Frame
@@ -237,10 +230,7 @@ test_frame_text_geometry_uses_render_backend :: proc(t: ^testing.T) {
 	state := Test_Text_Backend_State {
 		advance = 11,
 	}
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	ui_runtime_set_text_backend(&runtime, test_text_backend(&state))
 	frame: Ui_Frame
 	ui_frame_begin(&frame, &runtime)
 	text := "aa aa"
@@ -264,10 +254,7 @@ test_markdown_width_uses_render_backend :: proc(t: ^testing.T) {
 	state := Test_Text_Backend_State {
 		advance = 11,
 	}
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	ui_runtime_set_text_backend(&runtime, test_text_backend(&state))
 	frame: Ui_Frame
 	ui_frame_begin(&frame, &runtime)
 	plain_width := wrapped_max_line_width_md_frame(&frame, "abcd", 100, 16)
@@ -359,13 +346,9 @@ test_mid_frame_scale_change_invalidates_font_memo :: proc(t: ^testing.T) {
 @(test)
 test_measure_text_frame_cstring_uses_backend_cache :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	state: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &state)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	ui_frame_begin(&frame, &runtime)
 	width_a := measure_text_frame(&frame, "stable", 16)
@@ -384,13 +367,9 @@ test_measure_text_frame_cstring_uses_backend_cache :: proc(t: ^testing.T) {
 @(test)
 test_rune_advance_cache_measures_once_and_invalidates :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	first: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &first, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &first)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	ui_frame_begin(&frame, &runtime)
 	ascii_a := rune_width_frame(&frame, 'a', 16)
@@ -406,10 +385,7 @@ test_rune_advance_cache_measures_once_and_invalidates :: proc(t: ^testing.T) {
 	second := Test_Text_Backend_State {
 		advance = 11,
 	}
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &second, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	ui_runtime_set_text_backend(&runtime, test_text_backend(&second))
 	ui_frame_begin(&frame, &runtime)
 	ascii_c := rune_width_frame(&frame, 'a', 16)
 	ui_frame_end(&frame)
@@ -423,13 +399,9 @@ test_rune_advance_cache_measures_once_and_invalidates :: proc(t: ^testing.T) {
 @(test)
 test_wrap_text_frame_cache_reuses_lines :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	state: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &state, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &state)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	ui_frame_begin(&frame, &runtime)
 	text := "aa aa"

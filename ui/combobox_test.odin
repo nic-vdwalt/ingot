@@ -21,17 +21,9 @@ test_combobox_selected_label_finds_by_id :: proc(t: ^testing.T) {
 @(test)
 test_combobox_closed_mirrors_selected_label :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
@@ -58,14 +50,7 @@ combobox_popup_clamps_and_records_in_screen_space :: proc(t: ^testing.T) {
 	defer ui_runtime_destroy(&runtime)
 	sem_enable(&runtime, true)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	ui_runtime_set_text_backend(&runtime, test_text_backend(&text_backend))
 	output := new(Ui_Output)
 	defer free(output)
 	input := Ui_Input {

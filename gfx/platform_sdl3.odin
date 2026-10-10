@@ -157,6 +157,7 @@ when INGOT_GFX_SDL3 {
 		}
 		assert(ares.done, "platform_start_gpu: adapter request did not finish")
 		if ares.status != .Success || ares.adapter == nil {
+			ctx.last_error = .Adapter
 			fmt.eprintln("gfx: adapter request failed")
 			_abandon_window_context(ctx)
 			return
@@ -189,6 +190,7 @@ when INGOT_GFX_SDL3 {
 		}
 		assert(dres.done, "platform_start_gpu: device request did not finish")
 		if dres.status != .Success || dres.device == nil {
+			ctx.last_error = .Device
 			fmt.eprintln("gfx: device request failed")
 			_abandon_window_context(ctx)
 			return
@@ -196,6 +198,7 @@ when INGOT_GFX_SDL3 {
 		ctx.device = dres.device
 		ctx.queue = wg.DeviceGetQueue(ctx.device)
 		if ctx.queue == nil {
+			ctx.last_error = .Device
 			fmt.eprintln("gfx: device returned no queue")
 			_abandon_window_context(ctx)
 			return

@@ -16,9 +16,9 @@ term_ui_input_reads_captured_characters :: proc(t: ^testing.T) {
 		ts.pty_running = true
 	} else {
 		when ODIN_OS == .Windows do return
-		p, ok := pty.spawn("/bin/cat", 80, 24)
-		testing.expect(t, ok, "failed to spawn PTY")
-		if !ok do return
+		p, spawn_err := pty.spawn("/bin/cat", 80, 24)
+		testing.expect_value(t, spawn_err, pty.Spawn_Error.None)
+		if spawn_err != .None do return
 		defer pty.destroy(&p)
 		ts.pty = p
 		ts.pty_running = true

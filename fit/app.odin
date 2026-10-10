@@ -135,6 +135,16 @@ get_state :: proc(app: ^App) -> State {
 	return app.inner.state
 }
 
+last_error :: proc(app: ^App) -> Error {
+	assert(app != nil, "fit.last_error: nil app")
+	return ui_gfx.app_error(&app.inner)
+}
+
+last_graphics_error :: proc(app: ^App) -> Graphics_Error {
+	assert(app != nil, "fit.last_graphics_error: nil app")
+	return ui_gfx.app_graphics_error(&app.inner)
+}
+
 screen_rect :: proc(app: ^App) -> Rect {
 	assert(app != nil, "fit.screen_rect: nil app")
 	return ui_gfx.app_screen_rect(&app.inner)

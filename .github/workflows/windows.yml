@@ -99,6 +99,22 @@ jobs:
       - name: Rebuild patched Windows libvterm
         shell: pwsh
         run: cmd /c scripts\build-libvterm.bat
+      - name: Publish patched Windows libvterm
+        shell: pwsh
+        run: |
+          $lib = 'libvterm/lib/windows_amd64/vterm.lib'
+          $hash = (Get-FileHash -Algorithm SHA256 $lib).Hash.ToLower()
+          "$hash  $lib" | Set-Content -NoNewline -Encoding ascii "$lib.sha256"
+          Write-Host "$hash  $lib"
+      - name: Upload patched Windows libvterm
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-libvterm-patched
+          path: |
+            libvterm/lib/windows_amd64/vterm.lib
+            libvterm/lib/windows_amd64/vterm.lib.sha256
+          if-no-files-found: error
+          retention-days: 14
       - name: Run Windows native tests
         shell: pwsh
         run: ./scripts/test.ps1

@@ -32,13 +32,9 @@ modal_bottom_geometry_is_bounded :: proc(t: ^testing.T) {
 @(test)
 modal_owns_keyboard_on_opening_frame :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	input := Ui_Input {
 		screen_size = {640, 480},
 	}
@@ -67,13 +63,9 @@ modal_owns_keyboard_on_opening_frame :: proc(t: ^testing.T) {
 @(test)
 modal_viewport_centers_and_clamps_panel :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	input := Ui_Input {
 		screen_size = {320, 240},
 	}
@@ -99,13 +91,9 @@ modal_viewport_centers_and_clamps_panel :: proc(t: ^testing.T) {
 @(test)
 modal_host_centers_and_claims_only_host :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	input := Ui_Input {
 		screen_size = {640, 480},
 	}
@@ -132,13 +120,9 @@ modal_host_centers_and_claims_only_host :: proc(t: ^testing.T) {
 @(test)
 modal_stack_escape_closes_only_top :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	input := Ui_Input {
 		screen_size = {640, 480},
 	}

@@ -297,6 +297,7 @@ _web_on_device_lost :: proc "c" (
 	if ctx == nil || !ctx.initialized || ctx.device_lost do return
 	if device == nil || device^ != ctx.device do return
 	ctx.device_lost = true
+	ctx.last_error = .Device_Lost
 	fmt.eprintfln("gfx: WebGPU device lost (%v): %s", reason, _web_reason(message))
 	_js_device_lost(i32(reason))
 	assert(ctx.device_lost, "_web_on_device_lost: flag not set")
@@ -326,6 +327,7 @@ _web_on_device :: proc "c" (
 	ctx.device = device
 	ctx.queue = wg.DeviceGetQueue(ctx.device)
 	if ctx.queue == nil {
+		ctx.last_error = .Device
 		fmt.eprintln("gfx: web device returned no queue")
 		_abandon_window_context(ctx)
 		return

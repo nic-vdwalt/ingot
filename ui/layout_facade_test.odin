@@ -173,17 +173,9 @@ layout_named_row_resolves_exact_slots :: proc(t: ^testing.T) {
 @(test)
 layout_facade_prepared_toolbar_declares_dynamic_children_once :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
@@ -215,17 +207,9 @@ layout_facade_prepared_toolbar_declares_dynamic_children_once :: proc(t: ^testin
 @(test)
 layout_facade_concise_prepared_group_fits_content_and_overloads :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
@@ -255,17 +239,9 @@ layout_facade_concise_prepared_group_fits_content_and_overloads :: proc(t: ^test
 @(test)
 layout_facade_concise_prepared_group_resolves_width_and_wrap :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
@@ -303,17 +279,9 @@ layout_facade_concise_prepared_group_resolves_width_and_wrap :: proc(t: ^testing
 @(test)
 layout_facade_fit_builder_dynamic_children_and_outputs_are_bounded :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
@@ -362,17 +330,9 @@ layout_facade_fit_builder_dynamic_children_and_outputs_are_bounded :: proc(t: ^t
 @(test)
 layout_facade_fit_builder_reuse_clears_stale_outputs :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
@@ -442,17 +402,9 @@ layout_facade_fit_accepts_caller_node_capacity :: proc(t: ^testing.T) {
 @(test)
 layout_facade_prepared_accepts_small_caller_storage :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
@@ -545,17 +497,9 @@ layout_facade_fixed_leaf_nested_under_grid_row_skips_measure :: proc(t: ^testing
 @(test)
 layout_facade_fixed_grid_uses_direct_geometry :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
@@ -621,17 +565,9 @@ layout_facade_partial_fixed_leaf_retains_measure :: proc(t: ^testing.T) {
 @(test)
 layout_facade_prepared_wrapped_label_remeasures_height_for_width :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)

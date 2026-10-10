@@ -166,6 +166,8 @@ FIT_PUBLIC_ALIAS_ALLOW = {
     "Spinner_Style :: ui.Spinner_Style",
     "Split_Pane_Result :: ui.Split_Pane_Result",
     "State :: ui_gfx.App_State",
+    "Error :: ui_gfx.App_Error",
+    "Graphics_Error :: gfx.Context_Error",
     "Substrate_Kind :: ui.Substrate_Kind",
     "Surface_Kind :: ui.Surface",
     "Surface_Style :: ui.Surface_Style",

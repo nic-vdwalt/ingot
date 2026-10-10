@@ -20,13 +20,9 @@ w_mono :: proc(text: cstring, size: i32) -> i32 {
 @(test)
 control_widgets_keep_interaction_geometry :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	sem_enable(&runtime, true)
 	theme := theme_dark()
 	ui_runtime_set_theme(&runtime, theme)
@@ -90,13 +86,9 @@ control_widgets_keep_interaction_geometry :: proc(t: ^testing.T) {
 @(test)
 button_interaction_rect_preserves_visual_geometry :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	sem_enable(&runtime, true)
 	output := new(Ui_Output)
 	defer free(output)
@@ -129,17 +121,9 @@ button_interaction_rect_preserves_visual_geometry :: proc(t: ^testing.T) {
 @(test)
 button_spec_and_facade_share_geometry :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	text_backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{
-			data = &text_backend,
-			font_for_size = test_text_font_for_size,
-			measure = test_text_measure,
-		},
-	)
+	test_runtime_init(&runtime, &text_backend)
+	defer ui_runtime_destroy(&runtime)
 	frame: Ui_Frame
 	output := new(Ui_Output)
 	defer free(output)
@@ -164,13 +148,9 @@ button_spec_and_facade_share_geometry :: proc(t: ^testing.T) {
 @(test)
 disclosure_motion_keeps_expansion_immediate :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
-	ui_runtime_init(&runtime)
-	defer ui_runtime_destroy(&runtime)
 	backend: Test_Text_Backend_State
-	ui_runtime_set_text_backend(
-		&runtime,
-		{data = &backend, font_for_size = test_text_font_for_size, measure = test_text_measure},
-	)
+	test_runtime_init(&runtime, &backend)
+	defer ui_runtime_destroy(&runtime)
 	sem_enable(&runtime, true)
 	theme := theme_dark()
 	ui_runtime_set_theme(&runtime, theme)

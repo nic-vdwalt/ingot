@@ -1,5 +1,8 @@
 // ingot:gfx - raymath helpers (subset apps reference). Names/semantics match
-// raylib's raymath so call sites port unchanged.
+// raylib's raymath so call sites port unchanged. Names follow raylib
+// (zlib/libpng licence, Copyright (c) Ramon Santamaria); the bodies are
+// original elementary vector arithmetic, not translated raylib code. See
+// THIRD_PARTY_NOTICES.md, "API compatibility".
 package gfx
 
 import "core:math"

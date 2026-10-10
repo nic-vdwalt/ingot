@@ -30,6 +30,7 @@ vet_flags="-vet -strict-style -vet-shadowing -no-entry-point"
 
 echo "== repository hygiene =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_repository_hygiene_test.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/record_artifact_checksum_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check-repository-hygiene.py"
 
 echo "== consumer script contract =="

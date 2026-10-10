@@ -121,7 +121,7 @@ blob := ui.table_layout_encode(&table, context.temp_allocator)
 _ = prefs.write("my-app", "table-layout.txt", blob)
 
 // Load (falls back to a fresh seed on a missing or drifted file)
-if bytes, ok := prefs.read("my-app", "table-layout.txt", context.temp_allocator); ok {
+if bytes, err := prefs.read("my-app", "table-layout.txt", context.temp_allocator); err == .None {
     if !ui.table_layout_decode(bytes, &table, columns) {
         table.initialized = false
         ui.table_state_init(&table, columns)

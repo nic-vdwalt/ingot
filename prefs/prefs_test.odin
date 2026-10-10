@@ -19,21 +19,21 @@ prefs_paths_and_roundtrip :: proc(t: ^testing.T) {
 	// --- data_dir / path resolution ---
 	os.set_env("HOME", "/tmp/ingot_home")
 	os.set_env("APPDATA", "")
-	dir, ok := data_dir("myapp", context.temp_allocator)
-	testing.expect(t, ok, "data_dir resolves with HOME set")
+	dir, data_dir_err := data_dir("myapp", context.temp_allocator)
+	testing.expect_value(t, data_dir_err, Prefs_Error.None)
 	when ODIN_OS == .Windows {
 		testing.expect(t, strings.has_suffix(dir, "myapp"), "data_dir ends with app")
 	} else {
 		testing.expect_value(t, dir, "/tmp/ingot_home/.local/share/myapp")
 	}
 
-	p, pok := path("myapp", "settings.json", context.temp_allocator)
-	testing.expect(t, pok, "path resolves")
+	p, path_err := path("myapp", "settings.json", context.temp_allocator)
+	testing.expect_value(t, path_err, Prefs_Error.None)
 	testing.expect(t, strings.has_suffix(p, "myapp/settings.json"), "path ends with app/file")
-	_, empty_app_ok := data_dir("", context.temp_allocator)
-	_, empty_file_ok := path("myapp", "", context.temp_allocator)
-	testing.expect(t, !empty_app_ok, "empty app is rejected")
-	testing.expect(t, !empty_file_ok, "empty file is rejected")
+	_, empty_app_err := data_dir("", context.temp_allocator)
+	_, empty_file_err := path("myapp", "", context.temp_allocator)
+	testing.expect_value(t, empty_app_err, Prefs_Error.Invalid_Name)
+	testing.expect_value(t, empty_file_err, Prefs_Error.Invalid_Name)
 
 	// --- user_home prefers HOME ---
 	testing.expect_value(t, user_home(context.temp_allocator), "/tmp/ingot_home")
@@ -44,17 +44,18 @@ prefs_paths_and_roundtrip :: proc(t: ^testing.T) {
 	defer os.remove_all(base)
 
 	payload := transmute([]u8)string("hello=world")
-	wok := write("roundtrip", "cfg.txt", payload)
-	testing.expect(t, wok, "write succeeds and creates dirs")
+	testing.expect_value(t, write("roundtrip", "cfg.txt", payload), Prefs_Error.None)
 
-	got, rok := read("roundtrip", "cfg.txt", context.temp_allocator)
-	testing.expect(t, rok, "read succeeds")
+	got, read_err := read("roundtrip", "cfg.txt", context.temp_allocator)
+	testing.expect_value(t, read_err, Prefs_Error.None)
 	testing.expect_value(t, string(got), "hello=world")
 
 	replacement := transmute([]u8)string("new=value")
-	testing.expect(t, write("roundtrip", "cfg.txt", replacement), "replacement succeeds")
-	got, rok = read("roundtrip", "cfg.txt", context.temp_allocator)
-	testing.expect(t, rok, "replacement reads")
+	testing.expect_value(t, write("roundtrip", "cfg.txt", replacement), Prefs_Error.None)
+	got, read_err = read("roundtrip", "cfg.txt", context.temp_allocator)
+	testing.expect_value(t, read_err, Prefs_Error.None)
+	_, missing_err := read("roundtrip", "absent.txt", context.temp_allocator)
+	testing.expect_value(t, missing_err, Prefs_Error.Missing)
 	testing.expect_value(t, string(got), "new=value")
 	roundtrip_dir := fmt.tprintf("%s/.local/share/roundtrip", base)
 	dir_handle, dir_err := os.open(roundtrip_dir)
@@ -73,7 +74,7 @@ prefs_paths_and_roundtrip :: proc(t: ^testing.T) {
 	blocker := fmt.tprintf("%s/.local", blocked_home)
 	testing.expect(t, os.write_entire_file(blocker, payload) == nil, "create blocker")
 	os.set_env("HOME", blocked_home)
-	testing.expect(t, !write("blocked", "cfg.txt", payload), "propagate mkdir failure")
-	testing.expect(t, !write("", "cfg.txt", payload), "empty app write is rejected")
-	testing.expect(t, !write("blocked", "", payload), "empty file write is rejected")
+	testing.expect_value(t, write("blocked", "cfg.txt", payload), Prefs_Error.Create_Dir)
+	testing.expect_value(t, write("", "cfg.txt", payload), Prefs_Error.Invalid_Name)
+	testing.expect_value(t, write("blocked", "", payload), Prefs_Error.Invalid_Name)
 }
