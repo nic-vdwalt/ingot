@@ -165,6 +165,18 @@ measurement with:
 odin run tools/odingate -collection:ingot=. -- assertions --root . --files-from <(git ls-files '*.odin') --measure
 ```
 
+The assertions rule reads the AST: risks come from `Deref_Expr`, `Index_Expr`,
+`Slice_Expr`, `Type_Cast` (transmute), call names, and assignment targets;
+evidence comes from the conditions of `assert`/`ensure`/`assert_contextless`
+calls, `if`/`when`/loop headers, `defer` statements, and `return` values. A
+`#assert` directive is compile-time and never counts as an assertion; a
+`v, ok := m[k]` lookup is never an index risk; a `proc "c"` body is read from
+the literal's calling convention. `--report` prints one line per procedure
+(`path:name risks=[..] skip=<trivial|forwarder|dominated|-> discharged=[..]
+uncovered=[..]`) so two builds of the rule can be diffed procedure by
+procedure; the AST-level verdicts that differ from the retired text scan are
+locked in by the `assertions_*` parity tests in `tools/odingate`.
+
 Validate the browser target with:
 
 ```sh

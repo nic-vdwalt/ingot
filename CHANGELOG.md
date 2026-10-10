@@ -89,6 +89,29 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
 
 ### Changed
 
+- `tools/odingate assertions` now evaluates every risk and evidence predicate
+  on the `core:odin/parser` AST instead of regexes over masked text. Verdicts
+  that changed: comparisons such as `slot.state == .Recording` are no longer
+  state writes while `state^ = {}` is; `[4]f32{..}` and `map[K]V` type
+  literals are no longer index risks while `ptr^[:]` is; nested subscripts
+  (`a[b[i]]`) produce two index operations; multi-line `assert(` conditions,
+  `x if p != nil else y` guards, and `return v, ok && len(v) > 0` validations
+  are read whole. `--report` prints a per-procedure trace for diffing rule
+  builds. `ui.markdown_layout_heading` and `ui.markdown_layout_table_row_chrome`
+  gained the `MARKDOWN_LAYOUT_RUNS_MAX` truncation guard the sibling layout
+  procedures already had.
+- `tools/odingate ui-api-layers` consumes the `--files-from` list like every
+  other rule and normalises walked paths to forward slashes, so the gate
+  produces the same findings on Windows as on Linux and macOS.
+- `gfx/batch.odin` is split into `batch.odin`, `batch_pipeline.odin`,
+  `batch_push.odin`, `batch_flush.odin`, and `batch_stream.odin`;
+  `gfx/context.odin` into `context.odin`, `context_gpu.odin`,
+  `context_window.odin`, `context_frame.odin`, and `context_timing.odin`.
+  Package names and public symbols are unchanged.
+- CI downloads the pinned Odin source tarball without the `octet-stream`
+  Accept header (the tarball endpoint rejects it) and retries every GitHub
+  download on all three platforms.
+
 - `ingot:net` declares libcurl once in `net/curl_ffi.odin` (`Curl`,
   `Curl_Code`, `CURL_*` options, `curl_*` procs) instead of duplicating the
   `foreign import`, link lists, and option constants in `http_curl.odin` and

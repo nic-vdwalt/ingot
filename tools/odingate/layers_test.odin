@@ -528,3 +528,56 @@ ui_layers_gallery_allows_public_fit_surface :: proc(t: ^testing.T) {
 	)
 	testing.expect_value(t, len(layers_tree_check(tree)), 0)
 }
+
+@(test)
+ui_layers_rel_paths_use_forward_slashes :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+	when filepath.SEPARATOR == '\\' {
+		testing.expect_value(t, rel_slash("ui_gfx\\adapter.odin"), "ui_gfx/adapter.odin")
+	} else {
+		testing.expect_value(t, rel_slash("ui_gfx/adapter.odin"), "ui_gfx/adapter.odin")
+	}
+	tree := layers_tree_make(t)
+	if !tree.ok do return
+	defer os.remove_all(tree.root)
+	layers_tree_write(t, tree, "ui_gfx/adapter.odin", "package ui_gfx\n")
+	layers_tree_write(t, tree, "examples/gallery/main.odin", "package main\n")
+	files, ok := collect_odin_files(tree.root, "")
+	testing.expect(t, ok)
+	testing.expect_value(t, len(files), 2)
+	for path in files do testing.expect(t, !strings.contains(path, "\\"), path)
+	testing.expect_value(t, files[0], "examples/gallery/main.odin")
+	testing.expect_value(t, files[1], "ui_gfx/adapter.odin")
+}
+
+@(test)
+ui_layers_repo_check_honours_file_list :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+	tree := layers_tree_make(t)
+	if !tree.ok do return
+	defer os.remove_all(tree.root)
+	layers_tree_write(t, tree, "examples/main.odin", "package main\nimport ui \"ingot:fit\"\n")
+	layers_tree_write(t, tree, "examples/other/main.odin", "package main\n")
+	walked: Report
+	ui_layers_check_repo(tree.root, &walked)
+	testing.expect(t, any_contains(layers_messages(&walked), "Fit imported as internal UI alias"))
+	listed: Report
+	ui_layers_check_repo(tree.root, &listed, {"examples/other/main.odin"})
+	testing.expect_value(t, len(listed.findings), 0)
+	tracked: Report
+	ui_layers_check_repo(tree.root, &tracked, {"examples/main.odin"})
+	testing.expect(t, any_contains(layers_messages(&tracked), "Fit imported as internal UI alias"))
+}
+
+@(test)
+ui_layers_path_inside_is_separator_agnostic :: proc(t: ^testing.T) {
+	tree := layers_tree_make(t)
+	if !tree.ok do return
+	defer os.remove_all(tree.root)
+	layers_tree_write(t, tree, "examples/x.odin", "package main\n")
+	nested, _ := filepath.join({tree.root, "examples", "x.odin"}, context.temp_allocator)
+	testing.expect(t, ui_layers_path_inside(nested, tree.root))
+	testing.expect(t, ui_layers_path_inside(tree.root, tree.root))
+	sibling := strings.concatenate({tree.root, "-other"}, context.temp_allocator)
+	testing.expect(t, !ui_layers_path_inside(sibling, tree.root))
+}

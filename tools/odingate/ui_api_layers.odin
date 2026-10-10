@@ -666,13 +666,24 @@ ui_layers_check_consumer :: proc(source: ^Source, binding_allowed: bool, report:
 
 Ui_Layers_Tree :: struct {
 	root:  string,
-	files: []string, // relative to root, sorted
+	files: []string, // relative to root, slash-separated, sorted
+}
+
+// ui_layers_tree lists the `.odin` files under `root/sub`: from the gate's
+// `--files-from` list when one is given, otherwise by walking the directory
+// (tests build throwaway trees and pass no list).
+@(private = "file")
+ui_layers_tree :: proc(root, sub: string, files: []string) -> Ui_Layers_Tree {
+	if files != nil do return Ui_Layers_Tree{root, ui_layers_files_under(files, sub)}
+	walked, _ := collect_odin_files(root, sub)
+	return Ui_Layers_Tree{root, walked[:]}
 }
 
 @(private = "file")
-ui_layers_tree :: proc(root, sub: string) -> Ui_Layers_Tree {
-	files, _ := collect_odin_files(root, sub)
-	return Ui_Layers_Tree{root, files[:]}
+ui_layers_files_under :: proc(files: []string, sub: string) -> []string {
+	if sub == "" do return files
+	prefix := strings.concatenate({sub, "/"}, context.temp_allocator)
+	return filter_paths(files, {prefix}, nil, nil)
 }
 
 @(private = "file")
@@ -695,24 +706,25 @@ ui_layers_load :: proc(
 }
 
 // ui_layers_check_repo runs the framework-side rules under `root`: examples/,
-// fit/, ui/ (non-test), and adapter calls in examples/ and ui_gfx/.
-ui_layers_check_repo :: proc(root: string, report: ^Report) {
+// fit/, ui/ (non-test), and adapter calls in examples/ and ui_gfx/. `files`
+// is the slash-separated tracked file list; nil walks the tree instead.
+ui_layers_check_repo :: proc(root: string, report: ^Report, files: []string = nil) {
 	assert(root != "" && report != nil, "ui_layers_check_repo: bad argument")
-	for rel in ui_layers_tree(root, "examples").files {
+	for rel in ui_layers_tree(root, "examples", files).files {
 		if source, ok := ui_layers_load(root, rel, report); ok do ui_layers_check_example(&source, report)
 	}
-	for rel in ui_layers_tree(root, "fit").files {
+	for rel in ui_layers_tree(root, "fit", files).files {
 		if ui_layers_dir(rel) != "fit" do continue
 		if source, ok := ui_layers_load(root, rel, report); ok {
 			ui_layers_fit_public_violations(&source, report)
 		}
 	}
-	for rel in ui_layers_tree(root, "ui").files {
+	for rel in ui_layers_tree(root, "ui", files).files {
 		if ui_layers_dir(rel) != "ui" || strings.has_suffix(rel, "_test.odin") do continue
 		if source, ok := ui_layers_load(root, rel, report); ok do ui_layers_violations(&source, report)
 	}
 	for sub in ([?]string{"examples", "ui_gfx"}) {
-		for rel in ui_layers_tree(root, sub).files {
+		for rel in ui_layers_tree(root, sub, files).files {
 			if source, ok := ui_layers_load(root, rel, report); ok {
 				ui_layers_check_adapter_calls(&source, report)
 			}
@@ -730,7 +742,7 @@ ui_layers_check_consumers :: proc(
 ) {
 	assert(report != nil, "ui_layers_check_consumers: nil report")
 	for root in consumer_roots {
-		for rel in ui_layers_tree(root, "").files {
+		for rel in ui_layers_tree(root, "", nil).files {
 			full, join_err := filepath.join({root, rel}, context.temp_allocator)
 			if join_err != nil do continue
 			if ui_layers_path_inside(full, ingot_root) do continue
@@ -762,9 +774,11 @@ ui_layers_same_path :: proc(a, b: string) -> bool {
 }
 
 // ui_layers_path_inside reports whether `path` is `root` or lies under it.
+// Both sides are made absolute and slash-normalised so the comparison holds
+// on Windows, where filepath.abs returns backslashes.
 ui_layers_path_inside :: proc(path, root: string) -> bool {
-	p := ui_layers_abs(path, context.temp_allocator)
-	r := ui_layers_abs(root, context.temp_allocator)
+	p := rel_slash(ui_layers_abs(path, context.temp_allocator), context.temp_allocator)
+	r := rel_slash(ui_layers_abs(root, context.temp_allocator), context.temp_allocator)
 	if p == r do return true
 	prefix :=
 		strings.has_suffix(r, "/") ? r : strings.concatenate({r, "/"}, context.temp_allocator)
@@ -786,7 +800,7 @@ run_ui_api_layers :: proc(options: ^Options) -> int {
 		}
 	}
 	report: Report
-	ui_layers_check_repo(ingot_root, &report)
+	ui_layers_check_repo(ingot_root, &report, options.files)
 	ui_layers_check_consumers(
 		options.consumer_roots[:],
 		options.binding_allows[:],

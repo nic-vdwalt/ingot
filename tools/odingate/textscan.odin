@@ -2,11 +2,10 @@ package odingate
 
 import "core:strings"
 
-// Small text matchers over masked source lines. The assertion-discipline
-// predicates reason about what an author wrote on a line (an `if` comparing
-// `len(x)`, an `assert` mentioning a pointer and `nil`), so they need
-// word-bounded search and ordered-token matching rather than a full regex
-// engine. All scans are bounded by TEXT_SCAN_MAX iterations.
+// Small text matchers over masked source lines, shared by the gfx-context
+// and ui-api-layers rules for the few checks that still read declaration
+// text (parameter lists, vendor vocabulary). The assertions rule queries the
+// AST and no longer uses these. All scans are bounded by TEXT_SCAN_MAX.
 
 TEXT_SCAN_MAX :: 1 << 20
 
@@ -15,7 +14,7 @@ is_word_byte :: proc(b: byte) -> bool {
 }
 
 is_space_byte :: proc(b: byte) -> bool {
-	return b == ' ' || b == '\t'
+	return b == ' ' || b == '	'
 }
 
 is_upper_byte :: proc(b: byte) -> bool {
@@ -268,34 +267,6 @@ seq_in :: proc(text: string, specs: []string) -> bool {
 	return ok
 }
 
-// seq_in_lines reports whether any line matches the sequence.
-seq_in_lines :: proc(lines: []string, specs: []string) -> bool {
-	for line in lines {
-		if seq_in(line, specs) do return true
-	}
-	return false
-}
-
-// seq_in_lines_any tries each alternative head followed by the shared tail,
-// for patterns like `(assert|ensure|if)\s*\( ...`.
-seq_in_lines_any :: proc(lines: []string, heads: []string, tail: []string) -> bool {
-	assert(len(heads) > 0, "seq_in_lines_any: no heads")
-	specs := make([dynamic]string, context.temp_allocator)
-	for head in heads {
-		clear(&specs)
-		append(&specs, head)
-		append(&specs, ..tail)
-		if seq_in_lines(lines, specs[:]) do return true
-	}
-	return false
-}
-
-// split_lines splits on '\n' keeping a trailing partial line, which is how a
-// prefix cut mid-line must behave for "same line" scans.
-split_lines :: proc(text: string, allocator := context.temp_allocator) -> []string {
-	return strings.split(text, "\n", allocator)
-}
-
 // strip_spaces removes every space and tab so loosely formatted comparisons
 // such as `0 <= low` and `0<=low` compare equal.
 strip_spaces :: proc(text: string, allocator := context.temp_allocator) -> string {
@@ -304,40 +275,6 @@ strip_spaces :: proc(text: string, allocator := context.temp_allocator) -> strin
 		if char != ' ' && char != '\t' do strings.write_rune(&builder, char)
 	}
 	return strings.to_string(builder)
-}
-
-// count_call_shapes counts `ident(` occurrences (identifier, optional
-// spaces, open parenthesis) in `text`.
-count_call_shapes :: proc(text: string) -> int {
-	count := 0
-	for index in 0 ..< len(text) {
-		if text[index] != '(' do continue
-		back := index - 1
-		for back >= 0 && is_space_byte(text[back]) do back -= 1
-		if back >= 0 && is_word_byte(text[back]) do count += 1
-	}
-	return count
-}
-
-// is_dotted_ident reports `a`, `a.b`, `a.b.c` shapes.
-is_dotted_ident :: proc(text: string) -> bool {
-	if text == "" do return false
-	expect_ident := true
-	for char, index in text {
-		if expect_ident {
-			if !(char == '_' || (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z')) {
-				return false
-			}
-			expect_ident = false
-			continue
-		}
-		if char == '.' {
-			expect_ident = true
-			continue
-		}
-		if !is_word_byte(text[index]) do return false
-	}
-	return !expect_ident
 }
 
 is_all_digits :: proc(text: string) -> bool {
@@ -359,63 +296,6 @@ is_upper_const :: proc(text: string) -> bool {
 leaf_of_dotted :: proc(text: string) -> string {
 	index := strings.last_index_byte(text, '.')
 	return index < 0 ? text : text[index + 1:]
-}
-
-first_of_dotted :: proc(text: string) -> string {
-	index := strings.index_byte(text, '.')
-	return index < 0 ? text : text[:index]
-}
-
-// any_line reports whether any line of `text` matches the sequence.
-any_line :: proc(text: string, specs: []string) -> bool {
-	return seq_in_lines(split_lines(text), specs)
-}
-
-// any_line_heads tries each head followed by the shared tail on every line.
-any_line_heads :: proc(text: string, heads: []string, tail: []string) -> bool {
-	return seq_in_lines_any(split_lines(text), heads, tail)
-}
-
-// spec_* build dynamic specs for identifiers taken from the source being
-// checked: plain substring, word-bounded, and their adjacent variants.
-spec_plain :: proc(text: string, allocator := context.temp_allocator) -> string {
-	return strings.concatenate({"=", text}, allocator)
-}
-
-spec_adjacent :: proc(text: string, allocator := context.temp_allocator) -> string {
-	return strings.concatenate({"~=", text}, allocator)
-}
-
-spec_word :: proc(text: string, allocator := context.temp_allocator) -> string {
-	return strings.concatenate({"!", text}, allocator)
-}
-
-spec_adj_word :: proc(text: string, allocator := context.temp_allocator) -> string {
-	return strings.concatenate({"~!", text}, allocator)
-}
-
-// specs concatenates spec lists into one temp-allocated slice.
-specs :: proc(parts: ..[]string) -> []string {
-	total := 0
-	for part in parts do total += len(part)
-	out := make([]string, total, context.temp_allocator)
-	index := 0
-	for part in parts {
-		for spec in part {
-			out[index] = spec
-			index += 1
-		}
-	}
-	assert(index == total, "specs: count drifted")
-	return out
-}
-
-// contains_any reports whether any of `needles` is a substring of `text`.
-contains_any :: proc(text: string, needles: []string) -> bool {
-	for needle in needles {
-		if strings.contains(text, needle) do return true
-	}
-	return false
 }
 
 parse_uint :: proc(text: string) -> (value: int, ok: bool) {

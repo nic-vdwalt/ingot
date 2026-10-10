@@ -60,25 +60,33 @@ Index_Kind :: enum u8 {
 	Remove,
 }
 
+// Index_Op is one subscript, slice, or `ordered_remove`/`unordered_remove`
+// call. `target`/`expression` are the collapsed source text of the operands
+// (what the author wrote); the node handles are what the predicates query.
+// `offset` is relative to the executable body text.
 Index_Op :: struct {
-	target:     string,
-	expression: string,
-	offset:     int,
-	kind:       Index_Kind,
+	target:      string,
+	expression:  string,
+	offset:      int,
+	kind:        Index_Kind,
+	node:        ^ast.Node,
+	target_expr: ^ast.Expr,
+	index_expr:  ^ast.Expr, // element index or remove position; nil for slices
+	low:         ^ast.Expr, // slice bounds; nil when omitted
+	high:        ^ast.Expr,
 }
 
-// Proc_Body is the per-procedure view the predicates read: the masked text
-// of the whole declaration, the executable text between its outer braces,
-// and the derived lists every predicate would otherwise recompute.
+// Proc_Body is the per-procedure view the predicates read: the literal and
+// its single bounded scan, plus the derived lists every predicate would
+// otherwise recompute.
 Proc_Body :: struct {
 	name:              string,
 	line:              int,
-	text:              string, // unmasked declaration text
-	masked:            string, // masked declaration text
-	executable:        string, // masked text inside the outer braces
-	subscripts:        string, // executable with comma-ok map lookups blanked
-	lines:             []string,
-	contracts:         []string,
+	lit:               ^ast.Proc_Lit,
+	source:            ^Source,
+	scan:              Body_Scan,
+	assertions:        []Assertion,
+	exec_start:        int, // source offset just inside the body's `{`
 	ops:               []Index_Op,
 	pointer_params:    []string,
 	has_pointer_param: bool,
@@ -92,48 +100,27 @@ Assert_Finding :: struct {
 	risks: Risk_Set,
 }
 
-ASSERT_CONTRACT_WORDS := [?]string {
-	"assert_contextless",
-	"assert",
-	"ensure",
-	"if",
-	"when",
-	"for",
-	"defer",
-}
-ASSERT_HEADS3 := [?]string{"assert_contextless", "assert", "ensure"}
-ASSERT_HEADS4 := [?]string{"assert_contextless", "assert", "ensure", "if"}
-
 // proc_body builds the view for one top-level procedure.
 proc_body :: proc(source: ^Source, entry: Proc_Decl, allocator := context.allocator) -> Proc_Body {
 	assert(source != nil, "proc_body: nil source")
 	assert(entry.lit != nil && entry.lit.body != nil, "proc_body: bodiless procedure")
-	start := source.line_starts[entry.start_line]
-	end := len(source.text)
-	if entry.end_line + 1 < len(source.line_starts) do end = source.line_starts[entry.end_line + 1]
-	assert(start <= end, "proc_body: inverted declaration span")
 	open := entry.lit.body.pos.offset
 	close := entry.lit.body.end.offset - 1
-	assert(open >= start && close < end && open < close, "proc_body: body outside declaration")
+	assert(open < close, "proc_body: inverted body span")
 	assert(source.masked[open] == '{' && source.masked[close] == '}', "proc_body: body braces")
 	body := Proc_Body {
 		name       = entry.name,
 		line       = entry.start_line,
-		text       = source.text[start:end],
-		masked     = source.masked[start:end],
-		executable = source.masked[open + 1:close],
+		lit        = entry.lit,
+		source     = source,
+		exec_start = open + 1,
 	}
-	body.subscripts = assert_mask_map_lookups(body.executable, allocator)
-	body.lines = strings.split(body.executable, "\n", allocator)
-	contracts := make([dynamic]string, allocator)
-	for line in body.lines {
-		if has_any_word(line, ASSERT_CONTRACT_WORDS[:]) do append(&contracts, line)
-	}
-	body.contracts = contracts[:]
-	body.ops = assert_index_operations(body, allocator)
+	body.scan = body_scan(entry.lit.body, allocator)
+	body.assertions = collect_assertions(&body.scan, allocator)
+	body.ops = assert_index_operations(&body, allocator)
 	body.pointer_params = assert_pointer_parameter_names(entry.lit, allocator)
-	body.has_pointer_param = assert_has_pointer_parameter(source, entry.lit)
-	body.is_c = strings.contains(body.text, "proc \"c\"")
+	body.has_pointer_param = assert_has_pointer_parameter(entry.lit)
+	body.is_c = proc_is_c(entry.lit)
 	return body
 }
 
@@ -159,261 +146,343 @@ assert_pointer_parameter_names :: proc(
 	return names[:]
 }
 
-// assert_has_pointer_parameter mirrors the textual `:\s*\^` search over the
-// parameter list, which also sees pointers inside nested procedure types.
-assert_has_pointer_parameter :: proc(source: ^Source, lit: ^ast.Proc_Lit) -> bool {
+// assert_has_pointer_parameter reports a `^T` parameter, including one
+// declared inside a nested procedure-type parameter (`cb: proc(p: ^T)`).
+assert_has_pointer_parameter :: proc(lit: ^ast.Proc_Lit) -> bool {
+	assert(lit != nil, "assert_has_pointer_parameter: nil literal")
 	if lit.type == nil || lit.type.params == nil do return false
-	params := lit.type.params
-	start := clamp(params.pos.offset, 0, len(source.masked))
-	end := clamp(params.end.offset, start, len(source.masked))
-	text := source.masked[start:end]
-	for index in 0 ..< len(text) {
-		if text[index] != ':' do continue
-		next := skip_spaces(text, index + 1)
-		if next < len(text) && text[next] == '^' do return true
+	for field in lit.type.params.list {
+		if assert_type_has_pointer_param(field.type, 0) do return true
 	}
 	return false
 }
 
-// assert_mask_map_lookups blanks the subscript of every comma-ok map lookup
-// `v, ok := m[key]`, preserving offsets. Arrays and slices have no comma-ok
-// indexing form, so the shape is unambiguous and has no bound to violate.
-assert_mask_map_lookups :: proc(executable: string, allocator := context.allocator) -> string {
-	buffer := make([]byte, len(executable), allocator)
-	copy(buffer, executable)
-	for index in 0 ..< len(executable) {
-		if executable[index] != '[' do continue
-		if !assert_is_map_lookup_prefix(executable, index) do continue
-		close := strings.index_byte(executable[index:], ']')
-		if close < 0 do continue
-		if strings.index_byte(executable[index:index + close], '\n') >= 0 do continue
-		for position in index ..= index + close do buffer[position] = ' '
-	}
-	return string(buffer)
-}
+ASSERT_TYPE_NEST_MAX :: 8
 
-// assert_is_map_lookup_prefix reports whether the text before `open` ends in
-// `ident , ident :?= dotted` with arbitrary spacing.
+// assert_type_has_pointer_param walks a parameter type and the parameter
+// types of any nested procedure types, bounded by ASSERT_TYPE_NEST_MAX.
 @(private = "file")
-assert_is_map_lookup_prefix :: proc(text: string, open: int) -> bool {
-	pos := assert_skip_back_spaces(text, open)
-	dotted_start, has_dotted := assert_dotted_start(text, pos)
-	if !has_dotted do return false
-	pos = assert_skip_back_spaces(text, dotted_start)
-	if pos == 0 || text[pos - 1] != '=' do return false
-	pos -= 1
-	if pos > 0 && text[pos - 1] == ':' do pos -= 1
-	pos = assert_skip_back_spaces(text, pos)
-	ident_start, has_ident := assert_ident_start(text, pos)
-	if !has_ident do return false
-	pos = assert_skip_back_spaces(text, ident_start)
-	if pos == 0 || text[pos - 1] != ',' do return false
-	pos = assert_skip_back_spaces(text, pos - 1)
-	first_start, has_first := assert_ident_start(text, pos)
-	if !has_first do return false
-	return first_start == 0 || !is_word_byte(text[first_start - 1])
-}
-
-@(private = "file")
-assert_skip_back_spaces :: proc(text: string, pos: int) -> int {
-	index := pos
-	for index > 0 && is_space_byte(text[index - 1]) do index -= 1
-	return index
-}
-
-// assert_ident_start returns the start of the identifier ending at `end`.
-@(private = "file")
-assert_ident_start :: proc(text: string, end: int) -> (start: int, ok: bool) {
-	start = end
-	for start > 0 && is_word_byte(text[start - 1]) do start -= 1
-	if start == end do return start, false
-	return start, !is_digit_byte(text[start])
-}
-
-// assert_dotted_start returns the start of the `a.b.c` chain ending at `end`.
-@(private = "file")
-assert_dotted_start :: proc(text: string, end: int) -> (start: int, ok: bool) {
-	start, ok = assert_ident_start(text, end)
-	if !ok do return
-	for start > 0 && text[start - 1] == '.' {
-		previous, has_previous := assert_ident_start(text, start - 1)
-		if !has_previous do break
-		start = previous
-	}
-	return start, true
-}
-
-// assert_index_operations lists element and slice subscripts (map lookups
-// already blanked) and ordered/unordered_remove calls, sorted by offset.
-assert_index_operations :: proc(body: Proc_Body, allocator := context.allocator) -> []Index_Op {
-	ops := make([dynamic]Index_Op, allocator)
-	text := body.subscripts
-	for index in 0 ..< len(text) {
-		if text[index] != '[' do continue
-		pos := assert_skip_back_spaces(text, index)
-		start, has_target := assert_dotted_start(text, pos)
-		if !has_target || (start > 0 && is_word_byte(text[start - 1])) do continue
-		close := strings.index_byte(text[index:], ']')
-		if close < 0 do continue
-		inner := text[index + 1:index + close]
-		if strings.index_byte(inner, '\n') >= 0 do continue
-		expression := strings.trim_space(inner)
-		if expression == "" do continue
-		kind := strings.index_byte(expression, ':') >= 0 ? Index_Kind.Slice : Index_Kind.Element
-		append(&ops, Index_Op{text[start:pos], expression, start, kind})
-	}
-	for name in ([?]string{"ordered_remove", "unordered_remove"}) {
-		from := 0
-		for _ in 0 ..< TEXT_SCAN_MAX {
-			at := find_word(body.executable, name, from)
-			if at < 0 do break
-			from = at + len(name)
-			op, ok := assert_remove_operation(body.executable, at, from)
-			if ok do append(&ops, op)
+assert_type_has_pointer_param :: proc(type: ^ast.Expr, depth: int) -> bool {
+	pending := make([dynamic]^ast.Expr, context.temp_allocator)
+	append(&pending, type)
+	for _ in 0 ..< ASSERT_TYPE_NEST_MAX * 8 {
+		if len(pending) == 0 do return false
+		current := pop(&pending)
+		if current == nil do continue
+		#partial switch node in current.derived_expr {
+		case ^ast.Pointer_Type:
+			return true
+		case ^ast.Paren_Expr:
+			append(&pending, node.expr)
+		case ^ast.Proc_Type:
+			if node.params == nil do continue
+			for field in node.params.list do append(&pending, field.type)
 		}
 	}
-	slice.sort_by(ops[:], proc(a, b: Index_Op) -> bool {return a.offset < b.offset})
-	return ops[:]
+	return false
 }
 
-@(private = "file")
-assert_remove_operation :: proc(text: string, at, after: int) -> (op: Index_Op, ok: bool) {
-	pos := skip_spaces(text, after)
-	if pos >= len(text) || text[pos] != '(' do return
-	pos = skip_spaces(text, pos + 1)
-	if pos < len(text) && text[pos] == '&' do pos += 1
-	pos = skip_spaces(text, pos)
-	target_start := pos
-	for pos < len(text) && (is_word_byte(text[pos]) || text[pos] == '.') do pos += 1
-	if pos == target_start do return
-	target := text[target_start:pos]
-	pos = skip_spaces(text, pos)
-	if pos >= len(text) || text[pos] != ',' do return
-	pos = skip_spaces(text, pos + 1)
-	expr_start := pos
-	for pos < len(text) && text[pos] != ',' && text[pos] != ')' && text[pos] != '\n' do pos += 1
-	expression := strings.trim_space(text[expr_start:pos])
-	if expression == "" do return
-	return Index_Op{target, expression, at, .Remove}, true
+// assert_dotted_target returns the trailing identifier/selector chain of a
+// subscript target as written (`a.b` for `a.b[i]`, `bindings` for
+// `slots[0].bindings[i]`); ok is false when the target ends in a call,
+// subscript, or dereference, which no bound can be stated against by name.
+assert_dotted_target :: proc(
+	expr: ^ast.Expr,
+	allocator := context.allocator,
+) -> (
+	target: string,
+	ok: bool,
+) {
+	parts := make([dynamic]string, context.temp_allocator)
+	current := expr
+	for _ in 0 ..< ASSERT_TYPE_NEST_MAX * 8 {
+		if current == nil do break
+		#partial switch node in current.derived_expr {
+		case ^ast.Ident:
+			if node.name == "nil" do return "", false
+			inject_at(&parts, 0, node.name)
+			return strings.join(parts[:], ".", allocator), true
+		case ^ast.Selector_Expr:
+			if node.field == nil do return "", false
+			inject_at(&parts, 0, node.field.name)
+			current = node.expr
+		case ^ast.Paren_Expr:
+			current = node.expr
+		case:
+			if len(parts) == 0 do return "", false
+			return strings.join(parts[:], ".", allocator), true
+		}
+	}
+	return "", false
+}
+
+// assert_comma_ok_indexes collects the subscripts that are the single value
+// of a two-name declaration or assignment (`v, ok := m[k]`): a map lookup
+// with no bound to violate.
+assert_comma_ok_indexes :: proc(
+	scan: ^Body_Scan,
+	allocator := context.temp_allocator,
+) -> map[^ast.Index_Expr]bool {
+	lookups := make(map[^ast.Index_Expr]bool, allocator)
+	for decl in scan.decls {
+		if index, ok := is_comma_ok_lookup(decl); ok do lookups[index] = true
+	}
+	for assign in scan.assigns {
+		if len(assign.lhs) != 2 || len(assign.rhs) != 1 do continue
+		if index, ok := expr_unparen(assign.rhs[0]).derived_expr.(^ast.Index_Expr); ok {
+			lookups[index] = true
+		}
+	}
+	return lookups
+}
+
+// assert_index_operations lists element and slice subscripts on dotted
+// targets (comma-ok map lookups excluded) and ordered/unordered_remove calls,
+// sorted by offset.
+assert_index_operations :: proc(body: ^Proc_Body, allocator := context.allocator) -> []Index_Op {
+	assert(body != nil && body.source != nil, "assert_index_operations: nil body")
+	ops := make([dynamic]Index_Op, allocator)
+	lookups := assert_comma_ok_indexes(&body.scan)
+	for index in body.scan.indexes {
+		if index in lookups do continue
+		target := expr_unparen(index.expr)
+		name, named := assert_dotted_target(target, allocator)
+		if !named do continue
+		append(
+			&ops,
+			Index_Op {
+				target = name,
+				expression = expr_source(body.source, index.index, allocator),
+				offset = index.pos.offset - body.exec_start,
+				kind = .Element,
+				node = index,
+				target_expr = target,
+				index_expr = index.index,
+			},
+		)
+	}
+	for cell in body.scan.matrices {
+		target := expr_unparen(cell.expr)
+		name, named := assert_dotted_target(target, allocator)
+		if !named do continue
+		row := expr_source(body.source, cell.row_index, allocator)
+		column := expr_source(body.source, cell.column_index, allocator)
+		append(
+			&ops,
+			Index_Op {
+				target = name,
+				expression = strings.concatenate({row, ", ", column}, allocator),
+				offset = cell.pos.offset - body.exec_start,
+				kind = .Element,
+				node = cell,
+				target_expr = target,
+				index_expr = cell.row_index,
+				high = cell.column_index,
+			},
+		)
+	}
+	for slice_expr in body.scan.slices {
+		target := expr_unparen(slice_expr.expr)
+		name, named := assert_dotted_target(target, allocator)
+		if !named do continue
+		low := slice_expr.low != nil ? expr_source(body.source, slice_expr.low, allocator) : ""
+		high := slice_expr.high != nil ? expr_source(body.source, slice_expr.high, allocator) : ""
+		append(
+			&ops,
+			Index_Op {
+				target = name,
+				expression = strings.concatenate({low, ":", high}, allocator),
+				offset = slice_expr.pos.offset - body.exec_start,
+				kind = .Slice,
+				node = slice_expr,
+				target_expr = target,
+				low = slice_expr.low,
+				high = slice_expr.high,
+			},
+		)
+	}
+	for call in body.scan.calls {
+		if !callee_is(call, {"ordered_remove", "unordered_remove"}) do continue
+		if len(call.args) < 2 do continue
+		target := expr_unparen(call.args[0])
+		if unary, is_unary := target.derived_expr.(^ast.Unary_Expr);
+		   is_unary && unary.op.kind == .And {
+			target = expr_unparen(unary.expr)
+		}
+		name, named := assert_dotted_target(target, allocator)
+		if !named do continue
+		append(
+			&ops,
+			Index_Op {
+				target = name,
+				expression = expr_source(body.source, call.args[1], allocator),
+				offset = call.pos.offset - body.exec_start,
+				kind = .Remove,
+				node = call,
+				target_expr = target,
+				index_expr = call.args[1],
+			},
+		)
+	}
+	slice.sort_by(ops[:], proc(a, b: Index_Op) -> bool {return a.offset < b.offset})
+	assert(
+		len(ops) <=
+		len(body.scan.indexes) +
+			len(body.scan.slices) +
+			len(body.scan.matrices) +
+			len(body.scan.calls),
+	)
+	return ops[:]
 }
 
 // --- risk detection -------------------------------------------------------
 
+ASSERT_QUEUE_CALLS := [?]string{"append", "inject_at", "ordered_remove", "unordered_remove"}
+ASSERT_OWNERSHIP_CALLS := [?]string{"new", "delete", "free", "destroy", "clone", "resize"}
+ASSERT_STATE_WORDS := [?]string{"state", "running", "active", "session"}
+ASSERT_UNTRUSTED_PREFIXES := [?]string{"decode", "read", "recv"}
+ASSERT_RAW_POINTER_CALLS := [?]string{"raw_data", "raw_ptr"}
+
 assert_risks_for :: proc(body: ^Proc_Body) -> Risk_Set {
 	assert(body != nil, "assert_risks_for: nil body")
 	risks: Risk_Set
-	text := body.executable
-	if assert_pointer_syntax(text) do risks += {.Pointer}
-	if assert_index_syntax(body.subscripts) do risks += {.Index}
-	if has_any_call(text, {"append", "inject_at", "ordered_remove", "unordered_remove"}) {
-		risks += {.Queue}
-	}
-	if has_any_call(text, {"new", "delete", "free", "destroy", "clone", "resize"}) {
-		risks += {.Ownership}
-	}
-	if assert_state_write(text) do risks += {.State}
-	if assert_untrusted_call(text) do risks += {.Untrusted_Input}
+	if assert_pointer_syntax(body) do risks += {.Pointer}
+	if assert_index_syntax(body) do risks += {.Index}
+	if assert_calls_any(body, ASSERT_QUEUE_CALLS[:]) do risks += {.Queue}
+	if assert_calls_any(body, ASSERT_OWNERSHIP_CALLS[:]) do risks += {.Ownership}
+	if assert_state_write(body) do risks += {.State}
+	if assert_untrusted_call(body) do risks += {.Untrusted_Input}
 	if body.has_pointer_param && !body.is_c do risks += {.Pointer}
 	return risks
 }
 
-// has_call reports `name(` with word boundaries and optional spaces.
-has_call :: proc(text, name: string) -> bool {
-	return find_call(text, name) >= 0
-}
-
-find_call :: proc(text, name: string, from := 0) -> int {
-	start := from
-	for _ in 0 ..< TEXT_SCAN_MAX {
-		at := find_word(text, name, start)
-		if at < 0 do return -1
-		next := skip_spaces(text, at + len(name))
-		if next < len(text) && text[next] == '(' do return at
-		start = at + 1
-	}
-	return -1
-}
-
-has_any_call :: proc(text: string, names: []string) -> bool {
-	for name in names do if has_call(text, name) do return true
+// assert_calls_any reports a call to any of `names` in the body.
+assert_calls_any :: proc(body: ^Proc_Body, names: []string) -> bool {
+	for call in body.scan.calls do if callee_is(call, names) do return true
 	return false
 }
 
-@(private = "file")
-assert_pointer_syntax :: proc(text: string) -> bool {
-	for index in 1 ..< len(text) {
-		if text[index] == '^' && is_word_byte(text[index - 1]) do return true
-	}
-	for name in ([?]string{"raw_data", "raw_ptr"}) {
-		at := strings.index(text, name)
-		for _ in 0 ..< TEXT_SCAN_MAX {
-			if at < 0 do break
-			next := skip_spaces(text, at + len(name))
-			if next < len(text) && text[next] == '(' do return true
-			rel := strings.index(text[at + 1:], name)
-			at = rel < 0 ? -1 : at + 1 + rel
-		}
-	}
-	return has_call(text, "transmute")
+// assert_has_transmute reports a `transmute(T)x` in the body.
+assert_has_transmute :: proc(body: ^Proc_Body) -> bool {
+	for cast_expr in body.scan.casts do if cast_expr.tok.kind == .Transmute do return true
+	return false
 }
 
+// assert_pointer_syntax: a dereference, a raw pointer conversion, or a
+// transmute.
 @(private = "file")
-assert_index_syntax :: proc(text: string) -> bool {
-	for index in 0 ..< len(text) {
-		if text[index] != '[' do continue
-		pos := assert_skip_back_spaces(text, index)
-		if pos == 0 do continue
-		prev := text[pos - 1]
-		if !(is_word_byte(prev) || prev == ')' || prev == ']') do continue
-		close := strings.index_byte(text[index:], ']')
-		if close <= 1 do continue
-		if strings.index_byte(text[index:index + close], '\n') >= 0 do continue
-		return true
-	}
-	return has_any_call(text, {"ordered_remove", "unordered_remove"})
+assert_pointer_syntax :: proc(body: ^Proc_Body) -> bool {
+	if len(body.scan.derefs) > 0 do return true
+	if assert_calls_any(body, ASSERT_RAW_POINTER_CALLS[:]) do return true
+	return assert_has_transmute(body)
 }
 
+// assert_index_syntax: any subscript or slice that is not a comma-ok map
+// lookup, or an ordered/unordered_remove call.
 @(private = "file")
-assert_state_write :: proc(text: string) -> bool {
-	for word in ([?]string{"state", "running", "active", "session"}) {
-		from := 0
-		for _ in 0 ..< TEXT_SCAN_MAX {
-			at := find_word(text, word, from)
-			if at < 0 do break
-			from = at + len(word)
-			next := skip_spaces(text, from)
-			if next >= len(text) do break
-			if text[next] == '=' do return true
-			if (text[next] == '+' || text[next] == '-') &&
-			   next + 1 < len(text) &&
-			   text[next + 1] == '=' {
-				return true
-			}
+assert_index_syntax :: proc(body: ^Proc_Body) -> bool {
+	if len(body.scan.slices) > 0 || len(body.scan.matrices) > 0 do return true
+	lookups := assert_comma_ok_indexes(&body.scan)
+	for index in body.scan.indexes do if index not_in lookups do return true
+	return assert_calls_any(body, {"ordered_remove", "unordered_remove"})
+}
+
+// assert_state_write: an assignment (any operator) whose target's leaf name
+// is a lifecycle word.
+@(private = "file")
+assert_state_write :: proc(body: ^Proc_Body) -> bool {
+	for assign in body.scan.assigns {
+		for leaf in assign_lhs_leaves(assign) {
+			for word in ASSERT_STATE_WORDS do if leaf == word do return true
 		}
 	}
 	return false
 }
 
+// assert_untrusted_call: a call whose unqualified name starts with
+// decode/read/recv.
 @(private = "file")
-assert_untrusted_call :: proc(text: string) -> bool {
-	for prefix in ([?]string{"decode", "read", "recv"}) {
-		from := 0
-		for _ in 0 ..< TEXT_SCAN_MAX {
-			rel := strings.index(text[from:], prefix)
-			if rel < 0 do break
-			at := from + rel
-			from = at + 1
-			if at > 0 && is_word_byte(text[at - 1]) do continue
-			end := at + len(prefix)
-			for end < len(text) && is_word_byte(text[end]) do end += 1
-			next := skip_spaces(text, end)
-			if next < len(text) && text[next] == '(' do return true
-		}
+assert_untrusted_call :: proc(body: ^Proc_Body) -> bool {
+	for call in body.scan.calls {
+		for prefix in ASSERT_UNTRUSTED_PREFIXES do if callee_has_prefix(call, prefix) do return true
 	}
 	return false
 }
 
 // --- driver ---------------------------------------------------------------
+
+Assert_Skip :: enum {
+	None,
+	Trivial,
+	Forwarder,
+	Dominated,
+}
+
+ASSERT_SKIP_NAMES := [Assert_Skip]string {
+	.None      = "-",
+	.Trivial   = "trivial",
+	.Forwarder = "forwarder",
+	.Dominated = "dominated",
+}
+
+// Assert_Trace is the full verdict for one procedure: the risks detected,
+// why the procedure was skipped (if it was), which risks a predicate
+// discharged, and which remain uncovered. `--report` prints one line per
+// entry so two implementations of the rule can be diffed procedure by
+// procedure rather than only on the final finding count.
+Assert_Trace :: struct {
+	path:       string,
+	name:       string,
+	line:       int,
+	risks:      Risk_Set,
+	skip:       Assert_Skip,
+	discharged: Risk_Set,
+	uncovered:  Risk_Set,
+}
+
+// assert_trace_proc evaluates one procedure through the same cascade as the
+// gate: skip predicates first, then per-risk coverage and discharge.
+assert_trace_proc :: proc(source: ^Source, entry: Proc_Decl) -> Assert_Trace {
+	assert(source != nil, "assert_trace_proc: nil source")
+	body := proc_body(source, entry, context.temp_allocator)
+	trace := Assert_Trace {
+		path  = source.rel_path,
+		name  = entry.name,
+		line  = entry.start_line,
+		risks = assert_risks_for(&body),
+	}
+	switch {
+	case assert_is_trivial(&body, trace.risks):
+		trace.skip = .Trivial
+	case assert_is_thin_forwarder(&body, trace.risks):
+		trace.skip = .Forwarder
+	case assert_has_dominating_guard(&body, trace.risks):
+		trace.skip = .Dominated
+	}
+	if trace.skip != .None do return trace
+	for risk in Risk {
+		if risk not_in trace.risks do continue
+		if risk not_in assert_uncovered_risks(&body, trace.risks) do continue
+		if assert_discharged(&body, risk) {
+			trace.discharged += {risk}
+		} else {
+			trace.uncovered += {risk}
+		}
+	}
+	return trace
+}
+
+assert_traces_for_source :: proc(
+	source: ^Source,
+	allocator := context.allocator,
+) -> []Assert_Trace {
+	assert(source != nil, "assert_traces_for_source: nil source")
+	traces := make([dynamic]Assert_Trace, allocator)
+	for entry in top_level_procs(source.file, context.temp_allocator) {
+		append(&traces, assert_trace_proc(source, entry))
+	}
+	return traces[:]
+}
 
 assert_findings_for_source :: proc(
 	source: ^Source,
@@ -421,26 +490,39 @@ assert_findings_for_source :: proc(
 ) -> []Assert_Finding {
 	assert(source != nil, "assert_findings_for_source: nil source")
 	findings := make([dynamic]Assert_Finding, allocator)
-	for entry in top_level_procs(source.file, context.temp_allocator) {
-		body := proc_body(source, entry, context.temp_allocator)
-		risks := assert_risks_for(&body)
-		if assert_is_trivial(&body, risks) do continue
-		if assert_is_thin_forwarder(&body, risks) do continue
-		if assert_has_dominating_guard(&body, risks) do continue
-		uncovered: Risk_Set
-		for risk in Risk {
-			if risk in assert_uncovered_risks(&body, risks) && !assert_discharged(&body, risk) {
-				uncovered += {risk}
-			}
-		}
-		if uncovered != {} {
-			append(
-				&findings,
-				Assert_Finding{source.rel_path, entry.name, entry.start_line, uncovered},
-			)
-		}
+	for trace in assert_traces_for_source(source, context.temp_allocator) {
+		if trace.uncovered == {} do continue
+		append(&findings, Assert_Finding{trace.path, trace.name, trace.line, trace.uncovered})
 	}
 	return findings[:]
+}
+
+@(private = "file")
+assert_trace_less :: proc(a, b: Assert_Trace) -> bool {
+	if a.path != b.path do return a.path < b.path
+	if a.name != b.name do return a.name < b.name
+	return a.line < b.line
+}
+
+// assert_print_traces writes the parity trace, sorted by `path:name`, as
+// `path:name risks=[a,b] skip=<reason> discharged=[..] uncovered=[..]`.
+assert_print_traces :: proc(file: ^os.File, traces: []Assert_Trace) {
+	assert(file != nil, "assert_print_traces: nil file")
+	sorted := make([]Assert_Trace, len(traces), context.temp_allocator)
+	copy(sorted, traces)
+	slice.sort_by(sorted, assert_trace_less)
+	for trace in sorted {
+		fmt.fprintfln(
+			file,
+			"%s:%s risks=[%s] skip=%s discharged=[%s] uncovered=[%s]",
+			trace.path,
+			trace.name,
+			strings.join(risk_set_names(trace.risks), ",", context.temp_allocator),
+			ASSERT_SKIP_NAMES[trace.skip],
+			strings.join(risk_set_names(trace.discharged), ",", context.temp_allocator),
+			strings.join(risk_set_names(trace.uncovered), ",", context.temp_allocator),
+		)
+	}
 }
 
 risk_set_names :: proc(risks: Risk_Set, allocator := context.temp_allocator) -> []string {
@@ -609,6 +691,15 @@ run_assertions :: proc(options: ^Options) -> int {
 	)
 	report: Report
 	sources := load_sources(options.root, files, &report)
+	if options.report {
+		traces := make([dynamic]Assert_Trace)
+		for &source in sources {
+			if !source.parse_ok do continue
+			append(&traces, ..assert_traces_for_source(&source))
+		}
+		assert_print_traces(os.stdout, traces[:])
+		return EXIT_OK
+	}
 	findings := make([dynamic]Assert_Finding)
 	for &source in sources {
 		if !source.parse_ok do continue

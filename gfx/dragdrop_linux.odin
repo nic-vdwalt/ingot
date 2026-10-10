@@ -64,12 +64,7 @@ when !INGOT_GFX_SDL3 {
 		pending: [16]x11.XEvent
 		count := 0
 		for count < len(pending) {
-			if !x11.CheckTypedWindowEvent(
-				g_dd_display,
-				window,
-				.ClientMessage,
-				&pending[count],
-			) {
+			if !x11.CheckTypedWindowEvent(g_dd_display, window, .ClientMessage, &pending[count]) {
 				break
 			}
 			message_type := pending[count].xclient.message_type

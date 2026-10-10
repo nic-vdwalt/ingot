@@ -231,8 +231,7 @@ when !INGOT_GFX_SDL3 {
 		_drop_hover_stage_context(owner, false)
 		view := _dd_unbind_owner(owner)
 		if view == nil do return
-		if g_dd_original_class != nil &&
-		   rawptr(NS.object_getClass(NS.id(view))) == g_dd_subclass {
+		if g_dd_original_class != nil && rawptr(NS.object_getClass(NS.id(view))) == g_dd_subclass {
 			object_setClass(view, g_dd_original_class)
 		}
 	}

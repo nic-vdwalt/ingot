@@ -186,12 +186,18 @@ load_sources :: proc(root: string, rel_paths: []string, report: ^Report) -> []So
 }
 
 // collect_odin_files walks `root/sub` and returns `.odin` paths relative to
-// `root`, sorted so output is deterministic across platforms.
+// `root`, slash-separated and sorted so output is deterministic across
+// platforms. The walk reports resolved paths, so `root` is resolved the same
+// way before relating them.
 collect_odin_files :: proc(root, sub: string) -> (files: [dynamic]string, ok: bool) {
 	assert(root != "", "collect_odin_files: empty root")
-	start := root
+	resolved_root := root
+	if absolute, abs_err := filepath.abs(root, context.temp_allocator); abs_err == nil {
+		resolved_root = absolute
+	}
+	start := resolved_root
 	if sub != "" {
-		joined, join_err := filepath.join({root, sub})
+		joined, join_err := filepath.join({resolved_root, sub})
 		if join_err != nil do return files, false
 		start = joined
 	}
@@ -206,12 +212,24 @@ collect_odin_files :: proc(root, sub: string) -> (files: [dynamic]string, ok: bo
 			continue
 		}
 		if !strings.has_suffix(info.name, ".odin") do continue
-		rel, rel_err := filepath.rel(root, info.fullpath)
+		rel, rel_err := filepath.rel(resolved_root, info.fullpath)
 		if rel_err != nil do continue
-		append(&files, strings.clone(rel))
+		append(&files, rel_slash(rel))
 	}
 	slice.sort(files[:])
 	return files, true
+}
+
+// rel_slash returns `path` with the platform separator replaced by `/`, so
+// relative paths compare equal to `git ls-files` output and to the
+// slash-keyed tables in every rule on every platform.
+rel_slash :: proc(path: string, allocator := context.allocator) -> string {
+	when filepath.SEPARATOR == '/' {
+		return strings.clone(path, allocator)
+	} else {
+		normalised, _ := strings.replace_all(path, filepath.SEPARATOR_STRING, "/", allocator)
+		return normalised
+	}
 }
 
 // filter_prefix keeps paths starting with any of `prefixes`; an empty

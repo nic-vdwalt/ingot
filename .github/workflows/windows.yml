@@ -55,6 +55,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Same policy as fetch_gh in linux.yml/macos.yml: five attempts with
+          # linear backoff; release assets need the octet-stream Accept header,
+          # tarball endpoints reject it (HTTP 415) so they pass $null.
+          function Get-GhAsset {
+            param([string]$Path, [string]$Out, [string]$Accept = "application/octet-stream")
+            for ($Attempt = 1; $Attempt -le 5; $Attempt++) {
+              if ($Accept) {
+                gh api $Path -H "Accept: $Accept" > $Out
+              } else {
+                gh api $Path > $Out
+              }
+              if ($LASTEXITCODE -eq 0) { return }
+              if ($Attempt -eq 5) { throw "download failed after $Attempt attempts: $Path" }
+              Write-Warning "download attempt $Attempt failed, retrying: $Path"
+              Start-Sleep -Seconds (($Attempt + 1) * 5)
+            }
+          }
           $OdinArchive = Join-Path $env:RUNNER_TEMP "odin.zip"
           $OlsArchive = Join-Path $env:RUNNER_TEMP "ols.zip"
           $WgpuArchive = Join-Path $env:RUNNER_TEMP "wgpu.zip"
@@ -62,18 +79,15 @@ jobs:
           $OlsRoot = Join-Path $env:RUNNER_TEMP "ols"
           $WgpuRoot = Join-Path $env:RUNNER_TEMP "wgpu"
           New-Item -ItemType Directory -Force -Path $OdinRoot, $OlsRoot, $WgpuRoot | Out-Null
-          gh api "repos/odin-lang/Odin/releases/assets/$env:ODIN_RELEASE_ASSET" `
-            -H "Accept: application/octet-stream" > $OdinArchive
-          gh api "repos/DanielGavin/ols/releases/assets/$env:OLS_ASSET" `
-            -H "Accept: application/octet-stream" > $OlsArchive
-          gh api "repos/gfx-rs/wgpu-native/releases/assets/$env:WGPU_ASSET" `
-            -H "Accept: application/octet-stream" > $WgpuArchive
+          Get-GhAsset "repos/odin-lang/Odin/releases/assets/$env:ODIN_RELEASE_ASSET" $OdinArchive
+          Get-GhAsset "repos/DanielGavin/ols/releases/assets/$env:OLS_ASSET" $OlsArchive
+          Get-GhAsset "repos/gfx-rs/wgpu-native/releases/assets/$env:WGPU_ASSET" $WgpuArchive
           Expand-Archive -Path $OdinArchive -DestinationPath $OdinRoot
           Expand-Archive -Path $OlsArchive -DestinationPath $OlsRoot
           Expand-Archive -Path $WgpuArchive -DestinationPath $WgpuRoot
           $OdinRoot = Join-Path $OdinRoot "dist"
           $SourceArchive = Join-Path $env:RUNNER_TEMP "odin-source.tar.gz"
-          gh api "repos/odin-lang/Odin/tarball/$env:ODIN_COMMIT" > $SourceArchive
+          Get-GhAsset "repos/odin-lang/Odin/tarball/$env:ODIN_COMMIT" $SourceArchive $null
           tar -xzf $SourceArchive -C $OdinRoot --strip-components=1
           Push-Location $OdinRoot
           git init

@@ -284,12 +284,24 @@ assertions_ordinary_array_index_is_still_an_index_risk :: proc(t: ^testing.T) {
 }
 
 @(test)
-assertions_masking_preserves_offsets :: proc(t: ^testing.T) {
-	source := "\tif v, ok := m[key]; ok do use(v)\n\tvalue := xs[i]\n"
-	masked := assert_mask_map_lookups(source, context.temp_allocator)
-	testing.expect_value(t, len(masked), len(source))
-	testing.expect(t, !strings.contains(masked, "[key]"))
-	testing.expect(t, strings.contains(masked, "[i]"))
+assertions_comma_ok_lookup_is_not_an_index_op :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+	source := assert_source(
+		"p :: proc(m: map[string]int, xs: []int, key: string, i: int) -> int {\n" +
+		"\tif v, ok := m[key]; ok do use(v)\n" +
+		"\tvalue := xs[i]\n" +
+		"\treturn value\n" +
+		"}\n",
+	)
+	procs := top_level_procs(source.file)
+	testing.expect_value(t, len(procs), 1)
+	if len(procs) == 0 do return
+	body := proc_body(&source, procs[0])
+	testing.expect_value(t, len(body.ops), 1)
+	if len(body.ops) == 0 do return
+	testing.expect_value(t, body.ops[0].target, "xs")
+	testing.expect_value(t, body.ops[0].expression, "i")
+	testing.expect_value(t, body.ops[0].kind, Index_Kind.Element)
 }
 
 @(test)
@@ -543,4 +555,177 @@ odingate_repo_root :: proc() -> string {
 	cleaned, clean_err := filepath.clean(joined, context.temp_allocator)
 	if clean_err != nil do return here
 	return cleaned
+}
+
+// --- AST parity ------------------------------------------------------------
+// Each test below records a verdict where the AST rule deliberately differs
+// from the retired text scan (see the migration notes in docs/testing.md).
+
+@(test)
+assertions_state_comparison_is_not_a_state_write :: proc(t: ^testing.T) {
+	source :=
+		"p :: proc(slot: ^Slot) -> bool {\n" +
+		"\tif slot == nil do return false\n" +
+		"\treturn slot.state == .Recording\n" +
+		"}\n"
+	testing.expect(t, .State not_in assert_risks(source))
+}
+
+@(test)
+assertions_deref_assignment_to_state_is_a_state_write :: proc(t: ^testing.T) {
+	source := "p :: proc(state: ^State) {\n\tassert(state != nil)\n\tstate^ = {}\n}\n"
+	testing.expect(t, .State in assert_risks(source))
+	expect_clean(t, assert_findings(source))
+}
+
+@(test)
+assertions_array_type_literal_is_not_an_index_risk :: proc(t: ^testing.T) {
+	source :=
+		"p :: proc(w, h: i32) -> [4]f32 {\n" +
+		"\treturn [4]f32{1.0 / f32(max(w, 1)), 1.0 / f32(max(h, 1)), 1, 0}\n" +
+		"}\n"
+	testing.expect(t, .Index not_in assert_risks(source))
+}
+
+@(test)
+assertions_map_type_in_make_is_not_an_index_risk :: proc(t: ^testing.T) {
+	source :=
+		"p :: proc() -> map[string]bool {\n" +
+		"\treturn make(map[string]bool, context.temp_allocator)\n" +
+		"}\n"
+	testing.expect(t, .Index not_in assert_risks(source))
+}
+
+@(test)
+assertions_deref_slice_is_an_index_risk :: proc(t: ^testing.T) {
+	source :=
+		"p :: proc(vertices: ^[8]f32) -> []f32 {\n" +
+		"\tassert(vertices != nil)\n" +
+		"\treturn vertices^[:]\n" +
+		"}\n"
+	testing.expect(t, .Index in assert_risks(source))
+}
+
+@(test)
+assertions_nested_subscript_yields_two_ops :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+	source := assert_source(
+		"p :: proc(pad: ^Pad, remap: [8]int, b: int) -> bool {\n" +
+		"\tassert(pad != nil)\n" +
+		"\tassert(b >= 0 && b < len(remap))\n" +
+		"\treturn pad.buttons[int(remap[b])]\n" +
+		"}\n",
+	)
+	procs := top_level_procs(source.file)
+	if len(procs) == 0 do return
+	body := proc_body(&source, procs[0])
+	testing.expect_value(t, len(body.ops), 2)
+	if len(body.ops) < 2 do return
+	testing.expect_value(t, body.ops[0].target, "pad.buttons")
+	testing.expect_value(t, body.ops[1].target, "remap")
+}
+
+@(test)
+assertions_c_calling_convention_is_detected_from_the_literal :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+	source := assert_source(
+		"cb :: proc \"c\" (p: ^int) {\n\tcontext = runtime.default_context()\n\tuse(p)\n}\n",
+	)
+	procs := top_level_procs(source.file)
+	if len(procs) == 0 do return
+	body := proc_body(&source, procs[0])
+	testing.expect(t, body.is_c)
+	testing.expect(t, body.has_pointer_param)
+	testing.expect(t, .Pointer not_in assert_risks_for(&body))
+}
+
+@(test)
+assertions_multiline_assert_condition_is_read_whole :: proc(t: ^testing.T) {
+	source :=
+		"p :: proc(xs: []int, i: int) -> int {\n" +
+		"\tassert(\n" +
+		"\t\ti >= 0 &&\n" +
+		"\t\ti < len(xs),\n" +
+		"\t\t\"index\",\n" +
+		"\t)\n" +
+		"\treturn xs[i]\n" +
+		"}\n"
+	testing.expect(t, .Index in assert_risks(source))
+	expect_clean(t, assert_findings(source))
+}
+
+@(test)
+assertions_ternary_nil_guard_covers_pointer :: proc(t: ^testing.T) {
+	source :=
+		"p :: proc(request: ^Request) -> int {\n" +
+		"\tvalue := request.epoch if request != nil else 0\n" +
+		"\tlog(value)\n" +
+		"\treturn value\n" +
+		"}\n"
+	expect_clean(t, assert_findings(source))
+}
+
+@(test)
+assertions_return_validates_untrusted_read :: proc(t: ^testing.T) {
+	source :=
+		"p :: proc(path: string) -> ([]u8, bool) {\n" +
+		"\tdata, err := read_entire_file(path, context.temp_allocator)\n" +
+		"\treturn data, err == nil && len(data) > 0\n" +
+		"}\n"
+	testing.expect(t, .Untrusted_Input in assert_risks(source))
+	expect_clean(t, assert_findings(source))
+}
+
+@(test)
+assertions_dynamic_append_without_capacity_guard_is_flagged :: proc(t: ^testing.T) {
+	source :=
+		"p :: proc(layout: ^Layout, level: int) {\n" +
+		"\tassert(layout != nil)\n" +
+		"\tif level == 1 {\n" +
+		"\t\tappend(&layout.decorations, Decoration{})\n" +
+		"\t}\n" +
+		"}\n"
+	testing.expect(t, .Queue in first_risks(t, assert_findings(source)))
+	guarded :=
+		"p :: proc(layout: ^Layout, level: int) {\n" +
+		"\tassert(layout != nil)\n" +
+		"\tif len(layout.decorations) >= DECORATIONS_MAX do return\n" +
+		"\tif level == 1 {\n" +
+		"\t\tappend(&layout.decorations, Decoration{})\n" +
+		"\t}\n" +
+		"}\n"
+	expect_clean(t, assert_findings(guarded))
+}
+
+@(test)
+assertions_compile_time_assert_is_not_an_assertion :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+	source := assert_source(
+		"p :: proc() -> int {\n\t#assert(size_of(int) == 8)\n\tassert(true)\n\treturn 1\n}\n",
+	)
+	procs := top_level_procs(source.file)
+	if len(procs) == 0 do return
+	body := proc_body(&source, procs[0])
+	testing.expect_value(t, len(body.assertions), 1)
+}
+
+@(test)
+assertions_thin_forwarder_is_judged_on_statements :: proc(t: ^testing.T) {
+	context.allocator = context.temp_allocator
+	source := assert_source(
+		"p :: proc(ctx: ^Context, a: int) -> bool {\n" +
+		"\tresult := inner(ctx, a)\n" +
+		"\treturn finish(result)\n" +
+		"}\n",
+	)
+	procs := top_level_procs(source.file)
+	if len(procs) == 0 do return
+	body := proc_body(&source, procs[0])
+	risks := assert_risks_for(&body)
+	testing.expect(t, assert_is_thin_forwarder(&body, risks))
+	mutating := assert_source("q :: proc(ctx: ^Context) {\n\tctx.count = inner(ctx)\n}\n")
+	mprocs := top_level_procs(mutating.file)
+	if len(mprocs) == 0 do return
+	mbody := proc_body(&mutating, mprocs[0])
+	testing.expect(t, !assert_is_thin_forwarder(&mbody, assert_risks_for(&mbody)))
 }

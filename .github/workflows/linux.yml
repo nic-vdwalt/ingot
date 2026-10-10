@@ -63,11 +63,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # fetch_gh <api path> <out> [accept]: release assets need the
+          # octet-stream Accept header; tarball endpoints reject it (HTTP 415),
+          # so callers pass "" to omit it.
           fetch_gh() {
+            accept="${3-application/octet-stream}"
             attempt=1
             while :; do
-              if gh api "$1" -H "Accept: application/octet-stream" > "$2"; then
-                return 0
+              if [ -n "$accept" ]; then
+                gh api "$1" -H "Accept: $accept" > "$2" && return 0
+              else
+                gh api "$1" > "$2" && return 0
               fi
               if [ "$attempt" -ge 5 ]; then
                 echo "download failed after $attempt attempts: $1" >&2
@@ -101,11 +107,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # fetch_gh <api path> <out> [accept]: release assets need the
+          # octet-stream Accept header; tarball endpoints reject it (HTTP 415),
+          # so callers pass "" to omit it.
           fetch_gh() {
+            accept="${3-application/octet-stream}"
             attempt=1
             while :; do
-              if gh api "$1" -H "Accept: application/octet-stream" > "$2"; then
-                return 0
+              if [ -n "$accept" ]; then
+                gh api "$1" -H "Accept: $accept" > "$2" && return 0
+              else
+                gh api "$1" > "$2" && return 0
               fi
               if [ "$attempt" -ge 5 ]; then
                 echo "download failed after $attempt attempts: $1" >&2
@@ -125,7 +137,7 @@ jobs:
           fetch_gh "repos/gfx-rs/wgpu-native/releases/assets/$WGPU_ASSET" "$RUNNER_TEMP/wgpu.zip"
           mkdir "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
           unzip -q "$RUNNER_TEMP/wgpu.zip" -d "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
-          fetch_gh "repos/odin-lang/Odin/tarball/$ODIN_COMMIT" "$RUNNER_TEMP/odin-source.tar.gz"
+          fetch_gh "repos/odin-lang/Odin/tarball/$ODIN_COMMIT" "$RUNNER_TEMP/odin-source.tar.gz" ""
           tar -xzf "$RUNNER_TEMP/odin-source.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
           (cd "$RUNNER_TEMP/odin" && git init && git fetch --depth=1 https://github.com/odin-lang/Odin "$ODIN_COMMIT" && git reset FETCH_HEAD && LLVM_CONFIG=llvm-config-18 CXX=clang++-18 sh build_odin.sh release)
           sh "$RUNNER_TEMP/odin/vendor/miniaudio/src/build_miniaudio.sh"

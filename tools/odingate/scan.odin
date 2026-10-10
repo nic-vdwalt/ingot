@@ -1,6 +1,7 @@
 package odingate
 
 import "core:odin/ast"
+import "core:odin/tokenizer"
 import "core:strings"
 
 // A top-level procedure declaration with the spans the rules key on.
@@ -260,7 +261,7 @@ walk_body :: proc(
 	ast.walk(&visitor, lit.body)
 }
 
-// Expr_Collector gathers nodes of interest while walking; rules fill it with
+// Node_List gathers nodes of interest while walking; rules fill it with
 // one visitor and then run pure predicates over the lists, so the single
 // bounded walk is the only traversal.
 Node_List :: [dynamic]^ast.Node
@@ -344,19 +345,53 @@ line_count_of :: proc(text: string) -> int {
 // Body_Scan is the single bounded walk over a procedure body; rules then run
 // pure predicates over these lists instead of walking again.
 Body_Scan :: struct {
-	calls:   [dynamic]^ast.Call_Expr,
-	loops:   [dynamic]^ast.Node,
-	assigns: [dynamic]^ast.Assign_Stmt,
-	idents:  [dynamic]^ast.Ident,
+	calls:     [dynamic]^ast.Call_Expr,
+	loops:     [dynamic]^ast.Node,
+	assigns:   [dynamic]^ast.Assign_Stmt,
+	idents:    [dynamic]^ast.Ident,
+	ifs:       [dynamic]^ast.If_Stmt,
+	defers:    [dynamic]^ast.Defer_Stmt,
+	returns:   [dynamic]^ast.Return_Stmt,
+	branches:  [dynamic]^ast.Branch_Stmt,
+	indexes:   [dynamic]^ast.Index_Expr,
+	slices:    [dynamic]^ast.Slice_Expr,
+	decls:     [dynamic]^ast.Value_Decl,
+	binaries:  [dynamic]^ast.Binary_Expr,
+	casts:     [dynamic]^ast.Type_Cast,
+	dyn_types: [dynamic]^ast.Dynamic_Array_Type,
+	switches:  [dynamic]^ast.Node,
+	whens:     [dynamic]^ast.When_Stmt,
+	derefs:    [dynamic]^ast.Deref_Expr,
+	matrices:  [dynamic]^ast.Matrix_Index_Expr,
+	blocks:    [dynamic]^ast.Block_Stmt,
+	selectors: [dynamic]^ast.Selector_Expr,
+	ternaries: [dynamic]^ast.Ternary_If_Expr,
 }
 
 body_scan :: proc(root: ^ast.Node, allocator := context.allocator) -> Body_Scan {
 	assert(root != nil, "body_scan: nil root")
 	scan := Body_Scan {
-		calls   = make([dynamic]^ast.Call_Expr, allocator),
-		loops   = make([dynamic]^ast.Node, allocator),
-		assigns = make([dynamic]^ast.Assign_Stmt, allocator),
-		idents  = make([dynamic]^ast.Ident, allocator),
+		calls     = make([dynamic]^ast.Call_Expr, allocator),
+		loops     = make([dynamic]^ast.Node, allocator),
+		assigns   = make([dynamic]^ast.Assign_Stmt, allocator),
+		idents    = make([dynamic]^ast.Ident, allocator),
+		ifs       = make([dynamic]^ast.If_Stmt, allocator),
+		defers    = make([dynamic]^ast.Defer_Stmt, allocator),
+		returns   = make([dynamic]^ast.Return_Stmt, allocator),
+		branches  = make([dynamic]^ast.Branch_Stmt, allocator),
+		indexes   = make([dynamic]^ast.Index_Expr, allocator),
+		slices    = make([dynamic]^ast.Slice_Expr, allocator),
+		decls     = make([dynamic]^ast.Value_Decl, allocator),
+		binaries  = make([dynamic]^ast.Binary_Expr, allocator),
+		casts     = make([dynamic]^ast.Type_Cast, allocator),
+		dyn_types = make([dynamic]^ast.Dynamic_Array_Type, allocator),
+		switches  = make([dynamic]^ast.Node, allocator),
+		whens     = make([dynamic]^ast.When_Stmt, allocator),
+		derefs    = make([dynamic]^ast.Deref_Expr, allocator),
+		matrices  = make([dynamic]^ast.Matrix_Index_Expr, allocator),
+		blocks    = make([dynamic]^ast.Block_Stmt, allocator),
+		selectors = make([dynamic]^ast.Selector_Expr, allocator),
+		ternaries = make([dynamic]^ast.Ternary_If_Expr, allocator),
 	}
 	visitor := ast.Visitor {
 		visit = body_scan_visit,
@@ -379,8 +414,403 @@ body_scan_visit :: proc(v: ^ast.Visitor, node: ^ast.Node) -> ^ast.Visitor {
 		append(&scan.assigns, derived)
 	case ^ast.Ident:
 		append(&scan.idents, derived)
+	case ^ast.If_Stmt:
+		append(&scan.ifs, derived)
+	case ^ast.Defer_Stmt:
+		append(&scan.defers, derived)
+	case ^ast.Return_Stmt:
+		append(&scan.returns, derived)
+	case ^ast.Branch_Stmt:
+		append(&scan.branches, derived)
+	case ^ast.Index_Expr:
+		append(&scan.indexes, derived)
+	case ^ast.Slice_Expr:
+		append(&scan.slices, derived)
+	case ^ast.Value_Decl:
+		append(&scan.decls, derived)
+	case ^ast.Binary_Expr:
+		append(&scan.binaries, derived)
+	case ^ast.Type_Cast:
+		append(&scan.casts, derived)
+	case ^ast.Dynamic_Array_Type:
+		append(&scan.dyn_types, derived)
+	case ^ast.Switch_Stmt, ^ast.Type_Switch_Stmt:
+		append(&scan.switches, node)
+	case ^ast.When_Stmt:
+		append(&scan.whens, derived)
+	case ^ast.Deref_Expr:
+		append(&scan.derefs, derived)
+	case ^ast.Matrix_Index_Expr:
+		append(&scan.matrices, derived)
+	case ^ast.Block_Stmt:
+		append(&scan.blocks, derived)
+	case ^ast.Selector_Expr:
+		append(&scan.selectors, derived)
+	case ^ast.Ternary_If_Expr:
+		append(&scan.ternaries, derived)
 	}
 	return v
+}
+
+// Assertion is one runtime assertion statement (`assert`, `ensure`, or
+// `assert_contextless`) in a body. `#assert` is a compile-time directive and
+// is never collected.
+Assertion :: struct {
+	call:   ^ast.Call_Expr,
+	cond:   ^ast.Expr, // first argument; nil when the call has none
+	facts:  Expr_Facts,
+	offset: int,
+}
+
+ASSERTION_HEADS := [?]string{"assert", "ensure", "assert_contextless"}
+
+// is_assertion_call reports whether `call` is a runtime assertion head.
+is_assertion_call :: proc(call: ^ast.Call_Expr) -> bool {
+	if call == nil do return false
+	ident, ok := call.expr.derived_expr.(^ast.Ident)
+	if !ok do return false
+	for head in ASSERTION_HEADS do if ident.name == head do return true
+	return false
+}
+
+// collect_assertions lists the assertion calls in a scan in source order.
+collect_assertions :: proc(scan: ^Body_Scan, allocator := context.allocator) -> []Assertion {
+	assert(scan != nil, "collect_assertions: nil scan")
+	found := make([dynamic]Assertion, allocator)
+	for call in scan.calls {
+		if !is_assertion_call(call) do continue
+		cond: ^ast.Expr = len(call.args) > 0 ? call.args[0] : nil
+		append(&found, Assertion{call, cond, expr_facts(cond), call.pos.offset})
+	}
+	assert(len(found) <= len(scan.calls), "collect_assertions: more assertions than calls")
+	return found[:]
+}
+
+// --- expression predicates ------------------------------------------------
+
+// expr_mentions reports whether `name` appears as an identifier or selector
+// field anywhere under `expr`.
+expr_mentions :: proc(expr: ^ast.Expr, name: string) -> bool {
+	if expr == nil || name == "" do return false
+	probe := Expr_Mention {
+		name = name,
+	}
+	visitor := ast.Visitor {
+		visit = expr_mention_visit,
+		data  = &probe,
+	}
+	ast.walk(&visitor, expr)
+	return probe.found
+}
+
+@(private = "file")
+Expr_Mention :: struct {
+	name:  string,
+	found: bool,
+}
+
+@(private = "file")
+expr_mention_visit :: proc(v: ^ast.Visitor, node: ^ast.Node) -> ^ast.Visitor {
+	if node == nil do return nil
+	probe := cast(^Expr_Mention)v.data
+	if probe.found do return nil
+	#partial switch derived in node.derived {
+	case ^ast.Ident:
+		if derived.name == probe.name do probe.found = true
+	case ^ast.Selector_Expr:
+		if derived.field != nil && derived.field.name == probe.name do probe.found = true
+	}
+	return v
+}
+
+// expr_mentions_any reports whether any of `names` appears under `expr`.
+expr_mentions_any :: proc(expr: ^ast.Expr, names: []string) -> bool {
+	for name in names do if expr_mentions(expr, name) do return true
+	return false
+}
+
+// expr_same reports whether two expressions have the same source text with
+// whitespace collapsed; core:odin/ast has no structural equality.
+expr_same :: proc(source: ^Source, a, b: ^ast.Expr) -> bool {
+	if a == nil || b == nil do return false
+	return(
+		expr_source(source, a, context.temp_allocator) ==
+		expr_source(source, b, context.temp_allocator) \
+	)
+}
+
+// expr_unparen strips redundant parentheses.
+expr_unparen :: proc(expr: ^ast.Expr) -> ^ast.Expr {
+	current := expr
+	for _ in 0 ..< 64 {
+		paren, ok := current.derived_expr.(^ast.Paren_Expr)
+		if !ok do return current
+		current = paren.expr
+	}
+	return current
+}
+
+// expr_is_nil reports whether `expr` is the literal `nil`.
+expr_is_nil :: proc(expr: ^ast.Expr) -> bool {
+	if expr == nil do return false
+	ident, ok := expr_unparen(expr).derived_expr.(^ast.Ident)
+	return ok && ident.name == "nil"
+}
+
+// expr_nil_compare returns the non-nil operand of `x == nil` / `nil != x`.
+expr_nil_compare :: proc(expr: ^ast.Expr) -> (operand: ^ast.Expr, ok: bool) {
+	if expr == nil do return
+	binary, is_binary := expr_unparen(expr).derived_expr.(^ast.Binary_Expr)
+	if !is_binary do return
+	if binary.op.kind != .Cmp_Eq && binary.op.kind != .Not_Eq do return
+	if expr_is_nil(binary.right) do return binary.left, true
+	if expr_is_nil(binary.left) do return binary.right, true
+	return
+}
+
+// expr_has_nil_compare reports whether any `== nil`/`!= nil` sits under `expr`.
+expr_has_nil_compare :: proc(expr: ^ast.Expr) -> bool {
+	if expr == nil do return false
+	found := false
+	visitor := ast.Visitor {
+		visit = expr_nil_compare_visit,
+		data  = &found,
+	}
+	ast.walk(&visitor, expr)
+	return found
+}
+
+@(private = "file")
+expr_nil_compare_visit :: proc(v: ^ast.Visitor, node: ^ast.Node) -> ^ast.Visitor {
+	if node == nil do return nil
+	found := cast(^bool)v.data
+	if found^ do return nil
+	if binary, ok := node.derived.(^ast.Binary_Expr); ok {
+		if _, is_nil := expr_nil_compare(binary); is_nil do found^ = true
+	}
+	return v
+}
+
+// is_ordering_op reports `<`, `<=`, `>`, `>=`.
+is_ordering_op :: proc(kind: tokenizer.Token_Kind) -> bool {
+	#partial switch kind {
+	case .Lt, .Lt_Eq, .Gt, .Gt_Eq:
+		return true
+	}
+	return false
+}
+
+// is_comparison_op reports the ordering operators plus `==` and `!=`.
+is_comparison_op :: proc(kind: tokenizer.Token_Kind) -> bool {
+	return is_ordering_op(kind) || kind == .Cmp_Eq || kind == .Not_Eq
+}
+
+// expr_binaries lists every binary expression under `expr` whose operator
+// satisfies `accept`.
+expr_binaries :: proc(
+	expr: ^ast.Expr,
+	accept: proc(kind: tokenizer.Token_Kind) -> bool,
+	allocator := context.temp_allocator,
+) -> []^ast.Binary_Expr {
+	collector := Binary_Collector {
+		accept = accept,
+		found  = make([dynamic]^ast.Binary_Expr, allocator),
+	}
+	if expr == nil do return collector.found[:]
+	visitor := ast.Visitor {
+		visit = binary_collect_visit,
+		data  = &collector,
+	}
+	ast.walk(&visitor, expr)
+	return collector.found[:]
+}
+
+@(private = "file")
+Binary_Collector :: struct {
+	accept: proc(kind: tokenizer.Token_Kind) -> bool,
+	found:  [dynamic]^ast.Binary_Expr,
+}
+
+@(private = "file")
+binary_collect_visit :: proc(v: ^ast.Visitor, node: ^ast.Node) -> ^ast.Visitor {
+	if node == nil do return nil
+	collector := cast(^Binary_Collector)v.data
+	if binary, ok := node.derived.(^ast.Binary_Expr); ok && collector.accept(binary.op.kind) {
+		append(&collector.found, binary)
+	}
+	return v
+}
+
+// expr_ordering_against reports whether `expr` contains an ordering
+// comparison with `name` mentioned on either side.
+expr_ordering_against :: proc(expr: ^ast.Expr, name: string) -> bool {
+	for binary in expr_binaries(expr, is_ordering_op) {
+		if expr_mentions(binary.left, name) || expr_mentions(binary.right, name) do return true
+	}
+	return false
+}
+
+// expr_comparison_against reports whether `expr` contains any comparison with
+// `name` mentioned on either side.
+expr_comparison_against :: proc(expr: ^ast.Expr, name: string) -> bool {
+	for binary in expr_binaries(expr, is_comparison_op) {
+		if expr_mentions(binary.left, name) || expr_mentions(binary.right, name) do return true
+	}
+	return false
+}
+
+// expr_is_len_call reports whether `expr` is `len(x)`/`cap(x)` and returns
+// its argument.
+expr_is_len_call :: proc(expr: ^ast.Expr) -> (arg: ^ast.Expr, ok: bool) {
+	if expr == nil do return
+	call, is_call := expr_unparen(expr).derived_expr.(^ast.Call_Expr)
+	if !is_call || len(call.args) != 1 do return
+	_, name := callee_name(call)
+	if name != "len" && name != "cap" do return
+	return call.args[0], true
+}
+
+// expr_calls lists every call under `expr`.
+expr_calls :: proc(expr: ^ast.Expr, allocator := context.temp_allocator) -> []^ast.Call_Expr {
+	found := make([dynamic]^ast.Call_Expr, allocator)
+	if expr == nil do return found[:]
+	visitor := ast.Visitor {
+		visit = call_collect_visit,
+		data  = &found,
+	}
+	ast.walk(&visitor, expr)
+	return found[:]
+}
+
+@(private = "file")
+call_collect_visit :: proc(v: ^ast.Visitor, node: ^ast.Node) -> ^ast.Visitor {
+	if node == nil do return nil
+	found := cast(^[dynamic]^ast.Call_Expr)v.data
+	if call, ok := node.derived.(^ast.Call_Expr); ok do append(found, call)
+	return v
+}
+
+// expr_calls_named reports whether a call to `name` sits under `expr`.
+expr_calls_named :: proc(expr: ^ast.Expr, name: string) -> bool {
+	for call in expr_calls(expr) {
+		_, callee := callee_name(call)
+		if callee == name do return true
+	}
+	return false
+}
+
+// callee_has_prefix / callee_has_suffix test the unqualified callee name.
+callee_has_prefix :: proc(call: ^ast.Call_Expr, prefix: string) -> bool {
+	_, name := callee_name(call)
+	return name != "" && strings.has_prefix(name, prefix)
+}
+
+callee_has_suffix :: proc(call: ^ast.Call_Expr, suffix: string) -> bool {
+	_, name := callee_name(call)
+	return name != "" && strings.has_suffix(name, suffix)
+}
+
+// callee_is reports whether the unqualified callee name is one of `names`.
+callee_is :: proc(call: ^ast.Call_Expr, names: []string) -> bool {
+	_, name := callee_name(call)
+	if name == "" do return false
+	for candidate in names do if name == candidate do return true
+	return false
+}
+
+// node_contains reports whether `inner` lies within `outer`'s source span.
+node_contains :: proc(outer, inner: ^ast.Node) -> bool {
+	if outer == nil || inner == nil do return false
+	return inner.pos.offset >= outer.pos.offset && inner.end.offset <= outer.end.offset
+}
+
+// block_stmts returns the statements of a block, or a single-statement
+// slice for `do stmt` bodies.
+block_stmts :: proc(stmt: ^ast.Stmt) -> []^ast.Stmt {
+	if stmt == nil do return nil
+	if block, ok := stmt.derived_stmt.(^ast.Block_Stmt); ok do return block.stmts
+	return nil
+}
+
+// stmt_exits reports whether `stmt` is, or is a block containing at top
+// level, a return/break/continue.
+stmt_exits :: proc(stmt: ^ast.Stmt) -> bool {
+	if stmt == nil do return false
+	if stmt_is_exit(stmt) do return true
+	if block, ok := stmt.derived_stmt.(^ast.Block_Stmt); ok {
+		for inner in block.stmts do if stmt_is_exit(inner) do return true
+	}
+	return false
+}
+
+@(private = "file")
+stmt_is_exit :: proc(stmt: ^ast.Stmt) -> bool {
+	if stmt == nil do return false
+	#partial switch _ in stmt.derived_stmt {
+	case ^ast.Return_Stmt, ^ast.Branch_Stmt:
+		return true
+	}
+	return false
+}
+
+// Index_Lookup is a `v, ok := m[k]` comma-ok map lookup: the declaration's
+// single value is an index expression bound to two names.
+is_comma_ok_lookup :: proc(decl: ^ast.Value_Decl) -> (index: ^ast.Index_Expr, ok: bool) {
+	if decl == nil || len(decl.names) != 2 || len(decl.values) != 1 do return
+	index, ok = decl.values[0].derived_expr.(^ast.Index_Expr)
+	return
+}
+
+// decl_single_name returns the identifier of a one-name declaration.
+decl_single_name :: proc(decl: ^ast.Value_Decl) -> string {
+	if decl == nil || len(decl.names) != 1 do return ""
+	ident, ok := decl.names[0].derived_expr.(^ast.Ident)
+	return ok ? ident.name : ""
+}
+
+// decl_names lists every identifier a declaration binds.
+decl_names :: proc(decl: ^ast.Value_Decl, allocator := context.temp_allocator) -> []string {
+	names := make([dynamic]string, allocator)
+	if decl == nil do return names[:]
+	for name_expr in decl.names {
+		if ident, ok := name_expr.derived_expr.(^ast.Ident); ok do append(&names, ident.name)
+	}
+	return names[:]
+}
+
+// decl_call returns the call a declaration's single value is, if any.
+decl_call :: proc(decl: ^ast.Value_Decl) -> (call: ^ast.Call_Expr, ok: bool) {
+	if decl == nil || len(decl.values) != 1 do return
+	call, ok = expr_unparen(decl.values[0]).derived_expr.(^ast.Call_Expr)
+	return
+}
+
+// assign_call returns the call an assignment's single rhs is, if any.
+assign_call :: proc(assign: ^ast.Assign_Stmt) -> (call: ^ast.Call_Expr, ok: bool) {
+	if assign == nil || len(assign.rhs) != 1 do return
+	call, ok = expr_unparen(assign.rhs[0]).derived_expr.(^ast.Call_Expr)
+	return
+}
+
+// assign_lhs_names lists the leaf names an assignment writes.
+assign_lhs_leaves :: proc(
+	assign: ^ast.Assign_Stmt,
+	allocator := context.temp_allocator,
+) -> []string {
+	names := make([dynamic]string, allocator)
+	if assign == nil do return names[:]
+	for target in assign.lhs do append(&names, leaf_ident(target))
+	return names[:]
+}
+
+// proc_is_c reports a `proc "c"` calling convention; the parser keeps the
+// literal's quotes in the convention string.
+proc_is_c :: proc(lit: ^ast.Proc_Lit) -> bool {
+	if lit == nil || lit.type == nil do return false
+	convention, ok := lit.type.calling_convention.(string)
+	if !ok || len(convention) < 2 do return false
+	name := convention[1:len(convention) - 1]
+	return name == "c" || name == "cdecl"
 }
 
 // Expr_Facts summarises an expression subtree for the loop-bound predicate.
@@ -516,4 +946,90 @@ line_directive :: proc(source: ^Source, line: int) -> (kind, rationale: string, 
 	text := strings.trim_space(source.lines[line - 1])
 	if !strings.has_prefix(text, "//") do return
 	return tigerstyle_directive(text[2:])
+}
+
+// expr_has_expr reports whether `needle` occurs under `hay`: by identifier
+// or selector-field name when `needle` is a bare identifier, otherwise by
+// collapsed source text (core:odin/ast has no structural equality).
+expr_has_expr :: proc(source: ^Source, hay, needle: ^ast.Expr) -> bool {
+	if hay == nil || needle == nil do return false
+	if ident, ok := expr_unparen(needle).derived_expr.(^ast.Ident); ok {
+		return expr_mentions(hay, ident.name)
+	}
+	probe := Expr_Text_Probe {
+		source = source,
+		text   = expr_source(source, needle, context.temp_allocator),
+	}
+	visitor := ast.Visitor {
+		visit = expr_text_probe_visit,
+		data  = &probe,
+	}
+	ast.walk(&visitor, hay)
+	return probe.found
+}
+
+@(private = "file")
+Expr_Text_Probe :: struct {
+	source: ^Source,
+	text:   string,
+	found:  bool,
+}
+
+@(private = "file")
+expr_text_probe_visit :: proc(v: ^ast.Visitor, node: ^ast.Node) -> ^ast.Visitor {
+	if node == nil do return nil
+	probe := cast(^Expr_Text_Probe)v.data
+	if probe.found do return nil
+	#partial switch _ in node.derived {
+	case ^ast.Ident,
+	     ^ast.Selector_Expr,
+	     ^ast.Index_Expr,
+	     ^ast.Call_Expr,
+	     ^ast.Deref_Expr,
+	     ^ast.Paren_Expr,
+	     ^ast.Binary_Expr,
+	     ^ast.Unary_Expr,
+	     ^ast.Basic_Lit:
+		if expr_source(probe.source, node, context.temp_allocator) == probe.text do probe.found = true
+	}
+	return v
+}
+
+// node_mentions reports whether `name` appears as an identifier or selector
+// field anywhere under `node` (statement or expression).
+node_mentions :: proc(source: ^Source, node: ^ast.Node, name: string) -> bool {
+	if node == nil || name == "" do return false
+	probe := Expr_Mention {
+		name = name,
+	}
+	visitor := ast.Visitor {
+		visit = expr_mention_visit,
+		data  = &probe,
+	}
+	ast.walk(&visitor, node)
+	return probe.found
+}
+
+stmt_mentions :: proc(source: ^Source, stmt: ^ast.Stmt, name: string) -> bool {
+	return node_mentions(source, stmt, name)
+}
+
+// node_calls lists every call under `node`.
+node_calls :: proc(node: ^ast.Node, allocator := context.temp_allocator) -> []^ast.Call_Expr {
+	found := make([dynamic]^ast.Call_Expr, allocator)
+	if node == nil do return found[:]
+	visitor := ast.Visitor {
+		visit = call_collect_visit,
+		data  = &found,
+	}
+	ast.walk(&visitor, node)
+	return found[:]
+}
+
+stmt_calls_named :: proc(stmt: ^ast.Stmt, name: string) -> bool {
+	for call in node_calls(stmt) {
+		_, callee := callee_name(call)
+		if callee == name do return true
+	}
+	return false
 }

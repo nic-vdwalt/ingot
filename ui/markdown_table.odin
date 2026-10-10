@@ -419,6 +419,10 @@ markdown_layout_table_row_chrome :: proc(
 ) {
 	assert(layout != nil, "markdown_layout_table_row_chrome: nil layout")
 	assert(row_index >= 0 && row_index < row_count, "markdown_layout_table_row_chrome: bad row")
+	if len(layout.decorations) + 3 > MARKDOWN_LAYOUT_RUNS_MAX {
+		layout.status = .Truncated
+		return
+	}
 	if row_index > 0 && row_index % 2 == 0 {
 		append(
 			&layout.decorations,

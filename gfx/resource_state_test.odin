@@ -356,7 +356,7 @@ texture_slot_accounting_is_observable :: proc(t: ^testing.T) {
 // The tests below cannot observe that. They run after every @(init), so they
 // pin the outcome, not the ordering that produced it - an @(init) reading the
 // id too early would still find these green. The ordering itself is enforced
-// statically by scripts/check_init_order.py, which fails the build if any
+// statically by the `init-order` rule of tools/odingate, which fails the build if any
 // @(init) other than _default_context_init appears in gfx, and dynamically by
 // the assertions in context_id and _texture_slot_context.
 

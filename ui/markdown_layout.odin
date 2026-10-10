@@ -716,6 +716,10 @@ markdown_layout_heading :: proc(
 	if height == 0 do height = size + 4
 	layout.content_h += height
 	if heading.level == 1 {
+		if len(layout.decorations) >= MARKDOWN_LAYOUT_RUNS_MAX {
+			layout.status = .Truncated
+			return
+		}
 		append(
 			&layout.decorations,
 			Markdown_Layout_Decoration{{0, layout.content_h, layout.width, 1}, .Border},

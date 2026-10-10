@@ -11,8 +11,10 @@
 //
 // The file list comes from the shell (`git ls-files '*.odin'`) through
 // --files-from so this program never shells out; `-` reads the list from
-// stdin. Without --files-from the root is walked for `.odin` files, which
-// also sees untracked files, so gates should always pass the list explicitly.
+// stdin. Every rule, including ui-api-layers, consumes that list, so paths
+// are slash-separated on every platform. Without --files-from the root is
+// walked for `.odin` files, which also sees untracked files, so gates should
+// always pass the list explicitly.
 package odingate
 
 import "core:fmt"
