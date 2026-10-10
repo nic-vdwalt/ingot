@@ -13,6 +13,13 @@ concurrency:
   group: windows-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  # Upstream Odin commit behind ODIN_VERSION (dev-2026-10:93f71c2). Change both together.
+  ODIN_COMMIT: 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d
+  ODIN_RELEASE_ASSET: 615725640
+  OLS_ASSET: 487668593
+  WGPU_ASSET: 455571718
+
 jobs:
   windows:
     runs-on: windows-2022
@@ -34,7 +41,16 @@ jobs:
           $SdlRoot = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed/x64-windows"
           "LIB=$SdlRoot/lib;$env:LIB" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
           "$SdlRoot/bin" | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Install pinned Odin toolchain
+      - name: Restore pinned Odin toolchain
+        id: odin-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/odin
+            ${{ runner.temp }}/ols
+          key: odin-${{ runner.os }}-${{ env.ODIN_COMMIT }}-${{ env.ODIN_RELEASE_ASSET }}-${{ env.OLS_ASSET }}-${{ env.WGPU_ASSET }}-v1
+      - name: Build pinned Odin toolchain
+        if: steps.odin-cache.outputs.cache-hit != 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,22 +62,22 @@ jobs:
           $OlsRoot = Join-Path $env:RUNNER_TEMP "ols"
           $WgpuRoot = Join-Path $env:RUNNER_TEMP "wgpu"
           New-Item -ItemType Directory -Force -Path $OdinRoot, $OlsRoot, $WgpuRoot | Out-Null
-          gh api repos/odin-lang/Odin/releases/assets/615725640 `
+          gh api "repos/odin-lang/Odin/releases/assets/$env:ODIN_RELEASE_ASSET" `
             -H "Accept: application/octet-stream" > $OdinArchive
-          gh api repos/DanielGavin/ols/releases/assets/487668593 `
+          gh api "repos/DanielGavin/ols/releases/assets/$env:OLS_ASSET" `
             -H "Accept: application/octet-stream" > $OlsArchive
-          gh api repos/gfx-rs/wgpu-native/releases/assets/455571718 `
+          gh api "repos/gfx-rs/wgpu-native/releases/assets/$env:WGPU_ASSET" `
             -H "Accept: application/octet-stream" > $WgpuArchive
           Expand-Archive -Path $OdinArchive -DestinationPath $OdinRoot
           Expand-Archive -Path $OlsArchive -DestinationPath $OlsRoot
           Expand-Archive -Path $WgpuArchive -DestinationPath $WgpuRoot
           $OdinRoot = Join-Path $OdinRoot "dist"
           $SourceArchive = Join-Path $env:RUNNER_TEMP "odin-source.tar.gz"
-          gh api repos/odin-lang/Odin/tarball/93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d > $SourceArchive
+          gh api "repos/odin-lang/Odin/tarball/$env:ODIN_COMMIT" > $SourceArchive
           tar -xzf $SourceArchive -C $OdinRoot --strip-components=1
           Push-Location $OdinRoot
           git init
-          git fetch --depth=1 https://github.com/odin-lang/Odin 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d
+          git fetch --depth=1 https://github.com/odin-lang/Odin $env:ODIN_COMMIT
           if ($LASTEXITCODE -ne 0) { throw "Odin source fetch failed" }
           git reset FETCH_HEAD
           cmd /c build.bat release
@@ -73,8 +89,11 @@ jobs:
           Move-Item `
             (Join-Path $OlsRoot "odinfmt-x86_64-pc-windows-msvc.exe") `
             (Join-Path $OlsRoot "odinfmt.exe")
-          $OdinRoot | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          $OlsRoot | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Expose pinned Odin toolchain
+        shell: pwsh
+        run: |
+          (Join-Path $env:RUNNER_TEMP "odin/dist") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          (Join-Path $env:RUNNER_TEMP "ols") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Verify pinned Windows toolchain
         shell: pwsh
         run: |
@@ -96,6 +115,19 @@ jobs:
           }
           python scripts/check-toolchain.py
           odinfmt -help | Out-Null
+      - name: Run Windows strict gate
+        shell: pwsh
+        run: ./scripts/check.ps1
+      - name: Run Windows SDL3 strict gate
+        shell: pwsh
+        run: ./scripts/check.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
+      # The committed libvterm/lib/windows_amd64/vterm.lib predates the
+      # erase_internal and putglyph patches (docs/provenance/third-party-artifacts.json
+      # marks it stale), so tests need a rebuilt archive. The strict gates above
+      # run first because scripts/check-repository-hygiene.py compares that file
+      # against its recorded checksum and MSVC lib.exe output is not reproducible;
+      # rebuilding after the gates lets one archive serve both test passes with no
+      # restore step. See THIRD_PARTY_NOTICES.md for replacing the committed file.
       - name: Rebuild patched Windows libvterm
         shell: pwsh
         run: cmd /c scripts\build-libvterm.bat
@@ -118,24 +150,9 @@ jobs:
       - name: Run Windows native tests
         shell: pwsh
         run: ./scripts/test.ps1
-      - name: Restore committed Windows libvterm
-        shell: pwsh
-        run: git checkout -- libvterm/lib/windows_amd64/vterm.lib
-      - name: Run Windows strict gate
-        shell: pwsh
-        run: ./scripts/check.ps1
-      - name: Rebuild patched Windows libvterm for SDL3 tests
-        shell: pwsh
-        run: cmd /c scripts\build-libvterm.bat
       - name: Run Windows SDL3 tests
         shell: pwsh
         run: ./scripts/test.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
-      - name: Restore committed Windows libvterm after SDL3 tests
-        shell: pwsh
-        run: git checkout -- libvterm/lib/windows_amd64/vterm.lib
-      - name: Run Windows SDL3 strict gate
-        shell: pwsh
-        run: ./scripts/check.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
       - name: Upload bounded failure logs
         if: failure()
         uses: actions/upload-artifact@v4

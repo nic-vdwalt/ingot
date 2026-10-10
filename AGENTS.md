@@ -11,9 +11,7 @@ New subsystems are expected to preserve the four properties that make
 deterministic simulation cheap here: an explicit state-in/data-out boundary,
 nondeterminism confined to compile-gated simulation seams, bounded work with
 named upper bounds, and assertions plus inspectable derived output as oracles.
-`docs/testing.md` explains why, and forgecore's `docs/3d-content-pipeline-plan.md`
-(the 3D content pipeline now lives in `../forgecore`) is a worked example
-applied to a subsystem before it is written.
+`docs/testing.md` explains why.
 
 ## Packages
 
@@ -109,8 +107,8 @@ non-negotiables:
   target, not a padding quota. Use `assert` for debug checks, `ensure` for
   release-kept checks before unchecked use of untrusted-derived values, and
   `#assert` for compile-time relationships. Pair checks across real boundaries.
-  Changed/new risk-bearing procedures may not add uncovered debt; run
-  `scripts/check_assertions.py` through `scripts/check.sh`.
+  Changed/new risk-bearing procedures may not add uncovered debt; the
+  `odingate assertions` rule (`tools/odingate`) runs through `scripts/check.sh`.
 - **No recursion. Put a limit on everything** - every loop and queue has a fixed
   upper bound (see `term.TERM_PUMP_MAX_BUFS`) or an asserted exit invariant.
 - **Immediate-mode / static allocation**: callers own state and pass it each

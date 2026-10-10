@@ -13,6 +13,13 @@ concurrency:
   group: macos-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  # Upstream Odin commit behind ODIN_VERSION (dev-2026-10:93f71c2). Change both together.
+  ODIN_COMMIT: 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d
+  ODIN_RELEASE_ASSET: 615726666
+  OLS_ASSET: 487668580
+  WGPU_ASSET: 455571728
+
 jobs:
   macos:
     runs-on: macos-26
@@ -31,7 +38,16 @@ jobs:
           test -f libvterm/lib/darwin_arm64/libvterm.a
       - name: Install SDL3
         run: brew install sdl3
-      - name: Install pinned Odin toolchain
+      - name: Restore pinned Odin toolchain
+        id: odin-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/odin
+            ${{ runner.temp }}/ols
+          key: odin-${{ runner.os }}-${{ env.ODIN_COMMIT }}-${{ env.ODIN_RELEASE_ASSET }}-${{ env.OLS_ASSET }}-${{ env.WGPU_ASSET }}-v1
+      - name: Build pinned Odin toolchain
+        if: steps.odin-cache.outputs.cache-hit != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -51,23 +67,25 @@ jobs:
             done
           }
           mkdir "$RUNNER_TEMP/odin" "$RUNNER_TEMP/ols" "$RUNNER_TEMP/wgpu"
-          fetch_gh repos/odin-lang/Odin/releases/assets/615726666 "$RUNNER_TEMP/odin.tar.gz"
+          fetch_gh "repos/odin-lang/Odin/releases/assets/$ODIN_RELEASE_ASSET" "$RUNNER_TEMP/odin.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
-          fetch_gh repos/DanielGavin/ols/releases/assets/487668580 "$RUNNER_TEMP/ols.zip"
+          fetch_gh "repos/DanielGavin/ols/releases/assets/$OLS_ASSET" "$RUNNER_TEMP/ols.zip"
           unzip -q "$RUNNER_TEMP/ols.zip" -d "$RUNNER_TEMP/ols"
           mv "$RUNNER_TEMP/ols/odinfmt-arm64-darwin" "$RUNNER_TEMP/ols/odinfmt"
           chmod +x "$RUNNER_TEMP/ols/odinfmt"
-          fetch_gh repos/gfx-rs/wgpu-native/releases/assets/455571728 "$RUNNER_TEMP/wgpu.zip"
+          fetch_gh "repos/gfx-rs/wgpu-native/releases/assets/$WGPU_ASSET" "$RUNNER_TEMP/wgpu.zip"
           unzip -q "$RUNNER_TEMP/wgpu.zip" -d "$RUNNER_TEMP/wgpu"
           mkdir -p "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-macos-aarch64-release/lib"
           cp "$RUNNER_TEMP/wgpu/lib/"* \
             "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-macos-aarch64-release/lib/"
-          fetch_gh repos/odin-lang/Odin/tarball/93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d "$RUNNER_TEMP/odin-source.tar.gz"
+          fetch_gh "repos/odin-lang/Odin/tarball/$ODIN_COMMIT" "$RUNNER_TEMP/odin-source.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin-source.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
           brew install llvm@20
-          (cd "$RUNNER_TEMP/odin" && git init && git fetch --depth=1 https://github.com/odin-lang/Odin 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d && git reset FETCH_HEAD && LLVM_CONFIG="$(brew --prefix llvm@20)/bin/llvm-config" sh build_odin.sh release)
+          (cd "$RUNNER_TEMP/odin" && git init && git fetch --depth=1 https://github.com/odin-lang/Odin "$ODIN_COMMIT" && git reset FETCH_HEAD && LLVM_CONFIG="$(brew --prefix llvm@20)/bin/llvm-config" sh build_odin.sh release)
           sh "$RUNNER_TEMP/odin/vendor/miniaudio/src/build_miniaudio.sh"
           sh "$RUNNER_TEMP/odin/vendor/stb/src/build_stb.sh" unix
+      - name: Expose pinned Odin toolchain
+        run: |
           echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"
           echo "$RUNNER_TEMP/ols" >> "$GITHUB_PATH"
       - name: Verify pinned macOS toolchain

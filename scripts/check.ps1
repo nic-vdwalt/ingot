@@ -13,29 +13,47 @@ function Invoke-CheckedPython {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+# tools/odingate is the Odin-source gate on core:odin/parser: style, assertion
+# discipline, gfx context routing, UI API layers, and @(init) order all run
+# on the AST instead of regexes over masked text.
+$OdingateDir = Join-Path $env:TEMP "ingot-odingate"
+New-Item -ItemType Directory -Force -Path $OdingateDir | Out-Null
+$Odingate = Join-Path $OdingateDir "odingate.exe"
+$OdingateFiles = Join-Path $OdingateDir "files.txt"
+$env:INGOT_ODINGATE = $Odingate
+
+function Invoke-Odingate {
+    param([string[]]$Arguments)
+    & $Odingate @Arguments
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
 Write-Host "== Odin toolchain =="
 Invoke-CheckedPython "check_toolchain_test.py"
 Invoke-CheckedPython "check-toolchain.py"
+Write-Host "== building tools/odingate =="
+& odin build "$Root/tools/odingate" $Collection $Linker "-out:$Odingate" @OdinFlags
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& git -C $Root ls-files "*.odin" | Set-Content -Encoding ascii $OdingateFiles
+Write-Host "== odingate tests =="
+& odin test "$Root/tools/odingate" $Collection $Linker -define:ODIN_TEST_THREADS=1 @OdinFlags
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "== repository hygiene =="
 Invoke-CheckedPython "check_repository_hygiene_test.py"
 Invoke-CheckedPython "check-repository-hygiene.py"
 Write-Host "== consumer script contract =="
 Invoke-CheckedPython "consumer_contract_test.py"
 Write-Host "== gfx context ownership guard =="
-Invoke-CheckedPython "check_gfx_context_test.py"
-Invoke-CheckedPython "check_gfx_context.py" @($Root)
+Invoke-Odingate @("gfx-context", "--root", $Root, "--files-from", $OdingateFiles)
 Write-Host "== gfx @(init) ordering guard =="
-Invoke-CheckedPython "check_init_order_test.py"
-Invoke-CheckedPython "check_init_order.py" @($Root)
+Invoke-Odingate @("init-order", "--root", $Root, "--files-from", $OdingateFiles)
 Write-Host "== gfx expected-assert isolation guard =="
 Invoke-CheckedPython "check_gfx_expected_asserts_test.py"
 Invoke-CheckedPython "check_gfx_expected_asserts.py" @($Root)
 Write-Host "== assertion discipline =="
-Invoke-CheckedPython "check_assertions_test.py"
-Invoke-CheckedPython "check_assertions.py" @($Root)
+Invoke-Odingate @("assertions", "--root", $Root, "--files-from", $OdingateFiles)
 Write-Host "== UI API layers =="
-Invoke-CheckedPython "check_ui_api_layers_test.py"
-Invoke-CheckedPython "check_ui_api_layers.py" @($Root)
+Invoke-Odingate @("ui-api-layers", "--root", $Root, "--files-from", $OdingateFiles)
 Write-Host "== widget capabilities =="
 Invoke-CheckedPython "check_widget_capabilities_test.py"
 Invoke-CheckedPython "check_widget_capabilities.py"
@@ -89,8 +107,7 @@ foreach ($Package in $Manifest.hot_reload_packages) {
 Write-Host "== gate manifest =="
 Invoke-CheckedPython "gate_manifest_test.py"
 Write-Host "== Odin TigerStyle checks =="
-Invoke-CheckedPython "check_odin_style_test.py"
-Invoke-CheckedPython "check_odin_style.py" @("--baseline", "$PSScriptRoot/odin_style_baseline.json", $Root)
+Invoke-Odingate @("style", "--root", $Root, "--files-from", $OdingateFiles, "--baseline", "$PSScriptRoot/odin_style_baseline.json")
 Write-Host "== wasm bloat guard tests =="
 Invoke-CheckedPython "check_wasm_bloat_test.py"
 Write-Host "== odinfmt (verify formatting) =="

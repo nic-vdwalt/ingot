@@ -1,8 +1,5 @@
 {
   "python_flags": {
-    "check_assertions.py": ["--packages", "--baseline", "--measure"],
-    "check_odin_style.py": ["--baseline", "--print-procedures"],
-    "check_ui_api_layers.py": ["--consumer-root", "--binding-allow"],
     "test-supervisor.py": [
       "--package",
       "--timeout",
@@ -11,9 +8,34 @@
       "--retain-success-log"
     ]
   },
-  "shell_functions": {
-    "odin-toolchain.sh": ["ingot_use_pinned_odin"],
-    "sanitizer-toolchain.sh": ["ingot_use_sanitizer_clang"]
+  "odingate_flags": {
+    "style": [
+      "--baseline",
+      "--print-procedures"
+    ],
+    "assertions": [
+      "--packages",
+      "--baseline",
+      "--measure"
+    ],
+    "ui-api-layers": [
+      "--consumer-root",
+      "--binding-allow"
+    ]
   },
-  "shell_scripts": ["stage-web-runtime.sh"]
+  "shell_functions": {
+    "odin-toolchain.sh": [
+      "ingot_use_pinned_odin"
+    ],
+    "sanitizer-toolchain.sh": [
+      "ingot_use_sanitizer_clang"
+    ],
+    "odingate.sh": [
+      "ingot_build_odingate",
+      "ingot_odingate_files"
+    ]
+  },
+  "shell_scripts": [
+    "stage-web-runtime.sh"
+  ]
 }

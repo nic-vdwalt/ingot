@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Keep the scripts consumer repositories call from ingot stable.
 
-Consumers invoke these scripts from their own gates through a pinned ingot
-checkout, so removing a flag or function here breaks them only when they next
-bump the pin. scripts/consumer-contract.json lists what they rely on; this test
-fails the ingot gate instead. Removing an entry is a breaking change that needs
+Consumers invoke these scripts and `tools/odingate` rules from their own gates
+through a pinned ingot checkout, so removing a flag or function here breaks
+them only when they next bump the pin. scripts/consumer-contract.json lists
+what they rely on; this test fails the ingot gate instead. Removing an entry is a breaking change that needs
 a CHANGELOG note, see docs/consumer-gates.md.
 """
 
@@ -34,6 +34,16 @@ def help_options(script: str) -> set[str]:
     return set(OPTION.findall(result.stdout))
 
 
+def odingate_help_options(rule: str) -> set[str]:
+    binary = os.environ.get("INGOT_ODINGATE")
+    if not binary:
+        raise unittest.SkipTest("INGOT_ODINGATE is not set; run through scripts/check.sh")
+    result = subprocess.run([binary, rule, "--help"], capture_output=True, check=False, text=True)
+    if result.returncode != 0:
+        raise AssertionError(f"odingate {rule} --help exited {result.returncode}: {result.stderr}")
+    return set(OPTION.findall(result.stdout))
+
+
 def shell_functions(script: str) -> set[str]:
     source = (SCRIPTS / script).read_text(encoding="utf-8")
     return set(re.findall(r"^([A-Za-z_][A-Za-z0-9_]*)\s*\(\)\s*\{", source, re.M))
@@ -45,6 +55,12 @@ class ConsumerContractTest(unittest.TestCase):
             with self.subTest(script=script):
                 missing = set(flags) - help_options(script)
                 self.assertFalse(missing, f"{script} dropped consumer flags: {sorted(missing)}")
+
+    def test_odingate_rules_keep_their_flags(self):
+        for rule, flags in CONTRACT["odingate_flags"].items():
+            with self.subTest(rule=rule):
+                missing = set(flags) - odingate_help_options(rule)
+                self.assertFalse(missing, f"odingate {rule} dropped consumer flags: {sorted(missing)}")
 
     def test_shell_helpers_keep_their_functions(self):
         for script, functions in CONTRACT["shell_functions"].items():

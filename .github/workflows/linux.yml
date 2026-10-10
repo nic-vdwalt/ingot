@@ -13,10 +13,18 @@ concurrency:
   group: linux-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  # Upstream Odin commit behind ODIN_VERSION (dev-2026-10:93f71c2). Change both together.
+  ODIN_COMMIT: 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d
+  ODIN_RELEASE_ASSET: 615726879
+  OLS_ASSET: 487668598
+  WGPU_ASSET: 455571719
+  SDL_ASSET: 500597597
+
 jobs:
   linux:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Install Linux dependencies
@@ -42,7 +50,54 @@ jobs:
             libxcursor-dev \
             libxinerama-dev \
             libxss-dev
-      - name: Install pinned Odin toolchain
+      - name: Restore SDL3 build
+        id: sdl-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/sdl
+            ${{ runner.temp }}/sdl-build
+          key: sdl3-${{ runner.os }}-${{ env.SDL_ASSET }}-v1
+      - name: Build SDL3
+        if: steps.sdl-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          fetch_gh() {
+            attempt=1
+            while :; do
+              if gh api "$1" -H "Accept: application/octet-stream" > "$2"; then
+                return 0
+              fi
+              if [ "$attempt" -ge 5 ]; then
+                echo "download failed after $attempt attempts: $1" >&2
+                return 1
+              fi
+              echo "download attempt $attempt failed, retrying: $1" >&2
+              attempt=$((attempt + 1))
+              sleep $((attempt * 5))
+            done
+          }
+          fetch_gh "repos/libsdl-org/SDL/releases/assets/$SDL_ASSET" "$RUNNER_TEMP/sdl.tar.gz"
+          mkdir "$RUNNER_TEMP/sdl"
+          tar -xzf "$RUNNER_TEMP/sdl.tar.gz" -C "$RUNNER_TEMP/sdl" --strip-components=1
+          cmake -S "$RUNNER_TEMP/sdl" -B "$RUNNER_TEMP/sdl-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF
+          cmake --build "$RUNNER_TEMP/sdl-build"
+      - name: Install SDL3
+        run: |
+          sudo cmake --install "$RUNNER_TEMP/sdl-build"
+          sudo ldconfig
+      - name: Restore pinned Odin toolchain
+        id: odin-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/odin
+            ${{ runner.temp }}/ols
+          key: odin-${{ runner.os }}-${{ env.ODIN_COMMIT }}-${{ env.ODIN_RELEASE_ASSET }}-${{ env.OLS_ASSET }}-${{ env.WGPU_ASSET }}-v1
+      - name: Build pinned Odin toolchain
+        if: steps.odin-cache.outputs.cache-hit != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -62,27 +117,21 @@ jobs:
             done
           }
           mkdir "$RUNNER_TEMP/odin"
-          fetch_gh repos/odin-lang/Odin/releases/assets/615726879 "$RUNNER_TEMP/odin.tar.gz"
+          fetch_gh "repos/odin-lang/Odin/releases/assets/$ODIN_RELEASE_ASSET" "$RUNNER_TEMP/odin.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
-          fetch_gh repos/DanielGavin/ols/releases/assets/487668598 "$RUNNER_TEMP/ols.zip"
+          fetch_gh "repos/DanielGavin/ols/releases/assets/$OLS_ASSET" "$RUNNER_TEMP/ols.zip"
           unzip -q "$RUNNER_TEMP/ols.zip" -d "$RUNNER_TEMP/ols"
           mv "$RUNNER_TEMP/ols/odinfmt-x86_64-unknown-linux-gnu" "$RUNNER_TEMP/ols/odinfmt"
-          fetch_gh repos/gfx-rs/wgpu-native/releases/assets/455571719 "$RUNNER_TEMP/wgpu.zip"
+          fetch_gh "repos/gfx-rs/wgpu-native/releases/assets/$WGPU_ASSET" "$RUNNER_TEMP/wgpu.zip"
           mkdir "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
           unzip -q "$RUNNER_TEMP/wgpu.zip" -d "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
-          fetch_gh repos/libsdl-org/SDL/releases/assets/500597597 "$RUNNER_TEMP/sdl.tar.gz"
-          mkdir "$RUNNER_TEMP/sdl"
-          tar -xzf "$RUNNER_TEMP/sdl.tar.gz" -C "$RUNNER_TEMP/sdl" --strip-components=1
-          cmake -S "$RUNNER_TEMP/sdl" -B "$RUNNER_TEMP/sdl-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF
-          cmake --build "$RUNNER_TEMP/sdl-build"
-          sudo cmake --install "$RUNNER_TEMP/sdl-build"
-          sudo ldconfig
-          fetch_gh repos/odin-lang/Odin/tarball/93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d "$RUNNER_TEMP/odin-source.tar.gz"
+          fetch_gh "repos/odin-lang/Odin/tarball/$ODIN_COMMIT" "$RUNNER_TEMP/odin-source.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin-source.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
-          (cd "$RUNNER_TEMP/odin" && git init && git fetch --depth=1 https://github.com/odin-lang/Odin 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d && git reset FETCH_HEAD && LLVM_CONFIG=llvm-config-18 CXX=clang++-18 sh build_odin.sh release)
+          (cd "$RUNNER_TEMP/odin" && git init && git fetch --depth=1 https://github.com/odin-lang/Odin "$ODIN_COMMIT" && git reset FETCH_HEAD && LLVM_CONFIG=llvm-config-18 CXX=clang++-18 sh build_odin.sh release)
           sh "$RUNNER_TEMP/odin/vendor/miniaudio/src/build_miniaudio.sh"
           sh "$RUNNER_TEMP/odin/vendor/stb/src/build_stb.sh" unix
+      - name: Expose pinned Odin toolchain
+        run: |
           echo "$RUNNER_TEMP/odin" >> "$GITHUB_PATH"
           echo "$RUNNER_TEMP/ols" >> "$GITHUB_PATH"
       - name: Verify pinned Odin toolchain

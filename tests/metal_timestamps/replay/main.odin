@@ -666,6 +666,7 @@ iteration :: proc(r: ^Replay, iteration: int) -> bool {
 		ctx.device,
 		{mode = .AllowProcessEvents, callback = error_popped, userdata1 = &r.errors},
 	)
+	// tigerstyle: allow-unbounded-loop -- wgpu drives the pop callback to completion
 	for !r.errors.done do wg.InstanceProcessEvents(ctx.instance)
 	if len(r.errors.messages) > 0 {
 		for message in r.errors.messages {

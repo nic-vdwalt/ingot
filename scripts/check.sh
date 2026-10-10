@@ -23,6 +23,15 @@ echo "== Odin toolchain =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_toolchain_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check-toolchain.py"
 
+# tools/odingate is the Odin-source gate on core:odin/parser: style, assertion
+# discipline, gfx context routing, UI API layers, and @(init) order all run
+# on the AST instead of regexes over masked text.
+source "$root/scripts/odingate.sh"
+ingot_build_odingate "$root" "$@"
+odingate_files="$(ingot_odingate_files "$root")"
+echo "== odingate tests =="
+odin test "$root/tools/odingate" $col -define:ODIN_TEST_THREADS=1 "$@"
+
 # Type-check + vet every package. -vet-shadowing and -strict-style turn sloppy
 # code into build failures; -no-entry-point lets us check library packages that
 # have no main().
@@ -37,27 +46,23 @@ echo "== consumer script contract =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/consumer_contract_test.py"
 
 echo "== gfx context ownership guard =="
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context_test.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" "$root"
+"$INGOT_ODINGATE" gfx-context --root "$root" --files-from "$odingate_files"
 
 # @(init) order within a package is filename order, and gfx/context.odin does
 # not sort first. A second @(init) in gfx would run before the one that assigns
-# the default context id and read it as zero - see check_init_order.py.
+# the default context id and read it as zero - see tools/odingate/init_order.odin.
 echo "== gfx @(init) ordering guard =="
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_init_order_test.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_init_order.py" "$root"
+"$INGOT_ODINGATE" init-order --root "$root" --files-from "$odingate_files"
 
 echo "== gfx expected-assert isolation guard =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_expected_asserts_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_expected_asserts.py" "$root"
 
 echo "== assertion discipline =="
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions_test.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_assertions.py" "$root"
+"$INGOT_ODINGATE" assertions --root "$root" --files-from "$odingate_files"
 
 echo "== UI API layers =="
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_ui_api_layers_test.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_ui_api_layers.py" "$root"
+"$INGOT_ODINGATE" ui-api-layers --root "$root" --files-from "$odingate_files"
 
 echo "== widget capabilities =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_widget_capabilities_test.py"
@@ -148,10 +153,8 @@ echo "== gate manifest =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/gate_manifest_test.py"
 
 echo "== Odin TigerStyle checks =="
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_odin_style_test.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_odin_style.py" \
-	--baseline "$root/scripts/odin_style_baseline.json" \
-	"$root"
+"$INGOT_ODINGATE" style --root "$root" --files-from "$odingate_files" \
+	--baseline "$root/scripts/odin_style_baseline.json"
 
 # The guard itself runs in check-web.sh against a freshly built module; its
 # unit tests belong here with the other script tests, so a broken parser

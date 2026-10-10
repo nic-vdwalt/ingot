@@ -401,69 +401,105 @@ action :: proc {
 }
 
 @(private = "package")
-button_string :: proc(parent: Parent, key, label: string, options: Button_Options = {}) {
-	button_id(parent, id(parent, key), label, options)
+Button_Key :: union {
+	string,
+	u64,
+	Widget_Id,
 }
 
 @(private = "package")
-button_u64 :: proc(parent: Parent, key: u64, label: string, options: Button_Options = {}) {
-	button_id(parent, id(parent, key), label, options)
+button_key_resolve :: proc(parent: Parent, key: Button_Key) -> Widget_Id {
+	switch k in key {
+	case string:
+		return id(parent, k)
+	case u64:
+		return id(parent, k)
+	case Widget_Id:
+		return k
+	}
+	unreachable()
 }
 
 @(private = "package")
-button_id :: proc(parent: Parent, widget: Widget_Id, label: string, options: Button_Options = {}) {
+button_impl :: proc(parent: Parent, key: Button_Key, label: string, options: Button_Options) {
 	builder := parent_select(parent)
+	widget := button_key_resolve(parent, key)
 	ui.fit_builder_button(&builder.inner, ui.Widget_Id(widget), label, options)
 	parent_clear(builder)
 }
 
 @(private = "package")
+button_active_impl :: proc(parent: Parent, key: Button_Key, label: string, activated: ^bool) {
+	assert(activated != nil, "fit.button: nil activation destination")
+	button_impl(parent, key, label, {activated = activated})
+}
+
+@(private = "package")
+button_signal_impl :: proc(
+	parent: Parent,
+	key: Button_Key,
+	label: string,
+	signal: ^Signal,
+) -> bool {
+	assert(signal != nil, "fit.button: nil signal")
+	activated := signal_take(signal)
+	button_impl(parent, key, label, {activated = &signal.pending})
+	return activated
+}
+
+@(private = "package")
+button_string :: proc(parent: Parent, key, label: string, options: Button_Options = {}) {
+	button_impl(parent, key, label, options)
+}
+
+@(private = "package")
+button_u64 :: proc(parent: Parent, key: u64, label: string, options: Button_Options = {}) {
+	button_impl(parent, key, label, options)
+}
+
+@(private = "package")
+button_id :: proc(parent: Parent, widget: Widget_Id, label: string, options: Button_Options = {}) {
+	button_impl(parent, widget, label, options)
+}
+
+@(private = "package")
 button_string_action :: proc(parent: Parent, key, label: string, action: Action) {
-	button_string(parent, key, label, {action = action})
+	button_impl(parent, key, label, {action = action})
 }
 
 @(private = "package")
 button_string_active :: proc(parent: Parent, key, label: string, activated: ^bool) {
-	assert(activated != nil, "fit.button: nil activation destination")
-	button_string(parent, key, label, {activated = activated})
+	button_active_impl(parent, key, label, activated)
 }
 
 @(private = "package")
 button_u64_action :: proc(parent: Parent, key: u64, label: string, action: Action) {
-	button_u64(parent, key, label, {action = action})
+	button_impl(parent, key, label, {action = action})
 }
 
 @(private = "package")
 button_u64_active :: proc(parent: Parent, key: u64, label: string, activated: ^bool) {
-	assert(activated != nil, "fit.button: nil activation destination")
-	button_u64(parent, key, label, {activated = activated})
+	button_active_impl(parent, key, label, activated)
 }
 
 @(private = "package")
 button_id_action :: proc(parent: Parent, widget: Widget_Id, label: string, action: Action) {
-	button_id(parent, widget, label, {action = action})
+	button_impl(parent, widget, label, {action = action})
 }
 
 @(private = "package")
 button_id_active :: proc(parent: Parent, widget: Widget_Id, label: string, activated: ^bool) {
-	assert(activated != nil, "fit.button: nil activation destination")
-	button_id(parent, widget, label, {activated = activated})
+	button_active_impl(parent, widget, label, activated)
 }
 
 @(private = "package")
 button_string_signal :: proc(parent: Parent, key, label: string, signal: ^Signal) -> bool {
-	assert(signal != nil, "fit.button: nil signal")
-	activated := signal_take(signal)
-	button_string(parent, key, label, {activated = &signal.pending})
-	return activated
+	return button_signal_impl(parent, key, label, signal)
 }
 
 @(private = "package")
 button_u64_signal :: proc(parent: Parent, key: u64, label: string, signal: ^Signal) -> bool {
-	assert(signal != nil, "fit.button: nil signal")
-	activated := signal_take(signal)
-	button_u64(parent, key, label, {activated = &signal.pending})
-	return activated
+	return button_signal_impl(parent, key, label, signal)
 }
 
 @(private = "package")
@@ -473,10 +509,7 @@ button_id_signal :: proc(
 	label: string,
 	signal: ^Signal,
 ) -> bool {
-	assert(signal != nil, "fit.button: nil signal")
-	activated := signal_take(signal)
-	button_id(parent, widget, label, {activated = &signal.pending})
-	return activated
+	return button_signal_impl(parent, widget, label, signal)
 }
 
 button :: proc {

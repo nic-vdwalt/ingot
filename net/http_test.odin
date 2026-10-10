@@ -74,7 +74,7 @@ test_secure_request_header_bounds :: proc(t: ^testing.T) {
 	)
 	testing.expect_value(t, valid_err, Http_Error.None)
 	testing.expect(t, headers != nil)
-	if headers != nil do http_curl_slist_free_all(headers)
+	if headers != nil do curl_slist_free_all(headers)
 }
 
 @(test)

@@ -19,8 +19,8 @@ across the widget tree, each in a way that looked correct at its own call site:
 Each of those is invisible in review: a literal `1` is not obviously wrong
 until you know the surrounding convention. This script encodes the convention.
 
-The baseline is monotonic, matching `check_odin_style.py` and
-`check_gfx_context.py`: existing violations are recorded and may only
+The baseline is monotonic, matching `odingate style` and
+`odingate gfx-context`: existing violations are recorded and may only
 decrease. A file may not gain a violation, and an entry that has been fixed
 must be removed from the baseline so it cannot silently return.
 
@@ -38,7 +38,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import check_odin_style
+import odin_source
 
 # Test files describe behaviour rather than draw, and frequently need literal
 # colors to assert against.
@@ -137,7 +137,7 @@ def counts_for_source(source: str, path: str) -> dict[str, int]:
     """Count token violations in one file, keyed by "path:kind"."""
     # mask_source blanks comments and string literals, so a Color{...} inside
     # an explanatory comment is not counted as a violation.
-    masked = check_odin_style.mask_source(source)
+    masked = odin_source.mask_source(source)
     counts: dict[str, int] = {}
 
     if path not in PALETTE_FILES and path not in TOKEN_FILES:

@@ -230,8 +230,8 @@ Boundary types fall into two categories, and the category decides whether a
   engine, host, or renderer prefix, and `fit` would never want a different
   shape. `Color`, `Rect`, `Track`, `Space`, `Ink`, `Icon`, `Theme_Role`,
   `Pointer_Event`, `Table_Column`, `Modal_Close_Reason`, and `Action` are
-  vocabulary. Each alias is listed in `FIT_PUBLIC_ALIAS_ALLOW` in
-  `scripts/check_ui_api_layers.py`; adding one is a reviewed allowlist edit.
+  vocabulary. Each alias is listed in `UI_LAYERS_FIT_PUBLIC_ALIAS_ALLOW` in
+  `tools/odingate/ui_api_layers.odin`; adding one is a reviewed allowlist edit.
   Aliasing buys literal compatibility with `ui` and removes a converter.
 - **Engine, host, and renderer** types must be distinct projections or mapped
   enums, never aliases. These are `ui.Prepared_*` (layout engine), `ui.Ui_*`
@@ -240,9 +240,9 @@ Boundary types fall into two categories, and the category decides whether a
   `Graphics_Error`, `Session_Config`, `Frame_Diagnostics`, `Renderer_Peaks`,
   `Size_Options`, `Transition`, `Container_*`, `Flow_Options`, `Grid_Options`,
   `Attachment_Options`, and every `*_Options` that carries a `Size_Options` are
-  in this category. `FIT_ENGINE_TYPE` in `scripts/check_ui_api_layers.py`
-  rejects a public alias to any of those namespaces regardless of the
-  allowlist. Projecting buys insulation: the engine can add, rename, or remove
+  in this category. `UI_LAYERS_FIT_INTERNAL_NAMES` in
+  `tools/odingate/ui_api_layers.odin` rejects a public alias to any of those
+  namespaces regardless of the allowlist. Projecting buys insulation: the engine can add, rename, or remove
   backend fields and members without changing what a `fit` consumer compiles
   against, and `fit` may expose a selected field set rather than every backend
   field.

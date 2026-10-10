@@ -14,6 +14,18 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
 
 ### Removed
 
+- **Breaking:** the consumer gate scripts `scripts/check_assertions.py`,
+  `scripts/check_odin_style.py`, and `scripts/check_ui_api_layers.py` (and the
+  internal `check_gfx_context.py` and `check_init_order.py`) are replaced by
+  `tools/odingate`, an Odin program on `core:odin/parser` that checks the AST
+  instead of regexes over masked text. Build it with
+  `odin build tools/odingate -collection:ingot=<ingot>` and run
+  `odingate <rule> --root <root> --files-from <list>`; the rules are `style`,
+  `assertions`, `gfx-context`, `ui-api-layers`, and `init-order`, and the
+  consumer flags (`--baseline`, `--print-procedures`, `--packages`,
+  `--measure`, `--consumer-root`, `--binding-allow`) are unchanged. Output and
+  exit codes match the Python scripts byte for byte; `scripts/odingate.sh`
+  wraps the build for shell launchers.
 - **Breaking:** `ingot:asset`, `ingot:ecs`, `ingot:mesh`, `ingot:noise`,
   `ingot:scene`, and `ingot:scene_gfx` moved to forgecore as
   `forgecore:<name>` with unchanged package names and public symbols, together
@@ -77,6 +89,18 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
 
 ### Changed
 
+- `ingot:net` declares libcurl once in `net/curl_ffi.odin` (`Curl`,
+  `Curl_Code`, `CURL_*` options, `curl_*` procs) instead of duplicating the
+  `foreign import`, link lists, and option constants in `http_curl.odin` and
+  `ws_curl.odin`. The HTTP and WebSocket transports import the same symbols;
+  no public API changed.
+- `ingot:gfx` and `ingot:ui` split their largest files by responsibility with
+  no API change: `gfx/gpu3d_pipeline.odin` → `gpu3d_{types,target,geometry,
+  mesh_shader,pass,init}.odin`; `ui/prepared.odin` → `prepared_{types,build,
+  measure,place,render}.odin`; `ui/widgets.odin` → `widgets_{caret,button,
+  text,scroll,chrome}.odin`; `ui/markdown.odin` → `markdown_{types,parse,
+  table,draw,interact,prepared}.odin` with the `markdown_layout_*` block
+  builders now in `markdown_layout.odin`.
 - `ingot:gfx` native platform hooks now key their owner by window handle
   instead of a single process-wide owner. Metal presentation timing
   (`presentation_darwin.odin`) keeps a layer-to-context table and carries the

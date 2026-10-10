@@ -73,9 +73,9 @@ nobody modelled. Writing to these rules is what makes the harnesses in
 - **Never pad the metric.** Do not add tautologies, duplicate checks at the same
   boundary, or assertions for operating errors. Every changed or new
   risk-bearing procedure must instead encode its actual pointer, index, queue,
-  ownership, lifecycle, or untrusted-input contract. The structural gate in
-  `scripts/check_assertions.py` requires zero uncovered assertion risks; it has
-  no historical baseline or package/procedure exemptions.
+  ownership, lifecycle, or untrusted-input contract. The structural gate,
+  `odingate assertions` in `tools/odingate`, requires zero uncovered assertion
+  risks; it has no historical baseline or package/procedure exemptions.
 
 - Odin gives you several tools - use the right one:
   - `assert(cond)` / `assert(cond, "message")` - runtime precondition/invariant.
@@ -158,9 +158,9 @@ nobody modelled. Writing to these rules is what makes the harnesses in
     branch-free fragments down into pure helpers. "Push ifs up, push fors down."
   - Keep leaf helpers pure: let the parent own the mutable state and pass in
     what the helper needs.
-  - `scripts/check_odin_style.py` enforces this for authored source. Legacy
-    procedures in `scripts/odin_style_baseline.json` may only shrink; remove an
-    entry when its procedure reaches the limit.
+  - `odingate style` (`tools/odingate`) enforces this for authored source.
+    Legacy procedures in `scripts/odin_style_baseline.json` may only shrink;
+    remove an entry when its procedure reaches the limit.
 
 - **Handle every error / every returned `ok`.** The majority of catastrophic
   failures in real systems come from mishandled non-fatal errors. Never discard
@@ -237,7 +237,7 @@ nobody modelled. Writing to these rules is what makes the harnesses in
   exception is the `ingot:gfx` raylib migration facade: a PascalCase procedure
   there must carry a name that `vendor:raylib` declares.
   Ingot-only graphics capabilities use `context_*`, `frame_*`, or a plain
-  snake_case default-owner wrapper; `scripts/check_gfx_context.py` enforces it.
+  snake_case default-owner wrapper; `odingate gfx-context` enforces it.
 - Do not abbreviate, except a primitive integer used as a sort/loop index.
 - Proper capitalization for acronyms in types (`DPIScale`, not `DpiScale`).
 - Put **units and qualifiers last, most-significant first**: `latency_ms_max`,

@@ -45,7 +45,9 @@ run_supervised() {
 require_positive_integer INGOT_TEST_TIMEOUT_SECONDS "$timeout_seconds"
 require_positive_integer INGOT_TEST_OUTPUT_LIMIT_BYTES "$output_limit_bytes"
 "$root/scripts/check-ui-state.sh"
-PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_context.py" "$root"
+source "$root/scripts/odingate.sh"
+ingot_build_odingate "$root"
+"$INGOT_ODINGATE" gfx-context --root "$root" --files-from "$(ingot_odingate_files "$root")"
 has_define() {
 	local wanted="$1"
 	shift

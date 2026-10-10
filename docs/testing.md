@@ -150,7 +150,7 @@ requires zero ambiguous globals, active-context APIs, context scopes, internal
 default-context escapes, and implicit `ui_gfx` drawing. Measure its inventory with:
 
 ```sh
-python3 scripts/check_gfx_context.py --measure .
+odin run tools/odingate -collection:ingot=. -- gfx-context --root . --files-from <(git ls-files '*.odin') --measure
 ```
 
 The documented PascalCase compatibility facade and default constructors are
@@ -162,7 +162,7 @@ without a baseline; `--baseline` exists only as the consumer ratchet described i
 measurement with:
 
 ```sh
-python3 scripts/check_assertions.py --measure .
+odin run tools/odingate -collection:ingot=. -- assertions --root . --files-from <(git ls-files '*.odin') --measure
 ```
 
 Validate the browser target with:
@@ -198,10 +198,12 @@ Windows uses `scripts/test.ps1` and `scripts/check.ps1`. Both launchers consume
 supervisor, simulation defaults, timeout, output budget, and failure-log policy
 as Unix. `.github/workflows/windows.yml` runs on pushes to `main` and
 `develop` and on pull requests. It installs the pinned Odin toolchain and
-`odinfmt` from release assets, verifies them before any gate, and rebuilds the
-patched `libvterm/lib/windows_amd64/vterm.lib` with `scripts/build-libvterm.bat`
-for test runs; the committed archive is restored before the strict gate so the
-tree stays clean. It must never run with an ambient or unpinned toolchain.
+`odinfmt` from release assets, verifies them before any gate, runs both strict
+gates against the committed tree, and only then rebuilds the patched
+`libvterm/lib/windows_amd64/vterm.lib` with `scripts/build-libvterm.bat` for
+both test runs; the strict gate runs before the rebuild because the hygiene
+check compares the committed archive against its recorded checksum. It must
+never run with an ambient or unpinned toolchain.
 
 Validation runs use `scripts/validation-evidence.py` to emit bounded, redacted
 JSON and logs matching `docs/validation/schema.json`.
@@ -346,13 +348,10 @@ allocator play the same role for memory and concurrency errors, which have no
 natural in-language oracle at all.
 
 The consequence is that new subsystems should be designed to preserve these four
-properties rather than tested afterward. Forgecore's
-`docs/3d-content-pipeline-plan.md` (the pipeline moved to `../forgecore`)
-applies that rule to the asset and scene pipeline: import and cook are
-pure byte-to-data transforms, the draw list is bounded plain data, and the
-renderer-independent packages are forbidden from importing `ingot:gfx`, so
-almost the whole pipeline is reachable by the harness described here without a
-window.
+properties rather than tested afterward: pure byte-to-data transforms at the
+edges, bounded plain data in the middle, and renderer-independent packages
+forbidden from importing `ingot:gfx`, so the subsystem is reachable by the
+harness described here without a window.
 
 ## Why the UI harnesses are effective
 

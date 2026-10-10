@@ -31,6 +31,7 @@ fuzz_idle_animation_lifecycle :: proc(t: ^testing.T) {
 		}
 		testing.expect(t, anim == 1, "simulated animation failed to settle")
 		granted := 0
+		// tigerstyle: allow-unbounded-loop -- settle burst is bounded by IDLE_SETTLE_FRAMES
 		for _idle_take_frame(&s, 0) do granted += 1
 		testing.expect(t, granted <= IDLE_SETTLE_FRAMES, "settle burst overshot")
 		testing.expect(t, !_idle_take_frame(&s, 0), "pump failed to idle after settle")

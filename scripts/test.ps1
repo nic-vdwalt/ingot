@@ -19,7 +19,14 @@ function Invoke-Supervised {
 }
 
 & "$PSScriptRoot/check-ui-state.ps1"
-& python "$PSScriptRoot/check_gfx_context.py" "$Root"
+$OdingateDir = Join-Path $env:TEMP "ingot-odingate"
+New-Item -ItemType Directory -Force -Path $OdingateDir | Out-Null
+$Odingate = Join-Path $OdingateDir "odingate.exe"
+$OdingateFiles = Join-Path $OdingateDir "files.txt"
+& odin build "$Root/tools/odingate" $Collection $Linker "-out:$Odingate"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& git -C $Root ls-files "*.odin" | Set-Content -Encoding ascii $OdingateFiles
+& $Odingate gfx-context --root $Root --files-from $OdingateFiles
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($Package in $Manifest.test_packages) {
     Write-Host "== testing $Package =="

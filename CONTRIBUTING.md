@@ -6,9 +6,15 @@ API or architecture changes in an issue before investing in an implementation.
 
 ## Development setup
 
-Use the Odin revision recorded in `ODIN_VERSION` and put both `odin` and its
-bundled `odinfmt` on `PATH`. Clone the repository with its full contents, then
-run:
+Use the Odin revision recorded in `ODIN_VERSION` (`dev-2026-10:93f71c2`, built
+from upstream commit `93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d`). Install it at
+`../tools/odin-<release>` or `../tools/odin-<rev>` (currently
+`../tools/odin-93f71c2`) next to this checkout, or point `INGOT_ODIN_ROOT` at
+the install; `scripts/odin-toolchain.sh` puts that compiler ahead of any other
+`odin` on `PATH`, so a Homebrew or distribution Odin can coexist. Put the
+matching `odinfmt` from an ols release on `PATH` (for example `../ols`).
+`python3 scripts/check-toolchain.py` confirms the pin. Clone the repository
+with its full contents, then run:
 
 ```sh
 bash scripts/check.sh

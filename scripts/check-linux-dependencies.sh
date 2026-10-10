@@ -24,9 +24,7 @@ for command in odin odinfmt python3 cc ar pkg-config; do
 done
 
 if command -v odin >/dev/null 2>&1; then
-	expected="$(tr -d '\r\n' < "$root/ODIN_VERSION")"
-	actual="$(odin version | awk '{print $NF}')"
-	[ "$actual" = "$expected" ] || fail "Odin mismatch: expected $expected, got $actual"
+	python3 "$root/scripts/check-toolchain.py" || fail "Odin does not match ODIN_VERSION"
 
 	odin_root="$(dirname "$(dirname "$(command -v odin)")")"
 	wgpu_archive="$(find "$odin_root" -path '*vendor/wgpu/lib/wgpu-linux-*-release/lib/libwgpu_native.a' -print -quit 2>/dev/null || true)"

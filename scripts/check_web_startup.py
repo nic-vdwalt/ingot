@@ -38,7 +38,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import check_odin_style
+import odin_source
 
 # Host packages: these own an application's startup and frame loop, so a
 # readiness check here is a startup gate. gfx itself is exempt - that is where
@@ -75,9 +75,9 @@ def uses_for_source(source: str, path: str) -> list[Use]:
     calls context_live *instead of* context_ready, and matching that prose would
     make the guard fire on its own explanation.
     """
-    masked = check_odin_style.mask_source(source)
+    masked = odin_source.mask_source(source)
     return [
-        Use(path, check_odin_style.line_number(masked, match.start()))
+        Use(path, odin_source.line_number(masked, match.start()))
         for match in USE.finditer(masked)
     ]
 

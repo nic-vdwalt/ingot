@@ -51,7 +51,7 @@ they may rely on, and `scripts/consumer_contract_test.py` fails Ingot's own gate
 if any of them disappears. Removing an entry follows the same policy as a public
 API removal. Anything not listed is internal to Ingot's gates.
 
-`check_assertions.py --baseline FILE` is the consumer ratchet. Ingot's own gate
+`odingate assertions --baseline FILE` is the consumer ratchet. Ingot's own gate
 runs without a baseline and requires zero uncovered risks. A consumer that
 adopts the gate with existing debt records it in a baseline; the gate then
 fails on any new risk and on any entry that no longer applies.
@@ -169,8 +169,8 @@ must carry a name that `vendor:raylib` declares; Ingot-only capabilities use
 snake_case wrapper over the default owner, such as `set_frame_strategy`,
 `request_redraw`, or `update_texture_checked`. The former Ingot-only
 PascalCase names were removed in `0.3.0`; see the changelog for the mapping.
-`scripts/check_gfx_context.py` reads the raylib vocabulary from the pinned
-toolchain and rejects any other exported PascalCase procedure.
+`odingate gfx-context` reads the raylib vocabulary from the pinned toolchain
+and rejects any other exported PascalCase procedure.
 
 Native 3D picking follows the same rule: `screen_to_world_ray`,
 `intersect_plane`, `intersect_sphere`, and `intersect_bounds` are snake_case

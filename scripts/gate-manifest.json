@@ -13,7 +13,8 @@
     "prefs",
     "net",
     "testx",
-    "fuzz/fuzzx"
+    "fuzz/fuzzx",
+    "tools/odingate"
   ],
   "check_packages": [
     "action",
@@ -30,7 +31,8 @@
     "sys",
     "pty",
     "testx",
-    "fuzz/fuzzx"
+    "fuzz/fuzzx",
+    "tools/odingate"
   ],
   "binding_packages": [
     "libvterm",

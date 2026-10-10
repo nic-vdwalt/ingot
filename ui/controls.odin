@@ -254,16 +254,16 @@ checkbox_at :: proc(
 			s := f32(box)
 			draw_line_ex(
 				frame,
-				{cx + s * 0.22, cy + s * 0.52},
-				{cx + s * 0.44, cy + s * 0.74},
-				2.0,
+				{cx + s * CHECK_MARK_START.x, cy + s * CHECK_MARK_START.y},
+				{cx + s * CHECK_MARK_MID.x, cy + s * CHECK_MARK_MID.y},
+				metrics.CHECK_STROKE_W,
 				style.button_text,
 			)
 			draw_line_ex(
 				frame,
-				{cx + s * 0.44, cy + s * 0.74},
-				{cx + s * 0.80, cy + s * 0.28},
-				2.0,
+				{cx + s * CHECK_MARK_MID.x, cy + s * CHECK_MARK_MID.y},
+				{cx + s * CHECK_MARK_END.x, cy + s * CHECK_MARK_END.y},
+				metrics.CHECK_STROKE_W,
 				style.button_text,
 			)
 		}
@@ -388,7 +388,7 @@ radio_at :: proc(
 	draw_circle_v(frame, {ccx, ccy}, r, style.bg_input)
 	draw_circle_lines_v(frame, {ccx, ccy}, r, border)
 	if is_on {
-		draw_circle_v(frame, {ccx, ccy}, r * 0.45, style.fg_accent)
+		draw_circle_v(frame, {ccx, ccy}, r * RADIO_DOT_RATIO, style.fg_accent)
 	}
 	if focus_opt_focused(focus) {
 		draw_focus_ring(frame, rect.x, rect.y + (rect.h - box) / 2, box, box)
@@ -683,7 +683,7 @@ slider_resolve_and_paint :: proc(
 		knob_col := color_mix(style.fg_secondary, style.fg_accent, emphasis)
 		draw_circle_v(frame, {knob_x, cy}, knob_r, style.bg_input)
 		draw_circle_lines_v(frame, {knob_x, cy}, knob_r, knob_col)
-		draw_circle_v(frame, {knob_x, cy}, knob_r * 0.55, knob_col)
+		draw_circle_v(frame, {knob_x, cy}, knob_r * SLIDER_KNOB_DOT_RATIO, knob_col)
 		if focus_opt_focused(focus) {
 			draw_focus_ring(frame, rect.x, rect.y, rect.w, rect.h)
 		}

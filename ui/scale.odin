@@ -34,6 +34,7 @@ Ui_Metrics :: struct {
 	CONTROL_GAP:     i32,
 	SLIDER_TRACK_H:  i32,
 	SLIDER_KNOB_R:   f32,
+	CHECK_STROKE_W:  f32,
 	MENU_ITEM_H:     i32,
 	MENU_PAD:        i32,
 	MENU_MIN_W:      i32,
@@ -65,6 +66,7 @@ ui_metrics :: proc(scale: f32) -> Ui_Metrics {
 		CONTROL_GAP = si(8, s),
 		SLIDER_TRACK_H = si(4, s),
 		SLIDER_KNOB_R = 7 * s,
+		CHECK_STROKE_W = 2 * s,
 		MENU_ITEM_H = si(26, s),
 		MENU_PAD = si(4, s),
 		MENU_MIN_W = si(160, s),
@@ -75,6 +77,13 @@ ui_metrics :: proc(scale: f32) -> Ui_Metrics {
 		SPLIT_DIVIDER_W = si(4, s),
 	}
 }
+
+// Control geometry ratios relative to CONTROL_BOX / knob radius (not pixel sizes).
+CHECK_MARK_START :: [2]f32{0.22, 0.52}
+CHECK_MARK_MID :: [2]f32{0.44, 0.74}
+CHECK_MARK_END :: [2]f32{0.80, 0.28}
+RADIO_DOT_RATIO :: f32(0.45)
+SLIDER_KNOB_DOT_RATIO :: f32(0.55)
 
 ui_runtime_scale :: proc(runtime: ^Ui_Runtime) -> f32 {
 	assert(runtime != nil, "ui_runtime_scale: nil runtime")

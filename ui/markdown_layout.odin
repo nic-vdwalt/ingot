@@ -327,11 +327,6 @@ markdown_layout_run_color :: proc(
 	return base
 }
 
-markdown_table_stripe_color :: proc(theme: ^Theme) -> Color {
-	assert(theme != nil, "markdown_table_stripe_color: nil theme")
-	header := theme.bg_table_header
-	return Color{header.r, header.g, header.b, header.a / 2}
-}
 
 markdown_layout_draw :: proc(
 	ctx: ^Markdown_Context,
@@ -442,4 +437,324 @@ markdown_layout_draw_run :: proc(
 	text_c := strings.clone_to_cstring(text, context.temp_allocator)
 	if run.style == .Bold do draw_text_frame(ctx.frame, text_c, x + 1, y, run.font_size, color)
 	draw_text_frame(ctx.frame, text_c, x, y, run.font_size, color)
+}
+
+// Like measure_wrapped_height but strips ** markers for wrapping calculations.
+measure_wrapped_height_md :: proc(
+	ctx: ^Markdown_Context,
+	text: string,
+	max_width: i32,
+	font_size: i32,
+) -> i32 {
+	assert(ctx != nil, "measure_wrapped_height_md: nil ctx")
+	if len(text) == 0 do return 0
+
+	// Fast path: no inline markers.
+	if !strings.contains(text, "**") &&
+	   strings.index_byte(text, PILL_OPEN) < 0 &&
+	   strings.index_byte(text, '`') < 0 {
+		return wrapped_height_px_frame(
+			ctx.frame,
+			text,
+			max_width,
+			font_size,
+			ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+		)
+	}
+
+	spans := frame_view_items(ctx.frame, parse_inline_spans(ctx.frame, text))
+	display_text := frame_string_value(ctx.frame, spans_display_string(ctx.frame, spans))
+	return wrapped_height_px_frame(
+		ctx.frame,
+		display_text,
+		max_width,
+		font_size,
+		ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+	)
+}
+
+// Get font size for a heading level.
+heading_font_size :: proc(ctx: ^Markdown_Context, level: int) -> i32 {
+	assert(ctx != nil, "heading_font_size: nil ctx")
+	switch level {
+	case 1:
+		return ui_frame_metrics(ctx.frame).FONT_SIZE_TITLE + 6 // 26
+	case 2:
+		return ui_frame_metrics(ctx.frame).FONT_SIZE_TITLE + 2 // 22
+	case:
+		return ui_frame_metrics(ctx.frame).FONT_SIZE_TITLE // 20
+	}
+}
+
+// Get the wrapped line advance for a heading level.
+//
+// Why not LINE_HEIGHT: that metric is tuned for FONT_SIZE_BODY (22 for 16px).
+// A level-1 heading is 26px, so body line height clips its descenders and packs
+// multi-line headings tighter than body text. Scale the body ratio by the
+// heading's own size, and never advance less than the glyphs occupy.
+heading_line_height :: proc(ctx: ^Markdown_Context, level: int) -> i32 {
+	assert(ctx != nil, "heading_line_height: nil ctx")
+	metrics := ui_frame_metrics(ctx.frame)
+	assert(metrics.FONT_SIZE_BODY > 0, "heading_line_height: invalid body metric")
+	size := heading_font_size(ctx, level)
+	height := (size * metrics.LINE_HEIGHT + metrics.FONT_SIZE_BODY / 2) / metrics.FONT_SIZE_BODY
+	if height < size + 1 do height = size + 1
+	assert(height > 0, "heading_line_height: non-positive height")
+	return height
+}
+
+// Get total height consumed by a heading (wrapped text + padding + rule + margin).
+heading_total_height :: proc(
+	ctx: ^Markdown_Context,
+	heading_text: string,
+	level: int,
+	max_width: i32,
+) -> i32 {
+	assert(ctx != nil, "heading_total_height: nil ctx")
+	fs := heading_font_size(ctx, level)
+	text_h := wrapped_height_px_frame(
+		ctx.frame,
+		heading_text,
+		max_width,
+		fs,
+		heading_line_height(ctx, level),
+	)
+	if text_h == 0 do text_h = fs + 4
+	h := text_h
+	switch level {
+	case 1:
+		h += 1 + 8 // 1px rule + 8px margin
+	case 2:
+		h += 6 // 6px margin
+	case:
+		h += 4 // 4px margin
+	}
+	return h
+}
+
+// Measure the height that draw_text_wrapped would produce.
+measure_wrapped_height :: proc(
+	ctx: ^Markdown_Context,
+	text: string,
+	max_width: i32,
+	font_size: i32,
+) -> i32 {
+	assert(ctx != nil, "measure_wrapped_height: nil ctx")
+	return wrapped_height_px_frame(
+		ctx.frame,
+		text,
+		max_width,
+		font_size,
+		ui_frame_metrics(ctx.frame).LINE_HEIGHT,
+	)
+}
+
+markdown_layout_prepare :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	width: i32,
+	source: string,
+) -> Markdown_Prepare_Status {
+	assert(ctx != nil && ctx.frame != nil && ctx.frame.open)
+	assert(layout != nil && layout.initialized && width > 0)
+	source_end := min(len(source), MARKDOWN_LAYOUT_SOURCE_MAX)
+	for source_end > 0 && source_end < len(source) && (u8(source[source_end]) & 0xc0) == 0x80 {
+		source_end -= 1
+	}
+	owned_source := strings.clone(source[:source_end], layout.allocator)
+	delete(layout.source, layout.allocator)
+	layout.source = owned_source
+	clear(&layout.text)
+	clear(&layout.runs)
+	clear(&layout.stops)
+	clear(&layout.decorations)
+	clear(&layout.blocks)
+	layout.width, layout.content_w, layout.content_h = width, 0, 0
+	layout.trailing_hit_height = ui_frame_metrics(ctx.frame).LINE_HEIGHT
+	layout.status = .Truncated if len(source) > MARKDOWN_LAYOUT_SOURCE_MAX else .Complete
+	position := 0
+	in_code := false
+	for position < len(layout.source) {
+		newline := strings.index_byte(layout.source[position:], '\n')
+		end := len(layout.source) if newline < 0 else position + newline
+		line := layout.source[position:end]
+		block_y := layout.content_h
+		next := end + 1
+		if is_code_fence(line) {
+			decoration_y := layout.content_h + (2 if !in_code else 0)
+			append(
+				&layout.decorations,
+				Markdown_Layout_Decoration{{0, decoration_y, width, 1}, .Border},
+			)
+			layout.content_h += 6 if !in_code else 8
+			in_code = !in_code
+		} else if in_code {
+			markdown_layout_code(ctx, layout, line, position)
+		} else if heading, ok := match_heading(line); ok {
+			markdown_layout_heading(ctx, layout, heading, position)
+		} else if len(line) >= 2 &&
+		   (line[0] == '-' || line[0] == '*' || line[0] == '+') &&
+		   line[1] == ' ' {
+			markdown_layout_bullet(ctx, layout, line, position)
+		} else if table_next, handled := markdown_layout_table(ctx, layout, line, position, end);
+		   handled {
+			next = table_next
+		} else if len(line) == 0 {
+			layout.content_h += ui_frame_metrics(ctx.frame).LINE_HEIGHT / 2
+		} else {
+			metrics := ui_frame_metrics(ctx.frame)
+			layout.content_h += markdown_layout_add_text(
+				ctx,
+				layout,
+				line,
+				position,
+				0,
+				layout.content_h,
+				width,
+				metrics.FONT_SIZE_BODY,
+				metrics.LINE_HEIGHT,
+				.Body,
+				true,
+			)
+		}
+		assert(next > position)
+		append(
+			&layout.blocks,
+			Markdown_Layout_Block{position, next, block_y, end, layout.content_h},
+		)
+		position = next
+		if len(layout.runs) >= MARKDOWN_LAYOUT_RUNS_MAX ||
+		   len(layout.stops) >= MARKDOWN_LAYOUT_STOPS_MAX ||
+		   len(layout.decorations) >= MARKDOWN_LAYOUT_RUNS_MAX {
+			layout.status = .Truncated
+			break
+		}
+	}
+	when UI_TELEMETRY_ENABLED {
+		ctx.frame.markdown_telemetry.preparations += 1
+		ctx.frame.markdown_telemetry.layout_walks += 1
+	}
+	return layout.status
+}
+
+markdown_layout_code :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	line: string,
+	start: int,
+) {
+	assert(ctx != nil && layout != nil)
+	assert(start >= 0 && start <= len(layout.source))
+	if len(layout.decorations) + 2 > MARKDOWN_LAYOUT_RUNS_MAX {
+		layout.status = .Truncated
+		return
+	}
+	metrics := ui_frame_metrics(ctx.frame)
+	height := metrics.LINE_HEIGHT
+	append(
+		&layout.decorations,
+		Markdown_Layout_Decoration{{0, layout.content_h, layout.width, height}, .Code_Background},
+	)
+	append(
+		&layout.decorations,
+		Markdown_Layout_Decoration{{0, layout.content_h, 2, height}, .Code_Edge},
+	)
+	text := truncate_to_width_frame(
+		ctx.frame,
+		line,
+		max(layout.width - metrics.CODE_BLOCK_PAD * 2, 1),
+		metrics.FONT_SIZE_BODY,
+	)
+	markdown_layout_add_run(
+		ctx,
+		layout,
+		text,
+		start,
+		metrics.CODE_BLOCK_PAD,
+		layout.content_h,
+		metrics.FONT_SIZE_BODY,
+		height,
+		.Primary,
+	)
+	layout.content_w = max(
+		layout.content_w,
+		min(
+			measure_text_frame(
+				ctx.frame,
+				strings.clone_to_cstring(line, context.temp_allocator),
+				metrics.FONT_SIZE_BODY,
+			),
+			layout.width - metrics.CODE_BLOCK_PAD * 2,
+		) +
+		metrics.CODE_BLOCK_PAD * 2,
+	)
+	layout.content_h += height
+}
+
+markdown_layout_heading :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	heading: Heading_Match,
+	start: int,
+) {
+	assert(ctx != nil && layout != nil)
+	assert(heading.level >= 1 && heading.level <= 3)
+	size := heading_font_size(ctx, heading.level)
+	height := markdown_layout_add_text(
+		ctx,
+		layout,
+		heading.text,
+		start + heading.prefix_len,
+		0,
+		layout.content_h,
+		layout.width,
+		size,
+		heading_line_height(ctx, heading.level),
+		.Heading,
+		false,
+	)
+	if height == 0 do height = size + 4
+	layout.content_h += height
+	if heading.level == 1 {
+		append(
+			&layout.decorations,
+			Markdown_Layout_Decoration{{0, layout.content_h, layout.width, 1}, .Border},
+		)
+		layout.content_h += 9
+	} else {
+		layout.content_h += 6 if heading.level == 2 else 4
+	}
+}
+
+markdown_layout_bullet :: proc(
+	ctx: ^Markdown_Context,
+	layout: ^Markdown_Layout,
+	line: string,
+	start: int,
+) {
+	assert(ctx != nil && layout != nil)
+	assert(len(line) >= 2 && start >= 0)
+	metrics := ui_frame_metrics(ctx.frame)
+	append(
+		&layout.decorations,
+		Markdown_Layout_Decoration {
+			{8, layout.content_h + metrics.FONT_SIZE_BODY / 2 + 1, 5, 5},
+			.Bullet,
+		},
+	)
+	height := markdown_layout_add_text(
+		ctx,
+		layout,
+		line[2:],
+		start + 2,
+		metrics.BULLET_INDENT,
+		layout.content_h,
+		max(layout.width - metrics.BULLET_INDENT, 1),
+		metrics.FONT_SIZE_BODY,
+		metrics.LINE_HEIGHT,
+		.Body,
+		true,
+	)
+	layout.content_h += max(height, metrics.LINE_HEIGHT)
+	layout.content_w = max(layout.content_w, metrics.BULLET_INDENT)
 }
