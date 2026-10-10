@@ -84,8 +84,16 @@ when !INGOT_GFX_SDL3 {
 			effect: ^win.DWORD,
 		) -> win.HRESULT,
 	}
+	// DD_Target is one IDropTarget instance per registered window. COM hands
+	// `this` back to every callback, so the owner rides on the target instead
+	// of a process-wide global.
 	DD_Target :: struct {
-		vtable: ^DD_Target_VTable,
+		vtable:     ^DD_Target_VTable,
+		owner:      ^Context,
+		hwnd:       win.HWND,
+		refs:       win.ULONG,
+		has_files:  bool,
+		registered: bool,
 	}
 
 	@(private = "file")
@@ -98,19 +106,26 @@ when !INGOT_GFX_SDL3 {
 	@(private = "file")
 	g_dd_vtable: DD_Target_VTable
 	@(private = "file")
-	g_dd_target: DD_Target
+	g_dd_targets: [NATIVE_WINDOW_TABLE_MAX]DD_Target
 	@(private = "file")
-	g_dd_hwnd: win.HWND
+	g_dd_ole_count: int
+
 	@(private = "file")
-	g_dd_refs: win.ULONG = 1
+	_dd_target_for_owner :: proc "contextless" (owner: ^Context) -> ^DD_Target {
+		if owner == nil do return nil
+		for index in 0 ..< len(g_dd_targets) {
+			if g_dd_targets[index].owner == owner do return &g_dd_targets[index]
+		}
+		return nil
+	}
+
 	@(private = "file")
-	g_dd_registered: bool
-	@(private = "file")
-	g_dd_ole_owned: bool
-	@(private = "file")
-	g_dd_has_files: bool
-	@(private = "file")
-	g_dd_owner: ^Context
+	_dd_target_free_slot :: proc "contextless" () -> ^DD_Target {
+		for index in 0 ..< len(g_dd_targets) {
+			if g_dd_targets[index].owner == nil do return &g_dd_targets[index]
+		}
+		return nil
+	}
 
 	@(private = "file")
 	dd_guid_equal :: proc "system" (left, right: ^win.GUID) -> bool {
@@ -142,14 +157,18 @@ when !INGOT_GFX_SDL3 {
 
 	@(private = "file")
 	dd_add_ref :: proc "system" (this: rawptr) -> win.ULONG {
-		g_dd_refs += 1
-		return g_dd_refs
+		target := (^DD_Target)(this)
+		if target == nil do return 0
+		target.refs += 1
+		return target.refs
 	}
 
 	@(private = "file")
 	dd_release :: proc "system" (this: rawptr) -> win.ULONG {
-		if g_dd_refs > 1 do g_dd_refs -= 1
-		return g_dd_refs
+		target := (^DD_Target)(this)
+		if target == nil do return 0
+		if target.refs > 1 do target.refs -= 1
+		return target.refs
 	}
 
 	@(private = "file")
@@ -173,12 +192,14 @@ when !INGOT_GFX_SDL3 {
 		effect: ^win.DWORD,
 	) -> win.HRESULT {
 		context = runtime.default_context()
+		target := (^DD_Target)(this)
+		if target == nil do return win.S_OK
 		medium: DD_Storage_Medium
-		g_dd_has_files = dd_get_medium(data, &medium)
-		if g_dd_has_files do ReleaseStgMedium(&medium)
-		_drop_hover_stage_context(g_dd_owner, g_dd_has_files)
-		if g_dd_owner != nil do _idle_note_activity(&g_dd_owner.idle)
-		if effect != nil do effect^ = g_dd_has_files ? DD_EFFECT_COPY : DD_EFFECT_NONE
+		target.has_files = dd_get_medium(data, &medium)
+		if target.has_files do ReleaseStgMedium(&medium)
+		_drop_hover_stage_context(target.owner, target.has_files)
+		if target.owner != nil do _idle_note_activity(&target.owner.idle)
+		if effect != nil do effect^ = target.has_files ? DD_EFFECT_COPY : DD_EFFECT_NONE
 		return win.S_OK
 	}
 
@@ -189,15 +210,19 @@ when !INGOT_GFX_SDL3 {
 		point: DD_Point,
 		effect: ^win.DWORD,
 	) -> win.HRESULT {
-		if effect != nil do effect^ = g_dd_has_files ? DD_EFFECT_COPY : DD_EFFECT_NONE
+		target := (^DD_Target)(this)
+		has_files := target != nil && target.has_files
+		if effect != nil do effect^ = has_files ? DD_EFFECT_COPY : DD_EFFECT_NONE
 		return win.S_OK
 	}
 
 	@(private = "file")
 	dd_drag_leave :: proc "system" (this: rawptr) -> win.HRESULT {
-		g_dd_has_files = false
-		_drop_hover_stage_context(g_dd_owner, false)
-		if g_dd_owner != nil do _idle_note_activity(&g_dd_owner.idle)
+		target := (^DD_Target)(this)
+		if target == nil do return win.S_OK
+		target.has_files = false
+		_drop_hover_stage_context(target.owner, false)
+		if target.owner != nil do _idle_note_activity(&target.owner.idle)
 		return win.S_OK
 	}
 
@@ -209,8 +234,11 @@ when !INGOT_GFX_SDL3 {
 		effect: ^win.DWORD,
 	) -> win.HRESULT {
 		context = runtime.default_context()
-		_drop_hover_stage_context(g_dd_owner, false)
-		g_dd_has_files = false
+		target := (^DD_Target)(this)
+		if target == nil do return win.S_OK
+		owner := target.owner
+		_drop_hover_stage_context(owner, false)
+		target.has_files = false
 		if effect != nil do effect^ = DD_EFFECT_NONE
 		medium: DD_Storage_Medium
 		if !dd_get_medium(data, &medium) do return win.S_OK
@@ -241,54 +269,69 @@ when !INGOT_GFX_SDL3 {
 				accepted += 1
 			}
 		}
-		if _drop_paths_replace_context(g_dd_owner, paths[:accepted]) && effect != nil {
+		if _drop_paths_replace_context(owner, paths[:accepted]) && effect != nil {
 			effect^ = DD_EFFECT_COPY
 		}
-		if g_dd_owner != nil do _idle_note_activity(&g_dd_owner.idle)
+		if owner != nil do _idle_note_activity(&owner.idle)
 		return win.S_OK
 	}
 
 	@(private)
 	platform_dragdrop_init :: proc(owner: ^Context) {
-		if owner == nil || g_dd_owner != nil do return
+		if owner == nil || _dd_target_for_owner(owner) != nil do return
+		hwnd := win.HWND(context_get_window_handle(owner))
+		if hwnd == nil do return
+		slot := _dd_target_free_slot()
+		if slot == nil do return
 		result := OleInitialize(nil)
-		g_dd_ole_owned = result == win.S_OK || result == win.S_FALSE
-		if !g_dd_ole_owned do return
-		g_dd_vtable = {
-			dd_query_interface,
-			dd_add_ref,
-			dd_release,
-			dd_drag_enter,
-			dd_drag_over,
-			dd_drag_leave,
-			dd_drop,
+		if result != win.S_OK && result != win.S_FALSE do return
+		g_dd_ole_count += 1
+		if g_dd_vtable.DragEnter == nil {
+			g_dd_vtable = {
+				dd_query_interface,
+				dd_add_ref,
+				dd_release,
+				dd_drag_enter,
+				dd_drag_over,
+				dd_drag_leave,
+				dd_drop,
+			}
 		}
-		g_dd_target.vtable = &g_dd_vtable
-		g_dd_hwnd = win.HWND(context_get_window_handle(owner))
-		if g_dd_hwnd == nil do return
-		g_dd_owner = owner
-		result = RegisterDragDrop(g_dd_hwnd, &g_dd_target)
-		g_dd_registered = !win.FAILED(result)
-		if !g_dd_registered do g_dd_owner = nil
-		if g_dd_registered do win.DragAcceptFiles(g_dd_hwnd, false)
+		slot^ = {
+			vtable = &g_dd_vtable,
+			owner  = owner,
+			hwnd   = hwnd,
+			refs   = 1,
+		}
+		result = RegisterDragDrop(hwnd, slot)
+		slot.registered = !win.FAILED(result)
+		if !slot.registered {
+			slot^ = {}
+			g_dd_ole_count -= 1
+			OleUninitialize()
+			return
+		}
+		win.DragAcceptFiles(hwnd, false)
 	}
 
 	@(private)
-	platform_dragdrop_tick :: proc() {}
+	platform_dragdrop_tick :: proc(ctx: ^Context) {}
 
 	@(private)
 	platform_dragdrop_shutdown :: proc(owner: ^Context) {
-		if owner == nil || owner != g_dd_owner do return
-		if g_dd_registered {
-			RevokeDragDrop(g_dd_hwnd)
-			win.DragAcceptFiles(g_dd_hwnd, true)
+		if owner == nil do return
+		_drop_hover_stage_context(owner, false)
+		slot := _dd_target_for_owner(owner)
+		if slot == nil do return
+		if slot.registered {
+			RevokeDragDrop(slot.hwnd)
+			win.DragAcceptFiles(slot.hwnd, true)
 		}
-		if g_dd_ole_owned do OleUninitialize()
-		g_dd_hwnd = nil
-		g_dd_registered = false
-		g_dd_ole_owned = false
-		g_dd_has_files = false
-		g_dd_owner = nil
+		slot^ = {}
+		if g_dd_ole_count > 0 {
+			g_dd_ole_count -= 1
+			OleUninitialize()
+		}
 	}
 
 }

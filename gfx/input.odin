@@ -100,7 +100,7 @@ PREEDIT_MAX :: 256
 @(private)
 input_service_events :: proc(ctx: ^Context, should_wait := false, timeout: f64 = 0) {
 	assert(ctx != nil, "input_service_events: nil context")
-	platform_drop_prepare_events()
+	platform_drop_prepare_events(ctx)
 	when ODIN_OS == .JS {
 		platform_poll_events(ctx)
 	} else {
@@ -110,7 +110,7 @@ input_service_events :: proc(ctx: ^Context, should_wait := false, timeout: f64 =
 			platform_poll_events(ctx)
 		}
 	}
-	platform_drop_finish_events()
+	platform_drop_finish_events(ctx)
 }
 
 @(private = "package")

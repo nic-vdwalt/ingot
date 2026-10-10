@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -157,6 +158,58 @@ second :: proc(scope: ^Context_Scope) {
         self.assertTrue("gfx/x_test.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))
         self.assertTrue("gfx/x_tests.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))
         self.assertTrue("gfx/x_fuzz_test.odin".endswith(check_gfx_context.EXCLUDED_SUFFIXES))
+
+
+class PackageGlobalTest(unittest.TestCase):
+    def names(self, source):
+        return [name for _, name in check_gfx_context.package_global_declarations(source)]
+
+    def test_bare_package_global_is_reported(self):
+        source = "package gfx\n\n@(private)\ng_owner: ^Context\ncount := 3\nflag: bool = true\n"
+        self.assertEqual(self.names(source), ["g_owner", "count", "flag"])
+
+    def test_locals_inside_procedures_are_ignored(self):
+        source = "p :: proc() {\n\tlocal := 1\n\tother: int\n}\n"
+        self.assertEqual(self.names(source), [])
+
+    def test_globals_inside_when_blocks_are_reported(self):
+        source = (
+            "when ODIN_OS == .Darwin {\n\t@(private = \"file\")\n\tg_layer: rawptr\n"
+            "} else {\n\tg_other: int\n}\n"
+        )
+        self.assertEqual(self.names(source), ["g_layer", "g_other"])
+
+    def test_struct_fields_constants_and_rodata_are_ignored(self):
+        source = (
+            "LIMIT :: 4\n"
+            "Shape :: struct {\n\twidth: int,\n\theight: int,\n}\n"
+            "Kind :: enum {\n\tA,\n}\n"
+            "@(rodata)\nTABLE := [2]int{1, 2}\n"
+            "Run_Proc :: #type proc()\n"
+        )
+        self.assertEqual(self.names(source), [])
+
+    def test_load_initialisers_are_reported(self):
+        source = "when true {\n\tDEFAULT_FONT_TTF := #load(\"../assets/x.ttf\")\n}\n"
+        self.assertEqual(self.names(source), ["DEFAULT_FONT_TTF"])
+
+    def test_failures_cover_undeclared_and_stale_entries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "gfx").mkdir()
+            (root / "gfx" / "x.odin").write_text("package gfx\n\ng_new: int\ng_known: int\n")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "gfx/x.odin"], cwd=root, check=True)
+            allowed = {"gfx/x.odin": frozenset({"g_known", "g_gone"})}
+            self.assertEqual(
+                check_gfx_context.package_global_failures(root, allowed),
+                [
+                    "gfx/x.odin:3: g_new: undeclared gfx package global",
+                    "gfx/x.odin: g_gone: stale ALLOWED_PACKAGE_GLOBALS entry (declaration not found)",
+                ],
+            )
+            allowed = {"gfx/x.odin": frozenset({"g_new", "g_known"})}
+            self.assertEqual(check_gfx_context.package_global_failures(root, allowed), [])
 
 
 class PascalCaseLayerTest(unittest.TestCase):

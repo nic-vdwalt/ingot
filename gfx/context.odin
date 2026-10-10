@@ -407,6 +407,10 @@ g: ^Context = &default_context_storage
 DEFAULT_CONTEXT_ID :: u32(1)
 CONTEXT_ID_FIRST :: DEFAULT_CONTEXT_ID + 1
 
+// NATIVE_WINDOW_TABLE_MAX bounds the per-window owner tables kept by native
+// platform hooks (SDL window state, IME views, drop views, Metal layers).
+NATIVE_WINDOW_TABLE_MAX :: 16
+
 // The reserved id must not be handed out again, and both must fit the field
 // width resource handles pack them into. Derived rather than written as a
 // literal 2 so the two cannot drift apart.
@@ -444,7 +448,7 @@ _default_context_init :: proc "contextless" () {
 	default_context_storage.id = DEFAULT_CONTEXT_ID
 }
 
-default_context :: proc() -> ^Context {
+default_context :: proc "contextless" () -> ^Context {
 	return g
 }
 

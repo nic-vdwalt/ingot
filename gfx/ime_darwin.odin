@@ -32,9 +32,9 @@ IME_NS_View :: struct {
 @(private = "file")
 g_ime_swizzled: bool
 @(private = "file")
-g_ime_views: [16]rawptr
+g_ime_views: [NATIVE_WINDOW_TABLE_MAX]rawptr
 @(private = "file")
-g_ime_owners: [16]^Context
+g_ime_owners: [NATIVE_WINDOW_TABLE_MAX]^Context
 
 @(private = "file")
 _ime_owner_for_view :: proc "contextless" (view: rawptr) -> ^Context {

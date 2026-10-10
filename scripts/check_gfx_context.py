@@ -24,6 +24,73 @@ CONTROLLED_GLOBAL_ROUTING = {
     "gfx/context.odin:default_context": 1,
     "gfx/context.odin:set_default_context": 2,
 }
+# Package-scope mutable declarations in ingot:gfx. Every entry is either
+# process-wide by nature (one swizzled ObjC subclass, one COM vtable, one X
+# display, one audio engine) or a per-window owner table keyed by native handle.
+# Anything that routes a per-context event to a single hard-coded owner must
+# live in Context instead; adding a name here is a review decision, not a fix.
+ALLOWED_PACKAGE_GLOBALS: dict[str, frozenset[str]] = {
+    "gfx/audio_native.odin": frozenset({"g_audio"}),
+    "gfx/audio_web.odin": frozenset({"g_audio"}),
+    "gfx/batch.odin": frozenset({"BATCH_SHADER"}),
+    "gfx/context.odin": frozenset({"default_context_storage", "g", "context_id_next"}),
+    "gfx/dragdrop_darwin.odin": frozenset(
+        {
+            "g_dd_orig_entered",
+            "g_dd_orig_updated",
+            "g_dd_orig_exited",
+            "g_dd_orig_ended",
+            "g_dd_orig_perform",
+            "g_dd_views",
+            "g_dd_owners",
+            "g_dd_original_class",
+            "g_dd_subclass",
+        }
+    ),
+    "gfx/dragdrop_linux.odin": frozenset(
+        {
+            "g_dd_resolved",
+            "g_dd_ok",
+            "g_dd_display",
+            "g_dd_get_window",
+            "g_dd_enter",
+            "g_dd_leave",
+            "g_dd_position",
+            "g_dd_drop",
+        }
+    ),
+    "gfx/dragdrop_windows.odin": frozenset(
+        {"g_dd_target_id", "g_dd_vtable", "g_dd_targets", "g_dd_ole_count"}
+    ),
+    "gfx/font_default.odin": frozenset({"DEFAULT_FONT_TTF"}),
+    "gfx/ime_darwin.odin": frozenset({"g_ime_swizzled", "g_ime_views", "g_ime_owners"}),
+    "gfx/loop_web.odin": frozenset({"g_web_callback"}),
+    "gfx/platform_native.odin": frozenset({"g_cursors", "glfw_live_windows", "_mono_epoch"}),
+    "gfx/platform_sdl3.odin": frozenset(
+        {"g_sdl_windows", "g_sdl_window_count", "g_sdl_cursors", "g_sdl_gamepads"}
+    ),
+    "gfx/platform_web.odin": frozenset({"g_web_ctx", "g_web_owner", "g_web_owner_epoch"}),
+    "gfx/presentation_darwin.odin": frozenset(
+        {
+            "g_presentation_layers",
+            "g_presentation_owners",
+            "g_presentation_original_class",
+            "g_presentation_subclass",
+            "g_presentation_next",
+        }
+    ),
+    "gfx/submission.odin": frozenset({"g_submission_id_next"}),
+}
+# A package-scope variable: `name: Type`, `name: Type = value`, or `name := value`
+# at brace depth zero (or inside a `when` block, which is still package scope).
+# Constants (`::`) never match because the colon must not be followed by `:`.
+PACKAGE_GLOBAL = re.compile(
+    r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:(?!:)(?:=.*|\s*[^=\s][^=]*(?:=.*)?)\s*$"
+)
+NON_PROCEDURE_BLOCK = re.compile(
+    r"\b(?:struct|enum|union|bit_set|bit_field|foreign)\b[^{]*\{|::\s*(?:distinct\s+)?(?:struct|enum|union)\b"
+)
+PACKAGE_SCOPE_BLOCK = re.compile(r"^\s*(?:when|else)\b")
 CONTROL_FLOW = re.compile(r"\b(?:if|when|for|switch|defer)\b")
 DEFAULT_CONTEXT_CALL = re.compile(
     r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\((?:[^;{}()]|\([^;{}()]*\))*default_context\s*\("
@@ -193,6 +260,81 @@ def controlled_global_debt(counts: dict[str, int]) -> dict[str, int]:
     return debt
 
 
+def package_global_declarations(source: str) -> list[tuple[int, str]]:
+    """Return (1-based line, name) for every package-scope variable in `source`.
+
+    Procedure bodies are skipped using the shared procedure parser. Other brace
+    blocks (struct/enum/union/foreign) are skipped by tracking depth; `when`
+    and `else` blocks are transparent because their contents remain package
+    scope. Comments and strings are masked first so nothing inside them counts.
+    """
+    raw_lines = source.splitlines()
+    masked_lines = check_odin_style.mask_source(source).splitlines()
+    covered: set[int] = set()
+    for procedure in check_odin_style.procedures(source):
+        covered.update(range(procedure.start_line - 1, procedure.end_line))
+    declarations: list[tuple[int, str]] = []
+    depth = 0
+    for index, masked in enumerate(masked_lines):
+        if index in covered:
+            continue
+        stripped = masked.strip()
+        transparent = depth == 0 and (
+            PACKAGE_SCOPE_BLOCK.match(masked) is not None or stripped.startswith("}")
+        )
+        if depth == 0 and not transparent:
+            match = PACKAGE_GLOBAL.match(masked)
+            if match and not NON_PROCEDURE_BLOCK.search(masked):
+                attributes = _declaration_attributes(raw_lines, index)
+                if not any("rodata" in attribute for attribute in attributes):
+                    declarations.append((index + 1, match.group(1)))
+        opens = stripped.count("{")
+        closes = stripped.count("}")
+        if transparent:
+            if stripped.startswith("}"):
+                closes -= 1
+            if stripped.endswith("{"):
+                opens -= 1
+        depth = max(0, depth + opens - closes)
+    return declarations
+
+
+def package_global_inventory(root: Path) -> dict[str, list[str]]:
+    inventory: dict[str, list[str]] = {}
+    for relative in tracked_sources(root, ["gfx/*.odin"]):
+        if relative.startswith(PASCAL_CASE_EXCLUDED_PREFIXES):
+            continue
+        source = (root / relative).read_text(encoding="utf-8")
+        names = [name for _, name in package_global_declarations(source)]
+        if names:
+            inventory[relative] = names
+    return inventory
+
+
+def package_global_failures(
+    root: Path, allowed: dict[str, frozenset[str]] | None = None
+) -> list[str]:
+    if allowed is None:
+        allowed = ALLOWED_PACKAGE_GLOBALS
+    failures: list[str] = []
+    seen: dict[str, set[str]] = {}
+    for relative in tracked_sources(root, ["gfx/*.odin"]):
+        if relative.startswith(PASCAL_CASE_EXCLUDED_PREFIXES):
+            continue
+        source = (root / relative).read_text(encoding="utf-8")
+        permitted = allowed.get(relative, frozenset())
+        for line, name in package_global_declarations(source):
+            seen.setdefault(relative, set()).add(name)
+            if name not in permitted:
+                failures.append(f"{relative}:{line}: {name}: undeclared gfx package global")
+    for relative, names in sorted(allowed.items()):
+        for name in sorted(names - seen.get(relative, set())):
+            failures.append(
+                f"{relative}: {name}: stale ALLOWED_PACKAGE_GLOBALS entry (declaration not found)"
+            )
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default=".")
@@ -218,6 +360,7 @@ def main() -> int:
         "active_context_apis": active_context_debt,
         "default_context_escapes": default_context_escapes,
         "globals": globals_debt,
+        "package_globals": package_global_inventory(root),
         "ui_gfx_implicit_draws": implicit_draws,
     }
     if arguments.measure:
@@ -231,6 +374,7 @@ def main() -> int:
     failures += zero_debt_failures("internal default-context escape", default_context_escapes)
     failures += zero_debt_failures("ui_gfx implicit graphics routing", implicit_draws)
     failures += pascal_case_failures
+    failures += package_global_failures(root)
     for failure in failures:
         print(failure)
     return 1 if failures else 0

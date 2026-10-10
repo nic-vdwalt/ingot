@@ -561,13 +561,13 @@ when !INGOT_GFX_SDL3 {
 	}
 
 	@(private)
-	platform_drop_prepare_events :: proc() {
-		platform_dragdrop_tick()
+	platform_drop_prepare_events :: proc(ctx: ^Context) {
+		platform_dragdrop_tick(ctx)
 	}
 
 	@(private)
-	platform_drop_finish_events :: proc() {
-		platform_dragdrop_tick()
+	platform_drop_finish_events :: proc(ctx: ^Context) {
+		platform_dragdrop_tick(ctx)
 	}
 
 	@(private)

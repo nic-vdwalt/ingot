@@ -20,9 +20,9 @@ when !INGOT_GFX_SDL3 {
 	}
 
 	@(private = "file")
-	g_presentation_owner: ^Context
+	g_presentation_layers: [NATIVE_WINDOW_TABLE_MAX]rawptr
 	@(private = "file")
-	g_presentation_layer: rawptr
+	g_presentation_owners: [NATIVE_WINDOW_TABLE_MAX]^Context
 	@(private = "file")
 	g_presentation_original_class: rawptr
 	@(private = "file")
@@ -31,16 +31,69 @@ when !INGOT_GFX_SDL3 {
 	g_presentation_next: Presentation_Next_Proc
 
 	@(private = "file")
+	_presentation_owner_for_layer :: proc "contextless" (layer: rawptr) -> ^Context {
+		if layer == nil do return nil
+		for index in 0 ..< len(g_presentation_layers) {
+			if g_presentation_layers[index] == layer do return g_presentation_owners[index]
+		}
+		return nil
+	}
+
+	@(private = "file")
+	_presentation_layer_for_owner :: proc "contextless" (ctx: ^Context) -> rawptr {
+		if ctx == nil do return nil
+		for index in 0 ..< len(g_presentation_owners) {
+			if g_presentation_owners[index] == ctx do return g_presentation_layers[index]
+		}
+		return nil
+	}
+
+	@(private = "file")
+	_presentation_bind_layer :: proc(layer: rawptr, ctx: ^Context) {
+		assert(layer != nil && ctx != nil, "_presentation_bind_layer: invalid argument")
+		for index in 0 ..< len(g_presentation_layers) {
+			if g_presentation_layers[index] == layer || g_presentation_owners[index] == ctx {
+				g_presentation_layers[index] = layer
+				g_presentation_owners[index] = ctx
+				return
+			}
+		}
+		for index in 0 ..< len(g_presentation_layers) {
+			if g_presentation_layers[index] == nil {
+				g_presentation_layers[index] = layer
+				g_presentation_owners[index] = ctx
+				return
+			}
+		}
+		assert(false, "_presentation_bind_layer: too many layers")
+	}
+
+	@(private = "file")
+	_presentation_unbind_owner :: proc(ctx: ^Context) -> rawptr {
+		if ctx == nil do return nil
+		for index in 0 ..< len(g_presentation_owners) {
+			if g_presentation_owners[index] == ctx {
+				layer := g_presentation_layers[index]
+				g_presentation_layers[index] = nil
+				g_presentation_owners[index] = nil
+				return layer
+			}
+		}
+		return nil
+	}
+
+	@(private = "file")
 	Presentation_Callback :: struct {
+		owner:    ^Context,
 		identity: Frame_Delivery_Identity,
 	}
 
 	@(private = "file")
 	presentation_done :: proc "c" (user_data: rawptr, drawable: ^CA.MetalDrawable) {
 		context = runtime.default_context()
-		owner := g_presentation_owner
 		callback := (^Presentation_Callback)(user_data)
 		if callback == nil do return
+		owner := callback.owner
 		identity := callback.identity
 		free(callback)
 		if owner == nil || drawable == nil do return
@@ -52,12 +105,13 @@ when !INGOT_GFX_SDL3 {
 		context = runtime.default_context()
 		if g_presentation_next == nil do return nil
 		drawable := g_presentation_next(self, cmd)
-		owner := g_presentation_owner
+		owner := _presentation_owner_for_layer(rawptr(self))
 		if drawable == nil || owner == nil || owner.delivery.closing do return drawable
 		frame_index := owner.stats_current.frame_index
 		if frame_index == 0 do return drawable
 		callback := new(Presentation_Callback)
 		if callback == nil do return drawable
+		callback.owner = owner
 		callback.identity = {
 			epoch       = owner.epoch,
 			frame_index = frame_index,
@@ -74,8 +128,7 @@ when !INGOT_GFX_SDL3 {
 		ns_window->contentView()->setWantsLayer(true)
 		layer := CA.MetalLayer_layer()
 		ns_window->contentView()->setLayer(layer)
-		g_presentation_layer = rawptr(layer)
-		g_presentation_owner = ctx
+		_presentation_bind_layer(rawptr(layer), ctx)
 		return wg.InstanceCreateSurface(
 			instance,
 			&wg.SurfaceDescriptor {
@@ -90,8 +143,9 @@ when !INGOT_GFX_SDL3 {
 	@(private)
 	platform_frame_delivery_init :: proc(ctx: ^Context) -> bool {
 		assert(ctx != nil, "platform_frame_delivery_init: nil context")
-		if g_presentation_layer == nil || g_presentation_owner != ctx do return false
-		original_class := rawptr(NS.object_getClass(NS.id(g_presentation_layer)))
+		layer := _presentation_layer_for_owner(ctx)
+		if layer == nil do return false
+		original_class := rawptr(NS.object_getClass(NS.id(layer)))
 		if original_class == nil do return false
 		if g_presentation_subclass == nil {
 			subclass := allocateClassPair(original_class, "IngotPresentationMetalLayer", 0)
@@ -120,19 +174,19 @@ when !INGOT_GFX_SDL3 {
 		} else if original_class != g_presentation_original_class {
 			return false
 		}
-		object_setClass(g_presentation_layer, g_presentation_subclass)
+		object_setClass(layer, g_presentation_subclass)
 		return true
 	}
 
 	@(private)
 	platform_frame_delivery_shutdown :: proc(ctx: ^Context) {
 		assert(ctx != nil, "platform_frame_delivery_shutdown: nil context")
-		if g_presentation_owner != ctx do return
-		if g_presentation_layer != nil && g_presentation_original_class != nil {
-			object_setClass(g_presentation_layer, g_presentation_original_class)
+		layer := _presentation_unbind_owner(ctx)
+		if layer == nil do return
+		if g_presentation_original_class != nil &&
+		   rawptr(NS.object_getClass(NS.id(layer))) == g_presentation_subclass {
+			object_setClass(layer, g_presentation_original_class)
 		}
-		g_presentation_owner = nil
-		g_presentation_layer = nil
 	}
 }
 

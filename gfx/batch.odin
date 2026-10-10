@@ -217,6 +217,10 @@ Renderer :: struct {
 	// BATCH_TRANSIENT_BUFFERS_MAX buffers until the tab dies.
 	overflow_bytes:        u64,
 	overflow_draws:        u32,
+	// Lifetime count of overflow reports already printed for this renderer.
+	// Never reset per frame (like peak_*) so the report cap is per context,
+	// not per process.
+	overflow_reports:      u32,
 }
 
 @(private)
@@ -1090,21 +1094,11 @@ renderer_flush :: proc(
 	clear(&r.indices)
 }
 
-// _geometry_upload_transient is the fallback path when indexed streaming has
-// no room: it creates one-shot vertex and index buffers that live until the
-// owning stream slot is reused.
-//
-// The device is passed in rather than read from the active-context global, so
-// this leaf stays pure and its caller owns the context lookup (the same shape
-// as _neutral_texture_init).
 // GEOMETRY_OVERFLOW_REPORTS_MAX bounds how many overflow frames are reported.
 // A scene that overflows usually overflows every frame, and an unbounded log
 // would itself become the performance problem (and would flood the on-page
 // crash panel on web, hiding the first occurrence).
 GEOMETRY_OVERFLOW_REPORTS_MAX :: 4
-
-@(private)
-g_overflow_reports: u32
 
 // _renderer_report_overflow logs, at most GEOMETRY_OVERFLOW_REPORTS_MAX times,
 // that this frame's geometry did not fit the stream and fell back to one-shot
@@ -1115,9 +1109,9 @@ g_overflow_reports: u32
 _renderer_report_overflow :: proc(r: ^Renderer) {
 	assert(r != nil, "_renderer_report_overflow: nil renderer")
 	if r.overflow_draws == 0 do return
-	if g_overflow_reports >= GEOMETRY_OVERFLOW_REPORTS_MAX do return
-	g_overflow_reports += 1
-	final := g_overflow_reports == GEOMETRY_OVERFLOW_REPORTS_MAX
+	if r.overflow_reports >= GEOMETRY_OVERFLOW_REPORTS_MAX do return
+	r.overflow_reports += 1
+	final := r.overflow_reports == GEOMETRY_OVERFLOW_REPORTS_MAX
 	fmt.eprintfln(
 		"gfx: geometry stream overflow - %d draw(s), %d KiB spilled (stream %d KiB)%s",
 		r.overflow_draws,
@@ -1127,6 +1121,13 @@ _renderer_report_overflow :: proc(r: ^Renderer) {
 	)
 }
 
+// _geometry_upload_transient is the fallback path when indexed streaming has
+// no room: it creates one-shot vertex and index buffers that live until the
+// owning stream slot is reused.
+//
+// The device is passed in rather than read from the active-context global, so
+// this leaf stays pure and its caller owns the context lookup (the same shape
+// as _neutral_texture_init).
 @(private)
 _geometry_upload_transient :: proc(
 	ctx: ^Context,

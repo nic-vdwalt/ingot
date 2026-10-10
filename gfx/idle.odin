@@ -62,7 +62,7 @@ get_frame_strategy :: proc() -> Frame_Strategy {
 // from any thread ("c"/contextless): platform_wake unblocks a native wait in
 // progress, so background work (net callbacks, timers) can trigger a repaint.
 request_redraw :: proc "contextless" () {
-	context_request_redraw(&default_context_storage)
+	context_request_redraw(default_context())
 }
 
 context_request_redraw :: proc "contextless" (ctx: ^Context) {

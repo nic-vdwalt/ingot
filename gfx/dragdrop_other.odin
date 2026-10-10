@@ -8,7 +8,7 @@ package gfx
 platform_dragdrop_init :: proc(owner: ^Context) {}
 
 @(private)
-platform_dragdrop_tick :: proc() {}
+platform_dragdrop_tick :: proc(ctx: ^Context) {}
 
 @(private)
 platform_dragdrop_shutdown :: proc(owner: ^Context) {

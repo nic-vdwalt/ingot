@@ -32,19 +32,63 @@ when !INGOT_GFX_SDL3 {
 	@(private = "file")
 	g_dd_orig_perform: Drag_Bool_Proc
 	@(private = "file")
-	g_dd_view: rawptr
+	g_dd_views: [NATIVE_WINDOW_TABLE_MAX]rawptr
+	@(private = "file")
+	g_dd_owners: [NATIVE_WINDOW_TABLE_MAX]^Context
 	@(private = "file")
 	g_dd_original_class: rawptr
 	@(private = "file")
 	g_dd_subclass: rawptr
+
 	@(private = "file")
-	g_dd_owner: ^Context
+	_dd_owner_for_view :: proc "contextless" (view: rawptr) -> ^Context {
+		if view == nil do return nil
+		for index in 0 ..< len(g_dd_views) {
+			if g_dd_views[index] == view do return g_dd_owners[index]
+		}
+		return nil
+	}
+
+	@(private = "file")
+	_dd_bind_view :: proc(view: rawptr, owner: ^Context) {
+		assert(view != nil && owner != nil, "_dd_bind_view: invalid argument")
+		for index in 0 ..< len(g_dd_views) {
+			if g_dd_views[index] == view || g_dd_owners[index] == owner {
+				g_dd_views[index] = view
+				g_dd_owners[index] = owner
+				return
+			}
+		}
+		for index in 0 ..< len(g_dd_views) {
+			if g_dd_views[index] == nil {
+				g_dd_views[index] = view
+				g_dd_owners[index] = owner
+				return
+			}
+		}
+		assert(false, "_dd_bind_view: too many views")
+	}
+
+	@(private = "file")
+	_dd_unbind_owner :: proc(owner: ^Context) -> rawptr {
+		if owner == nil do return nil
+		for index in 0 ..< len(g_dd_owners) {
+			if g_dd_owners[index] == owner {
+				view := g_dd_views[index]
+				g_dd_views[index] = nil
+				g_dd_owners[index] = nil
+				return view
+			}
+		}
+		return nil
+	}
 
 	@(private = "file")
 	dd_entered_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) -> u64 {
-		if g_dd_owner != nil {
-			_drop_hover_stage_context(g_dd_owner, true)
-			_idle_note_activity(&g_dd_owner.idle)
+		owner := _dd_owner_for_view(rawptr(self))
+		if owner != nil {
+			_drop_hover_stage_context(owner, true)
+			_idle_note_activity(&owner.idle)
 		}
 		if g_dd_orig_entered != nil do return g_dd_orig_entered(self, cmd, sender)
 		return NS_DRAG_OP_COPY
@@ -52,34 +96,38 @@ when !INGOT_GFX_SDL3 {
 
 	@(private = "file")
 	dd_updated_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) -> u64 {
-		if g_dd_owner != nil do _drop_hover_stage_context(g_dd_owner, true)
+		owner := _dd_owner_for_view(rawptr(self))
+		if owner != nil do _drop_hover_stage_context(owner, true)
 		if g_dd_orig_updated != nil do return g_dd_orig_updated(self, cmd, sender)
 		return NS_DRAG_OP_COPY
 	}
 
 	@(private = "file")
 	dd_exited_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) {
-		if g_dd_owner != nil {
-			_drop_hover_stage_context(g_dd_owner, false)
-			_idle_note_activity(&g_dd_owner.idle)
+		owner := _dd_owner_for_view(rawptr(self))
+		if owner != nil {
+			_drop_hover_stage_context(owner, false)
+			_idle_note_activity(&owner.idle)
 		}
 		if g_dd_orig_exited != nil do g_dd_orig_exited(self, cmd, sender)
 	}
 
 	@(private = "file")
 	dd_ended_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) {
-		if g_dd_owner != nil {
-			_drop_hover_stage_context(g_dd_owner, false)
-			_idle_note_activity(&g_dd_owner.idle)
+		owner := _dd_owner_for_view(rawptr(self))
+		if owner != nil {
+			_drop_hover_stage_context(owner, false)
+			_idle_note_activity(&owner.idle)
 		}
 		if g_dd_orig_ended != nil do g_dd_orig_ended(self, cmd, sender)
 	}
 
 	@(private = "file")
 	dd_perform_hook :: proc "c" (self: NS.id, cmd: NS.SEL, sender: NS.id) -> NS.BOOL {
-		if g_dd_owner != nil {
-			_drop_hover_stage_context(g_dd_owner, false)
-			_idle_note_activity(&g_dd_owner.idle)
+		owner := _dd_owner_for_view(rawptr(self))
+		if owner != nil {
+			_drop_hover_stage_context(owner, false)
+			_idle_note_activity(&owner.idle)
 		}
 		if g_dd_orig_perform != nil do return g_dd_orig_perform(self, cmd, sender)
 		return false
@@ -87,7 +135,7 @@ when !INGOT_GFX_SDL3 {
 
 	@(private)
 	platform_dragdrop_init :: proc(owner: ^Context) {
-		if owner == nil || g_dd_owner != nil do return
+		if owner == nil do return
 		window := cast(^IME_NS_Window)context_get_window_handle(owner)
 		if window == nil do return
 		view := intrinsics.objc_send(NS.id, window, "contentView")
@@ -107,9 +155,8 @@ when !INGOT_GFX_SDL3 {
 		} else if original_class != g_dd_original_class {
 			return
 		}
-		g_dd_view = rawptr(view)
-		g_dd_owner = owner
-		object_setClass(g_dd_view, g_dd_subclass)
+		_dd_bind_view(rawptr(view), owner)
+		object_setClass(rawptr(view), g_dd_subclass)
 	}
 
 	@(private = "file")
@@ -176,17 +223,18 @@ when !INGOT_GFX_SDL3 {
 	}
 
 	@(private)
-	platform_dragdrop_tick :: proc() {}
+	platform_dragdrop_tick :: proc(ctx: ^Context) {}
 
 	@(private)
 	platform_dragdrop_shutdown :: proc(owner: ^Context) {
-		if owner == nil || owner != g_dd_owner do return
-		if g_dd_view != nil && g_dd_original_class != nil {
-			object_setClass(g_dd_view, g_dd_original_class)
-		}
+		if owner == nil do return
 		_drop_hover_stage_context(owner, false)
-		g_dd_view = nil
-		g_dd_owner = nil
+		view := _dd_unbind_owner(owner)
+		if view == nil do return
+		if g_dd_original_class != nil &&
+		   rawptr(NS.object_getClass(NS.id(view))) == g_dd_subclass {
+			object_setClass(view, g_dd_original_class)
+		}
 	}
 
 }

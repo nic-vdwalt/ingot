@@ -11,7 +11,7 @@ package gfx
 
 when INGOT_GFX_SDL3 {
 
-	SDL_WINDOW_MAX :: 16
+	SDL_WINDOW_MAX :: NATIVE_WINDOW_TABLE_MAX
 	SDL_EVENT_PUMP_MAX :: 4096
 	SDL_GPU_EVENT_PUMP_MAX :: 1_000_000
 	SDL_WAKE_EVENT :: sdl.EventType.USER
@@ -559,10 +559,10 @@ when INGOT_GFX_SDL3 {
 	}
 
 	@(private)
-	platform_drop_prepare_events :: proc() {}
+	platform_drop_prepare_events :: proc(ctx: ^Context) {}
 
 	@(private)
-	platform_drop_finish_events :: proc() {}
+	platform_drop_finish_events :: proc(ctx: ^Context) {}
 
 	@(private)
 	platform_drop_shutdown :: proc(ctx: ^Context) {

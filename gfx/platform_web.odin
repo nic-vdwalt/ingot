@@ -708,10 +708,10 @@ platform_drop_init :: proc(ctx: ^Context) {
 }
 
 @(private)
-platform_drop_prepare_events :: proc() {}
+platform_drop_prepare_events :: proc(ctx: ^Context) {}
 
 @(private)
-platform_drop_finish_events :: proc() {}
+platform_drop_finish_events :: proc(ctx: ^Context) {}
 
 @(private)
 platform_drop_shutdown :: proc(ctx: ^Context) {

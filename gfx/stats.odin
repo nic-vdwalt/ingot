@@ -206,6 +206,14 @@ context_renderer_peak_usage :: proc(ctx: ^Context) -> Peak_Usage {
 	}
 }
 
+// context_renderer_overflow_reports returns how many geometry overflow reports
+// this context's renderer has printed over its lifetime. The cap is per
+// context, so a second live context still gets its own first report.
+context_renderer_overflow_reports :: proc(ctx: ^Context) -> u32 {
+	if ctx == nil do return 0
+	return ctx.rend.overflow_reports
+}
+
 @(private)
 _stats_frame_begin :: proc(ctx: ^Context) {
 	when RENDER_STATS_ENABLED {

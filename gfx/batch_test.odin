@@ -341,6 +341,28 @@ batch_emission_is_context_bound :: proc(t: ^testing.T) {
 }
 
 @(test)
+overflow_reports_are_capped_per_context :: proc(t: ^testing.T) {
+	first := new(Context)
+	defer free(first)
+	second := new(Context)
+	defer free(second)
+	first.rend.overflow_draws = 1
+	second.rend.overflow_draws = 1
+
+	for _ in 0 ..< GEOMETRY_OVERFLOW_REPORTS_MAX + 2 {
+		_renderer_report_overflow(&first.rend)
+	}
+	testing.expect_value(t, first.rend.overflow_reports, u32(GEOMETRY_OVERFLOW_REPORTS_MAX))
+	testing.expect_value(t, second.rend.overflow_reports, u32(0))
+	testing.expect_value(t, context_renderer_overflow_reports(first), u32(GEOMETRY_OVERFLOW_REPORTS_MAX))
+	testing.expect_value(t, context_renderer_overflow_reports(second), u32(0))
+	testing.expect_value(t, context_renderer_overflow_reports(nil), u32(0))
+
+	_renderer_report_overflow(&second.rend)
+	testing.expect_value(t, second.rend.overflow_reports, u32(1))
+}
+
+@(test)
 frame_shape_drawing_is_context_bound :: proc(t: ^testing.T) {
 	first := new(Context)
 	defer free(first)
