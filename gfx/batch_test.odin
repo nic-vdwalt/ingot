@@ -354,7 +354,8 @@ overflow_reports_are_capped_per_context :: proc(t: ^testing.T) {
 	}
 	testing.expect_value(t, first.rend.overflow_reports, u32(GEOMETRY_OVERFLOW_REPORTS_MAX))
 	testing.expect_value(t, second.rend.overflow_reports, u32(0))
-	testing.expect_value(t, context_renderer_overflow_reports(first), u32(GEOMETRY_OVERFLOW_REPORTS_MAX))
+	expected_max := u32(GEOMETRY_OVERFLOW_REPORTS_MAX)
+	testing.expect_value(t, context_renderer_overflow_reports(first), expected_max)
 	testing.expect_value(t, context_renderer_overflow_reports(second), u32(0))
 	testing.expect_value(t, context_renderer_overflow_reports(nil), u32(0))
 

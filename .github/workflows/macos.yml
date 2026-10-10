@@ -35,22 +35,34 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          fetch_gh() {
+            attempt=1
+            while :; do
+              if gh api "$1" -H "Accept: application/octet-stream" > "$2"; then
+                return 0
+              fi
+              if [ "$attempt" -ge 5 ]; then
+                echo "download failed after $attempt attempts: $1" >&2
+                return 1
+              fi
+              echo "download attempt $attempt failed, retrying: $1" >&2
+              attempt=$((attempt + 1))
+              sleep $((attempt * 5))
+            done
+          }
           mkdir "$RUNNER_TEMP/odin" "$RUNNER_TEMP/ols" "$RUNNER_TEMP/wgpu"
-          gh api repos/odin-lang/Odin/releases/assets/615726666 \
-            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/odin.tar.gz"
+          fetch_gh repos/odin-lang/Odin/releases/assets/615726666 "$RUNNER_TEMP/odin.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
-          gh api repos/DanielGavin/ols/releases/assets/487668580 \
-            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/ols.zip"
+          fetch_gh repos/DanielGavin/ols/releases/assets/487668580 "$RUNNER_TEMP/ols.zip"
           unzip -q "$RUNNER_TEMP/ols.zip" -d "$RUNNER_TEMP/ols"
           mv "$RUNNER_TEMP/ols/odinfmt-arm64-darwin" "$RUNNER_TEMP/ols/odinfmt"
           chmod +x "$RUNNER_TEMP/ols/odinfmt"
-          gh api repos/gfx-rs/wgpu-native/releases/assets/455571728 \
-            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/wgpu.zip"
+          fetch_gh repos/gfx-rs/wgpu-native/releases/assets/455571728 "$RUNNER_TEMP/wgpu.zip"
           unzip -q "$RUNNER_TEMP/wgpu.zip" -d "$RUNNER_TEMP/wgpu"
           mkdir -p "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-macos-aarch64-release/lib"
           cp "$RUNNER_TEMP/wgpu/lib/"* \
             "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-macos-aarch64-release/lib/"
-          gh api repos/odin-lang/Odin/tarball/93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d > "$RUNNER_TEMP/odin-source.tar.gz"
+          fetch_gh repos/odin-lang/Odin/tarball/93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d "$RUNNER_TEMP/odin-source.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin-source.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
           brew install llvm@20
           (cd "$RUNNER_TEMP/odin" && git init && git fetch --depth=1 https://github.com/odin-lang/Odin 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d && git reset FETCH_HEAD && LLVM_CONFIG="$(brew --prefix llvm@20)/bin/llvm-config" sh build_odin.sh release)

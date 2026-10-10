@@ -46,20 +46,31 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          fetch_gh() {
+            attempt=1
+            while :; do
+              if gh api "$1" -H "Accept: application/octet-stream" > "$2"; then
+                return 0
+              fi
+              if [ "$attempt" -ge 5 ]; then
+                echo "download failed after $attempt attempts: $1" >&2
+                return 1
+              fi
+              echo "download attempt $attempt failed, retrying: $1" >&2
+              attempt=$((attempt + 1))
+              sleep $((attempt * 5))
+            done
+          }
           mkdir "$RUNNER_TEMP/odin"
-          gh api repos/odin-lang/Odin/releases/assets/615726879 \
-            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/odin.tar.gz"
+          fetch_gh repos/odin-lang/Odin/releases/assets/615726879 "$RUNNER_TEMP/odin.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
-          gh api repos/DanielGavin/ols/releases/assets/487668598 \
-            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/ols.zip"
+          fetch_gh repos/DanielGavin/ols/releases/assets/487668598 "$RUNNER_TEMP/ols.zip"
           unzip -q "$RUNNER_TEMP/ols.zip" -d "$RUNNER_TEMP/ols"
           mv "$RUNNER_TEMP/ols/odinfmt-x86_64-unknown-linux-gnu" "$RUNNER_TEMP/ols/odinfmt"
-          gh api repos/gfx-rs/wgpu-native/releases/assets/455571719 \
-            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/wgpu.zip"
+          fetch_gh repos/gfx-rs/wgpu-native/releases/assets/455571719 "$RUNNER_TEMP/wgpu.zip"
           mkdir "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
           unzip -q "$RUNNER_TEMP/wgpu.zip" -d "$RUNNER_TEMP/odin/vendor/wgpu/lib/wgpu-linux-x86_64-release"
-          gh api repos/libsdl-org/SDL/releases/assets/500597597 \
-            -H "Accept: application/octet-stream" > "$RUNNER_TEMP/sdl.tar.gz"
+          fetch_gh repos/libsdl-org/SDL/releases/assets/500597597 "$RUNNER_TEMP/sdl.tar.gz"
           mkdir "$RUNNER_TEMP/sdl"
           tar -xzf "$RUNNER_TEMP/sdl.tar.gz" -C "$RUNNER_TEMP/sdl" --strip-components=1
           cmake -S "$RUNNER_TEMP/sdl" -B "$RUNNER_TEMP/sdl-build" -G Ninja \
@@ -67,7 +78,7 @@ jobs:
           cmake --build "$RUNNER_TEMP/sdl-build"
           sudo cmake --install "$RUNNER_TEMP/sdl-build"
           sudo ldconfig
-          gh api repos/odin-lang/Odin/tarball/93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d > "$RUNNER_TEMP/odin-source.tar.gz"
+          fetch_gh repos/odin-lang/Odin/tarball/93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d "$RUNNER_TEMP/odin-source.tar.gz"
           tar -xzf "$RUNNER_TEMP/odin-source.tar.gz" -C "$RUNNER_TEMP/odin" --strip-components=1
           (cd "$RUNNER_TEMP/odin" && git init && git fetch --depth=1 https://github.com/odin-lang/Odin 93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d && git reset FETCH_HEAD && LLVM_CONFIG=llvm-config-18 CXX=clang++-18 sh build_odin.sh release)
           sh "$RUNNER_TEMP/odin/vendor/miniaudio/src/build_miniaudio.sh"
