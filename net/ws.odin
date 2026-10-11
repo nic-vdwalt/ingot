@@ -527,9 +527,11 @@ ws_enqueue :: proc(ws: ^Web_Socket, data: string, binary: bool) {
 // deadline set (see ws_recv_loop's heartbeat). Returns false if every attempt
 // failed or ws_close cut in. The socket is left retracted on failure.
 @(private = "file")
-ws_dial_and_handshake :: proc(ws: ^Web_Socket) -> bool {
+ws_dial_and_handshake :: proc(ws: ^Web_Socket, pending: ^WS_Handshake_Pending) -> bool {
 	assert(ws != nil, "ws_dial_and_handshake: nil ws")
+	assert(pending != nil)
 	for attempt := 0; attempt < ws.max_attempts && sync.atomic_load(&ws.running); attempt += 1 {
+		pending.count = 0
 		transport: Ws_Transport
 		net_err: Ws_Net_Err
 		if ws.secure {
@@ -564,7 +566,7 @@ ws_dial_and_handshake :: proc(ws: ^Web_Socket) -> bool {
 		ws.transport = transport
 		ws.socket_open = true
 		sync.mutex_unlock(&ws.sock_mutex)
-		if ws_handshake(ws, &ws.transport) {
+		if ws_handshake(ws, &ws.transport, pending) {
 			ws_net_set_recv_timeout(&ws.transport, WS_RECV_TIMEOUT)
 			sync.atomic_store(&ws.last_error, WS_Error.None)
 			return true
@@ -591,11 +593,12 @@ ws_connect_worker :: proc(ws: ^Web_Socket) {
 	previous_generation := sync.atomic_load(&ws.conn_gen)
 	assert(previous_generation >= 0)
 	first := true
+	pending: WS_Handshake_Pending
 	// tigerstyle: allow-unbounded-loop -- ws_close terminates the connection worker lifetime
 	for sync.atomic_load(&ws.running) {
 		ws_set_state(ws, first ? .Connecting : .Reconnecting)
 
-		if !ws_dial_and_handshake(ws) {
+		if !ws_dial_and_handshake(ws, &pending) {
 			failure := sync.atomic_load(&ws.last_error)
 			if failure == .TLS || failure == .Handshake {
 				ws_set_state(ws, .Error)
@@ -618,7 +621,7 @@ ws_connect_worker :: proc(ws: ^Web_Socket) {
 		// socket reporting Connected.
 		if !sync.atomic_load(&ws.running) do break
 		ws_set_state(ws, .Connected)
-		ws_recv_loop(ws) // returns when the socket drops
+		ws_recv_loop(ws, pending.bytes[:pending.count]) // returns when the socket drops
 
 		// Retract the dropped socket before the next dial cycle.
 		sync.mutex_lock(&ws.sock_mutex)
@@ -645,7 +648,22 @@ ws_connect_worker :: proc(ws: ^Web_Socket) {
 // Send the HTTP upgrade request and validate the 101 response (see
 // ws_handshake_response_valid for the RFC 6455 section 4.1 checks).
 @(private = "file")
-ws_handshake :: proc(ws: ^Web_Socket, transport: ^Ws_Transport) -> bool {
+WS_HANDSHAKE_CAPACITY :: 2048
+
+@(private = "file")
+WS_Handshake_Pending :: struct {
+	bytes: [WS_HANDSHAKE_CAPACITY]u8,
+	count: int,
+}
+
+@(private = "file")
+ws_handshake :: proc(
+	ws: ^Web_Socket,
+	transport: ^Ws_Transport,
+	pending: ^WS_Handshake_Pending,
+) -> bool {
+	assert(pending != nil)
+	pending.count = 0
 	assert(ws != nil)
 	assert(transport != nil, "ws_handshake: nil transport")
 	// Read through the accessor: ws_close can mark the transport closed from
@@ -685,7 +703,7 @@ ws_handshake :: proc(ws: ^Web_Socket, transport: ^Ws_Transport) -> bool {
 		total += count
 	}
 	ws_net_set_recv_timeout(transport, ws.handshake_timeout)
-	buf: [2048]u8
+	buf: [WS_HANDSHAKE_CAPACITY]u8
 	count := 0
 	started := time.now()
 	for count < len(buf) && time.since(started) < ws.handshake_timeout {
@@ -700,7 +718,12 @@ ws_handshake :: proc(ws: ^Web_Socket, transport: ^Ws_Transport) -> bool {
 		if strings.contains(string(buf[:count]), "\r\n\r\n") do break
 	}
 	ws_net_set_recv_timeout(transport, time.Duration(0))
-	return ws_handshake_response_valid(string(buf[:count]), key)
+	response := string(buf[:count])
+	if !ws_handshake_response_valid(response, key) do return false
+	header_end := strings.index(response, "\r\n\r\n") + 4
+	assert(header_end >= 4 && header_end <= count)
+	pending.count = copy(pending.bytes[:], buf[header_end:count])
+	return true
 }
 
 // Bound on parsed response header lines (Tiger Style: every loop has a fixed
@@ -777,7 +800,7 @@ ws_accept_for_key :: proc(key: string) -> string {
 // WS_DEAD_AFTER, declare the connection dead. Only ws_close clears ws.running
 // (which ends the whole session).
 @(private = "file")
-ws_recv_loop :: proc(ws: ^Web_Socket) {
+ws_recv_loop :: proc(ws: ^Web_Socket, initial: []u8) {
 	assert(ws != nil)
 	scratch: [65536]u8
 	acc := make([dynamic]u8) // growable accumulator (handles frames > 64 KB)
@@ -788,6 +811,9 @@ ws_recv_loop :: proc(ws: ^Web_Socket) {
 	frag: WS_Frag_State
 	defer delete(frag.buf)
 
+	append(&acc, ..initial)
+	if !sync.atomic_load(&ws.running) do return
+	if !ws_process_acc(ws, &acc, &frag) do return
 	last_activity := time.now()
 	last_ping := time.now()
 	// tigerstyle: allow-unbounded-loop -- ws_close terminates the receive worker lifetime
@@ -824,51 +850,45 @@ ws_recv_loop :: proc(ws: ^Web_Socket) {
 		ensure(n > 0 && n <= len(scratch))
 		last_activity = time.now() // any bytes (events OR a PONG) = alive
 		append(&acc, ..scratch[:n])
-		total := len(acc)
-		buf := acc[:]
-
-		// Parse WebSocket frame(s) from buffer.
-		offset := 0
-		for offset < total {
-			frame, consumed, status := ws_parse_frame(buf[offset:])
-			if status == .Need_More do break
-			if status == .Too_Big {
-				// Oversized frame: protocol violation - drop the connection
-				// rather than buffering unbounded data (worker will re-dial).
-				ws_mark_disconnected(ws, .Protocol)
-				return
-			}
-
-			// Control frames must not be fragmented (RFC 6455 §5.5).
-			if frame.opcode >= WS_OP_CLOSE && !frame.fin {
-				ws_mark_disconnected(ws, .Protocol)
-				return
-			}
-
-			switch frame.opcode {
-			case WS_OP_TEXT, WS_OP_BINARY, WS_OP_CONTINUATION:
-				if !ws_handle_data_frame(ws, &frag, frame) {
-					ws_mark_disconnected(ws, .Protocol)
-					return
-				}
-
-			case WS_OP_PING:
-				ws_send_frame(ws, WS_OP_PONG, frame.payload)
-
-			case WS_OP_CLOSE:
-				ws_mark_disconnected(ws, .Peer_Closed)
-				return
-			}
-
-			offset += consumed
-			assert(consumed > 0 && offset <= total)
-		}
-
-		// Drop consumed bytes; keep any partial-frame tail for the next recv.
-		if offset > 0 {
-			remove_range(&acc, 0, offset)
-		}
+		if !ws_process_acc(ws, &acc, &frag) do return
 	}
+}
+
+@(private = "file")
+ws_process_acc :: proc(ws: ^Web_Socket, acc: ^[dynamic]u8, frag: ^WS_Frag_State) -> bool {
+	assert(ws != nil && acc != nil)
+	assert(frag != nil)
+	total := len(acc^)
+	buf := acc^[:]
+	offset := 0
+	for offset < total {
+		frame, consumed, status := ws_parse_frame(buf[offset:])
+		if status == .Need_More do break
+		if status == .Too_Big {
+			ws_mark_disconnected(ws, .Protocol)
+			return false
+		}
+		if frame.opcode >= WS_OP_CLOSE && !frame.fin {
+			ws_mark_disconnected(ws, .Protocol)
+			return false
+		}
+		switch frame.opcode {
+		case WS_OP_TEXT, WS_OP_BINARY, WS_OP_CONTINUATION:
+			if !ws_handle_data_frame(ws, frag, frame) {
+				ws_mark_disconnected(ws, .Protocol)
+				return false
+			}
+		case WS_OP_PING:
+			ws_send_frame(ws, WS_OP_PONG, frame.payload)
+		case WS_OP_CLOSE:
+			ws_mark_disconnected(ws, .Peer_Closed)
+			return false
+		}
+		offset += consumed
+		assert(consumed > 0 && offset <= total)
+	}
+	if offset > 0 do remove_range(acc, 0, offset)
+	return true
 }
 
 // Send a text message over WebSocket.

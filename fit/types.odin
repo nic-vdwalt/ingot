@@ -80,6 +80,7 @@ Storage :: struct {
 	nodes:   []Storage_Node,
 	outputs: []^bool,
 	customs: []Custom_Spec,
+	results: []Widget_Id,
 }
 STORAGE_NODE_DEFAULT :: 128
 STORAGE_NODE_HARD_MAX :: 8192

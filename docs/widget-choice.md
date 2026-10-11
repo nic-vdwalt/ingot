@@ -2,10 +2,11 @@
 
 The [Fit guide](fit-guide.md#when-state-changes) lists delivery phases and
 ownership requirements. Builder operations run during render, not inline in Draw;
-use Action as the default operation path and typed commands only when needed.
+prefer builder-aware typed commands for operations and `button_result` for polling.
+Actions and raw output pointers are advanced compatibility paths with borrowed lifetimes.
 
-- Use `Button` for one immediate operation. Use an `Action` for the shortest
-  path; use `Button_Command` when several input sources share one typed command.
+- Use `button_command` with builder-aware collection for an operation.
+  Use a plain `button` with `button_result` for previous-build polling.
 - Use `Checkbox` for an independent boolean and `Radio` for one value from a
   small visible set.
 - Use dropdown/select for a short closed set. Use combobox when users must

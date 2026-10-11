@@ -12,15 +12,15 @@ bash "$root/scripts/check.sh"
 case "$(uname -m)" in
 	x86_64|amd64) ;;
 	aarch64|arm64)
-		odin check "$root/accesskit" -collection:ingot="$root" -no-entry-point \
+		ingot_odin check "$root/accesskit" -collection:ingot="$root" -no-entry-point \
 			-define:INGOT_ACCESSKIT=false
 		;;
 	*) echo "Unsupported Linux architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
-odin check "$root/accesskit" -collection:ingot="$root" -no-entry-point
-odin check "$root/sys" -collection:ingot="$root" -no-entry-point
-odin check "$root/pty" -collection:ingot="$root" -no-entry-point
+ingot_odin check "$root/accesskit" -collection:ingot="$root" -no-entry-point
+ingot_odin check "$root/sys" -collection:ingot="$root" -no-entry-point
+ingot_odin check "$root/pty" -collection:ingot="$root" -no-entry-point
 
 if [ "${INGOT_LINUX_RUNTIME:-0}" = 1 ]; then
 	command -v xvfb-run >/dev/null 2>&1 || {

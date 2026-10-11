@@ -28,15 +28,27 @@ function Invoke-Odingate {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+# Retries once when the compiler process itself crashed (an NTSTATUS exit such
+# as 0xC0000005), never on exit 1 from diagnostics. Odin dev-2026-10:93f71c2
+# has two data races that kill roughly one invocation in several hundred; see
+# docs/testing.md. $LASTEXITCODE is left at the final attempt's status.
+function Invoke-Odin {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    & odin @Arguments
+    if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 1) { return }
+    Write-Warning "odin $($Arguments[0]) exited with $LASTEXITCODE (known compiler race in $(& odin version), see docs/testing.md); retrying once"
+    & odin @Arguments
+}
+
 Write-Host "== Odin toolchain =="
 Invoke-CheckedPython "check_toolchain_test.py"
 Invoke-CheckedPython "check-toolchain.py"
 Write-Host "== building tools/odingate =="
-& odin build "$Root/tools/odingate" $Collection $Linker "-out:$Odingate" @OdinFlags
+Invoke-Odin build "$Root/tools/odingate" $Collection $Linker "-out:$Odingate" @OdinFlags
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & git -C $Root ls-files "*.odin" | Set-Content -Encoding ascii $OdingateFiles
 Write-Host "== odingate tests =="
-& odin test "$Root/tools/odingate" $Collection $Linker -define:ODIN_TEST_THREADS=1 @OdinFlags
+Invoke-Odin test "$Root/tools/odingate" $Collection $Linker -define:ODIN_TEST_THREADS=1 @OdinFlags
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "== repository hygiene =="
 Invoke-CheckedPython "check_repository_hygiene_test.py"
@@ -63,32 +75,32 @@ Invoke-CheckedPython "check_theme_tokens.py" @("--baseline", "$PSScriptRoot/them
 
 foreach ($Package in $Manifest.check_packages) {
     Write-Host "== checking $Package =="
-    & odin check "$Root/$Package" $Collection -vet -strict-style -vet-shadowing -no-entry-point @OdinFlags
+    Invoke-Odin check "$Root/$Package" $Collection -vet -strict-style -vet-shadowing -no-entry-point @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 Write-Host "== checking net (INGOT_WS_SIM=true, vet) =="
-& odin check "$Root/net" $Collection -vet -strict-style -vet-shadowing -no-entry-point -define:INGOT_WS_SIM=true @OdinFlags
+Invoke-Odin check "$Root/net" $Collection -vet -strict-style -vet-shadowing -no-entry-point -define:INGOT_WS_SIM=true @OdinFlags
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "== checking ui_gfx (INGOT_ACCESSKIT=false, vet) =="
-& odin check "$Root/ui_gfx" $Collection -vet -strict-style -vet-shadowing -no-entry-point -define:INGOT_ACCESSKIT=false @OdinFlags
+Invoke-Odin check "$Root/ui_gfx" $Collection -vet -strict-style -vet-shadowing -no-entry-point -define:INGOT_ACCESSKIT=false @OdinFlags
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($Mode in $Manifest.simulation_modes) {
     $Package = $Mode[0]
     $Define = $Mode[1]
     Write-Host "== checking $Package ($Define) =="
-    & odin test "$Root/$Package" $Collection $Linker "-define:$Define" -define:ODIN_TEST_NAMES=__compile_only__ @OdinFlags
+    Invoke-Odin test "$Root/$Package" $Collection $Linker "-define:$Define" -define:ODIN_TEST_NAMES=__compile_only__ @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 foreach ($Package in $Manifest.binding_packages) {
     Write-Host "== checking binding $Package =="
-    & odin check "$Root/$Package" $Collection -no-entry-point @OdinFlags
+    Invoke-Odin check "$Root/$Package" $Collection -no-entry-point @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 $ExampleOut = Join-Path $env:TEMP "ingot-example-check"
 New-Item -ItemType Directory -Force -Path $ExampleOut | Out-Null
 foreach ($Example in $Manifest.examples) {
     Write-Host "== building example $Example =="
-    & odin build "$Root/examples/$Example" $Collection $Linker "-out:$ExampleOut/$Example.exe" @OdinFlags
+    Invoke-Odin build "$Root/examples/$Example" $Collection $Linker "-out:$ExampleOut/$Example.exe" @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 foreach ($Package in $Manifest.hot_reload_packages) {
@@ -101,7 +113,7 @@ foreach ($Package in $Manifest.hot_reload_packages) {
         $Arguments += "-out:$ExampleOut/hot_reload_host.exe"
     }
     $Arguments += $OdinFlags
-    & odin @Arguments
+    Invoke-Odin @Arguments
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 Write-Host "== gate manifest =="

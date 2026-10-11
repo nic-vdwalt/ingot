@@ -1,5 +1,12 @@
 # UI state and stable focus
 
+Builder-owned button results are transient interaction history, not persistent
+application model state. Query them only in the next build; skipped renders and
+owner/storage resets invalidate history. Scoped keys isolate logical buttons,
+but reused IDs do not detect destroyed objects: include entity generations in
+replacement keys. Prefer builder-aware typed commands for operations and
+`button_result` for polling; raw outputs and callback contexts remain advanced.
+
 See the [Fit guide](fit-guide.md#reusable-components) for a tested scoped
 component recipe and the distinction between current-build handles and state
 that must survive helper return, rendering, and later builds.

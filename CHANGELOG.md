@@ -9,6 +9,13 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+- Add bounded builder-owned button results with explicit availability, one-build
+  expiry, scoped identity, external storage, and overflow diagnostics.
+- Add builder-aware typed-command collection without deferred queue pointers.
+  Legacy collection and raw outputs remain supported; conflicting command-button
+  delivery options are rejected. Payload copies and other model storage remain
+  borrowed unless explicitly owned by the application.
+
 This release renames the whole public `ingot:fit` procedure surface. Every
 consumer of `ingot:fit` must update call sites; see **Removed** below.
 
@@ -59,6 +66,10 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
 
 ### Added
 
+- `fit.button_output` explicitly names advanced deferred button outputs while
+  preserving existing overloads. Added delivery contract tests, a persistent-owner
+  tagged-action component recipe, and guidance for borrowed lifetimes, canonical
+  Surface names, and command-button saturation.
 - Typed operating errors along the application lifecycle. `gfx.Context_Error`
   and `gfx.context_error` record why `context_init` or `context_close` failed
   (window, instance, surface, adapter, device, device lost, swapchain, stream
@@ -200,6 +211,12 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
 
 ### Fixed
 
+- Selected gate compiler invocations now retry once to absorb intermittent
+  crashes associated with Odin `93f71c2`'s cached entity-name publication and
+  thread-pool task-accounting races. Exit 1 is never retried; platform-specific
+  heuristics and the Windows supervised-test exception are documented in
+  [compiler crash retry](docs/testing.md#compiler-crash-retry). Remove this
+  workaround when the compiler pin includes both upstream fixes.
 - Two live native `ingot:gfx` contexts no longer share one drag-drop and
   presentation owner. Before, `platform_create_surface` on macOS overwrote the
   single presentation owner so the first window's `nextDrawable` hook reported

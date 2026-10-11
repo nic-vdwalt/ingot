@@ -18,6 +18,52 @@ Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 boolean result. A raw callback context is an explicit borrowed pointer, not a
 closure allocation. Keep its cast at the callback boundary.
 
+## Choose an interaction path
+
+Prefer `typed_commands_begin(&commands, builder)` with `button_command` for
+operations. Rendering retains neither the queue nor a callback context. For
+polling, declare a plain button and query `button_result(parent, key)` next build.
+Persistent value pointers remain necessary for checkboxes and sliders.
+Actions are an advanced borrowed-context compatibility path:
+
+```odin
+fit.button(root, "save", "Save", fit.Button_Options{
+    style = .Secondary,
+    action = fit.action(Save, state),
+})
+```
+
+Use `button_output(parent, key, label, &state.activated, options)` only when an
+integration needs a deferred raw output. It accepts string, u64, and Widget_Id
+keys. Its options must not also supply `activated` or an Action. Existing
+`button(..., ^bool)` overloads remain compatibility-supported without warnings.
+The default button style remains Primary.
+
+Choose `button_delayed` for a later-build Signal, typed commands for shared
+command processing, and Surface/Region controls for explicit geometry. These
+are different timing contracts, not interchangeable spellings.
+
+## Owned result polling
+
+`button_result(parent, key)` accepts string, u64, and explicit Widget_Id keys.
+Its value contains `status` (`Available` or `Unavailable`) and `activated`.
+Queries are repeatable throughout the next build, not consuming reads. History
+expires at the following begin; skipped renders and lifecycle/storage resets
+produce `Unavailable`. Completed history with no activation yields an available
+false. Overflow preserves recorded positives but makes unknown negatives
+unavailable. Inspect `button_results_dropped(builder)` and
+`typed_commands_unavailable(&queue)`; counters persist across ordinary resets.
+
+`Storage.results` optionally supplies two equal ID banks: allocate twice the
+wanted result capacity, at most twice `STORAGE_NODE_HARD_MAX`. It must remain
+stable through every use. Without it, the builder uses inline bounded storage.
+Scoped keys isolate components; explicit IDs are unchanged. Reusing an ID means
+the same logical button: use generation-bearing entity keys for replacements.
+This does not validate object lifetimes. Command payload copies are shallow;
+prefer enums, owned value records, or validated handles rather than borrowed
+strings, slices, or pointers. Custom userdata and editable model pointers remain
+borrowed. See `examples/typed_commands` for scoped polling and safe commands.
+
 ## When state changes
 
 ```text
@@ -34,10 +80,10 @@ synchronous interaction; preserve bounded work and event-driven sleep.
 
 | Mechanism | Delivery | Ownership / recommendation |
 |---|---|---|
-| `button` + `action` | Activating render, after declaration | Default for an operation; caller owns context through dispatch |
+| `button` + `action` | Activating render, after declaration | Advanced compatibility; caller owns context through dispatch |
 | Checkbox/slider value pointer | During rendering | Default for a value; caller owns backing storage |
 | `button_delayed` + `Signal` | Observed/consumed by a later build | Optional one-shot latch; caller owns Signal |
-| `button_command` | Collected at next `typed_commands_begin` | Optional bounded typed queue for converging input sources |
+| `button_command` | Collected at next `typed_commands_begin` | Recommended with builder-aware begin; bounded value commands |
 | Surface interaction return | Inside its render callback | Advanced explicit-geometry code; Surface is borrowed |
 
 A later declaration in the same Draw still reads pre-render state. See
@@ -59,6 +105,36 @@ Do not pass a component helper's local bool or stack-local callback context to a
 Builder control. The helper returns before rendering. Use fields of the
 caller's persistent component state instead. Copied structs containing slices
 or pointers do not deep-copy their backing storage.
+
+### Lifetime and visibility are separate
+
+This helper is invalid under the default deferred rendering path:
+
+```odin
+invalid_helper :: proc(parent: fit.Parent) {
+    activated := false
+    fit.button_output(parent, "save", "Save", &activated)
+}
+```
+
+The helper returns before the destination is written. Instead, keep the value
+in persistent component state:
+
+```odin
+draw_save_output :: proc(parent: fit.Parent, state: ^Save_State) {
+    fit.button_output(parent, "save", "Save", &state.activated)
+}
+```
+
+`Save_State` owns an `activated: bool` field and must survive rendering. Reading
+that field immediately after declaring the button still reads pre-render state.
+For an operation, prefer builder-aware typed commands instead of polling this output.
+
+Actions also borrow their context; they do not create owning closures. Strings,
+item slices, and track slices borrow backing storage: copying their descriptors
+is not a deep copy. Explicit `render` consumes declarations synchronously, but
+is not the recommended workaround for helper-local pointers. Never call Draw
+twice to imitate immediate interaction.
 
 ## Reusable components
 
@@ -91,11 +167,34 @@ or replaces browser applications must use an explicit host lifecycle and its
 shutdown callback to call its owner cleanup; page-lifetime globals are not a
 reusable multi-app teardown recipe. See [application shell](application-shell.md).
 
+### Tagged operations on generated components
+
+`examples/builder_controls` pairs `draw_preference_reset` with `reset_preference`:
+
+```odin
+scoped := fit.scope(parent, stable_key)
+fit.button(scoped, "reset", "Reset local settings",
+    fit.action(reset_preference, data, stable_key))
+```
+
+The tag is copied by value; `data` remains a borrowed persistent owner. The
+callback looks up the component by stable key, resets only its value, and safely
+ignores a removed key. It does not capture a pointer to a loop-local item or
+replace resource-owning widget state. Reordering keys and their corresponding
+state together preserves the target. The example tests cover pointer/keyboard
+activation, post-declaration dispatch, and isolation after reorder/removal.
+
 ## Optional typed commands
 
-Keep direct Actions as the short default. When several sources share typed
-operations, use the existing `Typed_Commands(T, Capacity)` rather than a new
-callback registry. The capacity is fixed and shared with the bounded drain loop.
+Handle `button_command` results: `.Full` means no button was declared, so layout
+and focus order exclude it. Previously accepted controls remain usable. Keep the
+queue across builds to preserve command values. In builder-aware mode widgets
+retain no queue pointers. The legacy one-argument begin still borrows activation slots. Do not provide Action or raw-output delivery fields
+in command-button options. See [Commands](commands.md) for capacity semantics.
+
+Use `Typed_Commands(T, Capacity)` with `typed_commands_begin(&queue, builder)`
+as the default operation path. Reset before switching between owned and legacy
+modes. The capacity is fixed and shared with the bounded drain loop.
 
 ```text
 Draw N:
@@ -103,8 +202,8 @@ Draw N:
   drain at most Capacity values into application state
   declare Button_Command controls while collection is open
   End (deferred until Draw returns)
-Render N: write accepted controls' activation flags
-Draw N+1: collect those flags
+Render N: record activated button IDs in builder-owned history
+Draw N+1: resolve descriptors against that history
 ```
 
 `examples/typed_commands/main.odin` is the executable recipe. Pair Begin with

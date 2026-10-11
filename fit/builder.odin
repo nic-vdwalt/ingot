@@ -117,6 +117,7 @@ debug_owner_retire :: proc(builder: ^Builder) {
 		return
 	}
 	debug_owner_assert_quiescent(builder)
+	ui.fit_results_reset(&builder.inner)
 	builder.owner.alive = false
 }
 
@@ -125,6 +126,7 @@ debug_owner_prepare :: proc(builder: ^Builder) {
 	assert(builder != nil, "fit debug owner: nil builder")
 	if builder.owner.alive do return
 	assert(builder.owner.epoch < max(u64), "fit debug owner: epoch exhausted")
+	ui.fit_results_reset(&builder.inner)
 	builder.owner.epoch += 1
 	builder.owner.alive = true
 }
@@ -522,6 +524,61 @@ button :: proc {
 	button_id,
 	button_id_action,
 	button_id_active,
+}
+
+@(private = "package")
+button_output_impl :: proc(
+	parent: Parent,
+	key: Button_Key,
+	label: string,
+	activated: ^bool,
+	options: Button_Options,
+) {
+	assert(activated != nil, "fit.button_output: nil destination")
+	assert(options.activated == nil, "fit.button_output: duplicate output")
+	assert(options.action.procedure == nil, "fit.button_output: conflicting action")
+	assert(options.action.tagged_procedure == nil, "fit.button_output: conflicting tagged action")
+	resolved := options
+	resolved.activated = activated
+	button_impl(parent, key, label, resolved)
+}
+
+@(private = "package")
+button_output_string :: proc(
+	parent: Parent,
+	key, label: string,
+	activated: ^bool,
+	options: Button_Options = {},
+) {
+	button_output_impl(parent, key, label, activated, options)
+}
+
+@(private = "package")
+button_output_u64 :: proc(
+	parent: Parent,
+	key: u64,
+	label: string,
+	activated: ^bool,
+	options: Button_Options = {},
+) {
+	button_output_impl(parent, key, label, activated, options)
+}
+
+@(private = "package")
+button_output_id :: proc(
+	parent: Parent,
+	key: Widget_Id,
+	label: string,
+	activated: ^bool,
+	options: Button_Options = {},
+) {
+	button_output_impl(parent, key, label, activated, options)
+}
+
+button_output :: proc {
+	button_output_string,
+	button_output_u64,
+	button_output_id,
 }
 
 button_delayed :: proc {

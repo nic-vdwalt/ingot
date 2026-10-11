@@ -107,7 +107,9 @@ components, typed commands, and headless tests without introducing another API.
 See the [layout guide](docs/layout.md) for responsive Flow, track Grid, sizing,
 and placement options. Larger applications can optionally converge buttons,
 menus, shortcuts, and integration completions on a caller-owned bounded typed
-queue; the direct Action API above remains the shortest primary path. See
+queue with `typed_commands_begin(&queue, builder)`, the recommended operation
+path. Use `button_result` for owned polling. The Action example above is an
+advanced compatibility path: its context must survive rendering and dispatch. See
 [Commands and contextual shortcuts](docs/commands.md) and
 `examples/typed_commands`.
 

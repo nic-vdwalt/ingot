@@ -92,7 +92,7 @@ bash "$ROOT/build_web.sh" >/dev/null
 # it can't be built for the web; type-check net for js instead so the web
 # WebSocket backend (ws_web.odin) can't rot unnoticed.
 echo "== wasm check: net =="
-(cd "$ROOT" && odin check net -collection:ingot=. -target:js_wasm32 -no-entry-point)
+(cd "$ROOT" && ingot_odin check net -collection:ingot=. -target:js_wasm32 -no-entry-point)
 
 # Imports used only inside native `when` blocks are invisible to the native
 # vet, so vet every web-capable package again for js_wasm32. term, testx and
@@ -101,7 +101,7 @@ web_vet_packages="$(python3 -c 'import json,sys; print(" ".join(json.load(open(s
 	"$ROOT/scripts/gate-manifest.json")"
 for pkg in $web_vet_packages; do
 	echo "== wasm vet: $pkg =="
-	(cd "$ROOT" && odin check "$pkg" -collection:ingot=. -target:js_wasm32 \
+	(cd "$ROOT" && ingot_odin check "$pkg" -collection:ingot=. -target:js_wasm32 \
 		-vet -strict-style -vet-shadowing -no-entry-point)
 done
 

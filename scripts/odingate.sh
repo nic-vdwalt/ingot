@@ -18,7 +18,13 @@ ingot_build_odingate() {
 	INGOT_ODINGATE="$out_dir/odingate"
 	export INGOT_ODINGATE
 	echo "== building tools/odingate =="
-	odin build "$root/tools/odingate" "-collection:ingot=$root" "-out:$INGOT_ODINGATE" "$@"
+	# ingot_odin (scripts/odin-toolchain.sh) retries a compiler that died from a
+	# signal; a consumer that sources only this file still gets a plain build.
+	local runner=odin
+	if declare -F ingot_odin >/dev/null; then
+		runner=ingot_odin
+	fi
+	"$runner" build "$root/tools/odingate" "-collection:ingot=$root" "-out:$INGOT_ODINGATE" "$@"
 }
 
 ingot_odingate_files() {

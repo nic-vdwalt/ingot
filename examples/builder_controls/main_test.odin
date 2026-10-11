@@ -36,6 +36,61 @@ preview_balances_clipping_at_multiple_scales :: proc(t: ^testing.T) {
 	}
 }
 
+Reset_Test_State :: struct {
+	owner:    State,
+	observed: int,
+}
+
+reset_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
+	data := cast(^Reset_Test_State)user_data
+	draw_preference_reset(fit.center(builder), 205, &data.owner)
+	data.observed = data.owner.reset_count
+}
+
+@(test)
+tagged_reset_preserves_owner_and_timing :: proc(t: ^testing.T) {
+	for mode in 0 ..< 2 {
+		driver: fit.Test_Driver
+		fit.test_driver_init(&driver)
+		data: Reset_Test_State
+		data.owner.preference_keys = {205, 101}
+		data.owner.local_preferences[0].enabled = true
+		data.owner.local_preferences[1].enabled = true
+		base := fit.Test_Input {
+			screen_size    = {640, 480},
+			dpi_scale      = 1,
+			mouse_position = {320, 240},
+		}
+		testing.expect(t, fit.test_driver_frame(&driver, base, reset_test_draw, &data))
+		pressed := base
+		if mode == 0 {
+			pressed.mouse_pressed[0] = true
+			pressed.mouse_down[0] = true
+		} else {
+			pressed.keys_pressed[int(fit.Key.Tab)] = true
+		}
+		testing.expect(t, fit.test_driver_frame(&driver, pressed, reset_test_draw, &data))
+		released := base
+		if mode == 0 {
+			released.mouse_released[0] = true
+		} else {
+			released.keys_pressed[int(fit.Key.Enter)] = true
+		}
+		testing.expect(t, fit.test_driver_frame(&driver, released, reset_test_draw, &data))
+		testing.expect_value(t, data.observed, 0)
+		testing.expect_value(t, data.owner.reset_count, 1)
+		testing.expect(t, !data.owner.local_preferences[0].enabled)
+		testing.expect(t, data.owner.local_preferences[1].enabled)
+		testing.expect(t, fit.test_driver_frame(&driver, base, reset_test_draw, &data))
+		testing.expect_value(t, data.owner.reset_count, 1)
+		data.owner.preference_keys[0] = 0
+		reset_preference(&data.owner, 205)
+		testing.expect_value(t, data.owner.reset_count, 1)
+		destroy_state(&data.owner)
+		fit.test_driver_destroy(&driver)
+	}
+}
+
 Preview_Test_State :: struct {
 	rect:  fit.Rect,
 	inset: i32,

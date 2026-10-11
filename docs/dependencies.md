@@ -38,6 +38,15 @@ Keep Git metadata at the exact commit so version output includes its revision
 and commit month. On macOS, LLVM 20 is used; install the result at
 `../tools/odin-93f71c2` or point `INGOT_ODIN_ROOT` to it.
 
+This pin also has two identified compiler races: unsynchronized cached-name
+publication in `lb_get_entity_name` and task publication before accounting in
+`thread_pool_queue_push`; selected gate invocations temporarily retry once
+(see [compiler crash retry](testing.md#compiler-crash-retry) for coverage and
+exit-status limitations). The next pin bump should include upstream fixes for
+both races, then remove the retry rather than carry a local compiler patch;
+the investigation and candidate patch are preserved in the sibling
+`../ingot-artifacts/odin-93f71c2-compiler-races/` snapshot.
+
 GLFW is the default native host. `-define:INGOT_GFX_SDL3=true` selects SDL3
 3.4.x at compile time while retaining `vendor:wgpu`; the unselected host is not
 linked. Browser builds continue using DOM events and WebGPU directly.

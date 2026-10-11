@@ -30,7 +30,7 @@ source "$root/scripts/odingate.sh"
 ingot_build_odingate "$root" "$@"
 odingate_files="$(ingot_odingate_files "$root")"
 echo "== odingate tests =="
-odin test "$root/tools/odingate" $col -define:ODIN_TEST_THREADS=1 "$@"
+ingot_odin test "$root/tools/odingate" $col -define:ODIN_TEST_THREADS=1 "$@"
 
 # Type-check + vet every package. -vet-shadowing and -strict-style turn sloppy
 # code into build failures; -no-entry-point lets us check library packages that
@@ -84,21 +84,21 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_theme_tokens.py" \
 for pkg in $(manifest_values check_packages); do
 	echo "== checking $pkg =="
 	# shellcheck disable=SC2086
-	odin check "$root/$pkg" $col $vet_flags "$@"
+	ingot_odin check "$root/$pkg" $col $vet_flags "$@"
 done
 
 # The simulated WebSocket transport compiles a different import set; vet it so
 # an import used only by the real transport cannot hide behind the default mode.
 echo "== checking net (INGOT_WS_SIM=true, vet) =="
 # shellcheck disable=SC2086
-odin check "$root/net" $col $vet_flags -define:INGOT_WS_SIM=true "$@"
+ingot_odin check "$root/net" $col $vet_flags -define:INGOT_WS_SIM=true "$@"
 
 # INGOT_ACCESSKIT=false compiles out ui_gfx's AccessKit bridge, the same import
 # set the web build sees; vet it natively so an import used only by the bridge
 # fails here rather than only in check-web.sh.
 echo "== checking ui_gfx (INGOT_ACCESSKIT=false, vet) =="
 # shellcheck disable=SC2086
-odin check "$root/ui_gfx" $col $vet_flags -define:INGOT_ACCESSKIT=false "$@"
+ingot_odin check "$root/ui_gfx" $col $vet_flags -define:INGOT_ACCESSKIT=false "$@"
 
 # Simulated-transport builds are a separate compilation of the same packages:
 # a `when !INGOT_*_SIM` block hides code from one mode and reveals it in the
@@ -117,7 +117,7 @@ for spec in \
 	echo "== checking $pkg ($define) =="
 	# ODIN_TEST_NAMES selects no test, so this compiles the test build without
 	# running it.
-	odin test "$root/$pkg" $col "-define:$define" \
+	ingot_odin test "$root/$pkg" $col "-define:$define" \
 		-define:ODIN_TEST_NAMES=__compile_only__ >/dev/null
 done
 
@@ -125,7 +125,7 @@ done
 # they must still type-check against the pinned toolchain.
 for pkg in $(manifest_values binding_packages); do
 	echo "== checking binding $pkg =="
-	odin check "$root/$pkg" $col -no-entry-point "$@"
+	ingot_odin check "$root/$pkg" $col -no-entry-point "$@"
 done
 
 # Examples are consumer contracts, not samples that may rot independently.
@@ -135,7 +135,7 @@ example_out="${TMPDIR:-/tmp}/ingot-example-check"
 mkdir -p "$example_out"
 for example in $(manifest_values examples); do
 	echo "== building example $example =="
-	odin build "$root/examples/$example" $col "-out:$example_out/$example" "$@"
+	ingot_odin build "$root/examples/$example" $col "-out:$example_out/$example" "$@"
 done
 
 case "$(uname -s)" in
@@ -144,10 +144,10 @@ Linux) hot_reload_extension=".so" ;;
 *) hot_reload_extension=".dll" ;;
 esac
 echo "== building example hot_reload/game =="
-odin build "$root/examples/hot_reload/game" $col -build-mode:dll \
+ingot_odin build "$root/examples/hot_reload/game" $col -build-mode:dll \
 	"-out:$example_out/hot_reload_game$hot_reload_extension" "$@"
 echo "== building example hot_reload/host =="
-odin build "$root/examples/hot_reload/host" $col "-out:$example_out/hot_reload_host" "$@"
+ingot_odin build "$root/examples/hot_reload/host" $col "-out:$example_out/hot_reload_host" "$@"
 
 echo "== gate manifest =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/gate_manifest_test.py"

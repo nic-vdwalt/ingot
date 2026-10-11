@@ -31,7 +31,15 @@ require_positive_integer() {
 	fi
 }
 
+# run_supervised [--retry-signal-exit] <label> <command...>
+#   The flag is forwarded to the supervisor for direct compiler invocations so
+#   a compiler process killed by a signal is rerun once (docs/testing.md).
 run_supervised() {
+	local retry=()
+	if [ "$1" = --retry-signal-exit ]; then
+		retry+=("$1")
+		shift
+	fi
 	local pkg="$1"
 	shift
 	python3 "$supervisor" \
@@ -39,6 +47,7 @@ run_supervised() {
 		--timeout "$timeout_seconds" \
 		--output-limit "$output_limit_bytes" \
 		--log-dir "$log_dir" \
+		${retry[@]+"${retry[@]}"} \
 		-- "$@"
 }
 
@@ -79,13 +88,13 @@ for pkg in $(manifest_values test_packages); do
 	# The supervisor names its failure log after the label, so a nested package
 	# path has to be flattened: "view/generate" would otherwise write into a
 	# directory that does not exist.
-	run_supervised "${pkg//\//-}" odin test "$root/$pkg" "$col" "$guard" \
+	run_supervised --retry-signal-exit "${pkg//\//-}" odin test "$root/$pkg" "$col" "$guard" \
 		-define:ODIN_TEST_FAIL_ON_EMPTY=true ${extra[@]+"${extra[@]}"} "$@"
 done
 
 for example in $(manifest_values test_examples); do
 	echo "== testing examples/$example =="
-	run_supervised "${example//_/-}-example" odin test "$root/examples/$example" "$col" \
+	run_supervised --retry-signal-exit "${example//_/-}-example" odin test "$root/examples/$example" "$col" \
 		"$guard" -define:ODIN_TEST_FAIL_ON_EMPTY=true "$@"
 done
 
@@ -99,5 +108,5 @@ run_supervised "wss-loopback" python3 "$root/scripts/wss-loopback-test.py" \
 # Packages without unit tests are still type-checked so they cannot rot.
 for pkg in $(manifest_values compile_packages); do
 	echo "== checking $pkg =="
-	run_supervised "$pkg-check" odin check "$root/$pkg" "$col" -no-entry-point
+	run_supervised --retry-signal-exit "$pkg-check" odin check "$root/$pkg" "$col" -no-entry-point
 done

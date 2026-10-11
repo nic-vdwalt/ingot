@@ -23,6 +23,13 @@ def parse_args():
     parser.add_argument("--output-limit", required=True, type=int)
     parser.add_argument("--log-dir", required=True)
     parser.add_argument("--retain-success-log", action="store_true")
+    # Relaunch once when the supervised process itself died from a signal.
+    # Odin dev-2026-10:93f71c2 has two data races that kill the compiler
+    # roughly once in several hundred runs (docs/testing.md); a test binary that
+    # crashes makes `odin test` exit with a positive status, which is never
+    # retried. Only POSIX reports negative return codes, so the flag is inert
+    # on Windows.
+    parser.add_argument("--retry-signal-exit", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.command and args.command[0] == "--":
@@ -153,6 +160,20 @@ def supervise(args):
 def main():
     args = parse_args()
     process, chunks, failure, interrupted = supervise(args)
+    if (
+        args.retry_signal_exit
+        and failure is None
+        and interrupted is None
+        and process.returncode is not None
+        and process.returncode < 0
+    ):
+        log_path = write_failure_log(args.log_dir, args.package, chunks, args.output_limit)
+        print(
+            f"test supervisor: {args.package} died with signal {-process.returncode}"
+            f" (known compiler race, see docs/testing.md); retrying once; log: {log_path}",
+            file=sys.stderr,
+        )
+        process, chunks, failure, interrupted = supervise(args)
     return_code = process.returncode
     if failure is None and return_code == 0:
         if args.retain_success_log:

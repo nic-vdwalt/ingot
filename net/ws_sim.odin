@@ -45,6 +45,14 @@ when INGOT_WS_SIM {
 		Server_Close, // clean CLOSE frame
 		Cut, // recv error mid-connection
 		Timeout, // recv timeout (PING probe path)
+		Handshake_Frame,
+		Handshake_Multiple,
+		Handshake_Split_Header,
+		Handshake_Split_Payload,
+		Handshake_Frame_And_Partial,
+		Handshake_Invalid_Frame,
+		Handshake_Ping_Frame,
+		Handshake_Close,
 	}
 
 	MAX_SIM_EVENTS :: 256
@@ -58,10 +66,11 @@ when INGOT_WS_SIM {
 		payload_seed:    u64, // deterministic payload generation
 		pending_key:     [64]u8, // handshake key captured from the upgrade request
 		pending_key_len: int,
-		split_tail:      [128]u8, // second half of a Frame_Split
+		split_tail:      [2048]u8, // second half of a Frame_Split
 		split_tail_len:  int,
 		handle_seq:      i64,
 		frames_served:   int, // atomic; harness-side observability
+		pongs_sent:      int,
 		burst_remaining: int, // worker-thread only; Frame_Burst expansion
 		mutex:           sync.Mutex,
 	}
@@ -83,12 +92,17 @@ when INGOT_WS_SIM {
 		g_ws_sim.pending_key_len = 0
 		g_ws_sim.burst_remaining = 0
 		sync.atomic_store(&g_ws_sim.frames_served, 0)
+		sync.atomic_store(&g_ws_sim.pongs_sent, 0)
 	}
 
 	// ws_sim_frames_served reports clean frames delivered (harness checks
 	// drain counts against it).
 	ws_sim_frames_served :: proc() -> int {
 		return sync.atomic_load(&g_ws_sim.frames_served)
+	}
+
+	ws_sim_pongs_sent :: proc() -> int {
+		return sync.atomic_load(&g_ws_sim.pongs_sent)
 	}
 
 	@(private = "file")
@@ -175,6 +189,9 @@ when INGOT_WS_SIM {
 				sync.mutex_unlock(&g_ws_sim.mutex)
 			}
 		}
+		if len(data) >= 2 && data[0] == 0x80 | WS_OP_PONG {
+			sync.atomic_add(&g_ws_sim.pongs_sent, 1)
+		}
 		return len(data), .None // sink everything (PONGs, texts, CLOSE)
 	}
 
@@ -194,7 +211,9 @@ when INGOT_WS_SIM {
 		defer sync.mutex_unlock(&g_ws_sim.mutex)
 		if g_ws_sim.split_tail_len <= 0 do return 0, .None, false
 		count := copy(buf, g_ws_sim.split_tail[:g_ws_sim.split_tail_len])
-		g_ws_sim.split_tail_len = 0
+		remaining := g_ws_sim.split_tail_len - count
+		copy(g_ws_sim.split_tail[:], g_ws_sim.split_tail[count:g_ws_sim.split_tail_len])
+		g_ws_sim.split_tail_len = remaining
 		return count, .None, true
 	}
 
@@ -211,9 +230,12 @@ when INGOT_WS_SIM {
 			return copy(buf, "HTTP/1.1 200 NOPE\r\n\r\n"), .None, true
 		}
 		if event == .Handshake_Cut do return 0, .Other, true
-		sync.mutex_lock(&g_ws_sim.mutex)
-		g_ws_sim.tape_pos = max(g_ws_sim.tape_pos - 1, 0)
-		sync.mutex_unlock(&g_ws_sim.mutex)
+		coalesced := event >= .Handshake_Frame && event <= .Handshake_Close
+		if !coalesced {
+			sync.mutex_lock(&g_ws_sim.mutex)
+			g_ws_sim.tape_pos = max(g_ws_sim.tape_pos - 1, 0)
+			sync.mutex_unlock(&g_ws_sim.mutex)
+		}
 		accept := ws_accept_for_key(string(key_buf[:key_len]))
 		response := strings.concatenate(
 			{
@@ -224,11 +246,49 @@ when INGOT_WS_SIM {
 			},
 			context.temp_allocator,
 		)
-		return copy(buf, response), .None, true
+		if !coalesced {
+			count := copy(buf, response)
+			if count < len(response) do sim_store_tail(transmute([]u8)response[count:])
+			return count, .None, true
+		}
+		return sim_handshake_frames(buf, response, event), .None, true
+	}
+
+	@(private = "file")
+	sim_handshake_frames :: proc(buf: []u8, response: string, event: Ws_Sim_Event) -> int {
+		assert(len(buf) > 0)
+		assert(event >= .Handshake_Frame && event <= .Handshake_Close)
+		wire: [2048]u8
+		header := response
+		if event == .Handshake_Invalid_Frame do header = "HTTP/1.1 200 OK\r\n\r\n"
+		count := copy(wire[:], header)
+		if event == .Handshake_Ping_Frame {
+			count += sim_server_frame(wire[count:], WS_OP_PING, {})
+		}
+		if event == .Handshake_Close {
+			count += sim_server_frame(wire[count:], WS_OP_CLOSE, {})
+		} else {
+			count += sim_server_frame(wire[count:], WS_OP_TEXT, transmute([]u8)string("first"))
+			sync.atomic_add(&g_ws_sim.frames_served, 1)
+		}
+		if event == .Handshake_Multiple || event == .Handshake_Frame_And_Partial {
+			count += sim_server_frame(wire[count:], WS_OP_TEXT, transmute([]u8)string("second"))
+			sync.atomic_add(&g_ws_sim.frames_served, 1)
+		}
+		first_count := count
+		#partial switch event {
+		case .Handshake_Split_Header: first_count = len(header) + 1
+		case .Handshake_Split_Payload: first_count = len(header) + 4
+		case .Handshake_Frame_And_Partial: first_count = count - 3
+		}
+		delivered := copy(buf, wire[:first_count])
+		if delivered < count do sim_store_tail(wire[delivered:count])
+		return delivered
 	}
 
 	@(private = "file")
 	sim_store_tail :: proc(tail: []u8) {
+		assert(len(tail) <= len(g_ws_sim.split_tail))
 		sync.mutex_lock(&g_ws_sim.mutex)
 		g_ws_sim.split_tail_len = copy(g_ws_sim.split_tail[:], tail)
 		sync.mutex_unlock(&g_ws_sim.mutex)

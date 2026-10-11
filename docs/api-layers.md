@@ -2,6 +2,11 @@
 
 Ingot has two primary consumer entry points and two advanced UI layers.
 
+For Fit button operations, prefer builder-aware typed commands; use owned
+`button_result` polling for explicit next-build results. Raw outputs and Action
+contexts remain advanced borrowed-storage compatibility paths. See the
+[Fit guide](fit-guide.md#owned-result-polling) for expiry and overflow contracts.
+
 ## `ingot:gfx`
 
 Use `ingot:gfx` as a raylib-compatible import. Keep the PascalCase window,
@@ -35,6 +40,15 @@ the frame seam, and plain wrappers such as `set_frame_strategy` or
 `request_redraw` for the default owner.
 
 ## `ingot:fit`
+
+Builder, Surface, and Region are distinct execution/geometry models, not
+redundant APIs. For Surface operations with both spellings, use the explicit
+`surface_*` name as the reference vocabulary: `surface_viewport` rather than
+`viewport`, `surface_metrics` rather than `get_metrics`, and
+`surface_theme_tokens` rather than `get_theme_tokens`. Short aliases remain
+supported without deprecation warnings. This convention does not rename
+Builder APIs or imply every Surface operation has an alias.
+
 
 Start with the [Fit guide](fit-guide.md) for executable timing, lifetime,
 component, typed-command, and custom-geometry recipes.

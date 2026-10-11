@@ -58,8 +58,8 @@ need and their timeout, parser, and diagnostic contracts are designed.
 `fit.Typed_Commands(T, Capacity)` is a caller-owned fixed-capacity queue for
 applications that want buttons, menus, shortcuts, and integration completions
 to converge on one typed vocabulary. It is not an application runtime or
-reducer, and ordinary immediate results and `fit.Action` remain the shortest
-primary APIs.
+reducer. Builder-aware collection is the recommended button operation path;
+owned `button_result` polling is the alternative. Actions remain advanced.
 
 ```odin
 Command :: enum u8 {
@@ -70,9 +70,11 @@ Command :: enum u8 {
 commands: fit.Typed_Commands(Command, 16)
 
 Draw :: proc(builder: ^fit.Builder, _: rawptr) {
-	fit.typed_commands_begin(&commands)
+	fit.typed_commands_begin(&commands, builder)
+	defer fit.typed_commands_end(&commands)
 	command: Command
-	for fit.typed_commands_take(&commands, &command) {
+	for _ in 0 ..< 16 {
+		if !fit.typed_commands_take(&commands, &command) do break
 		switch command {
 		case .Save:
 			save()
@@ -80,10 +82,10 @@ Draw :: proc(builder: ^fit.Builder, _: rawptr) {
 			reset()
 		}
 	}
-	fit.typed_commands_end(&commands)
 
 	root := fit.column(builder)
-	_ = fit.button_command(root, "save", "Save", &commands, Command.Save)
+	result := fit.button_command(root, "save", "Save", &commands, Command.Save)
+	if result != .Accepted do fit.label(root, "Command capacity reached")
 }
 ```
 
@@ -93,6 +95,18 @@ appended while draining wait for the next explicit drain, so dispatch is never
 recursive. `Button_Command` reports `.Full` if no activation slot remains;
 `Typed_Commands_Append` reports `.Full` when ready storage is saturated. Drop
 counts remain inspectable through `Typed_Commands_Dropped`.
+
+On activation-slot `.Full`, `button_command` declares no widget: layout and focus
+order exclude that button. Handle its result explicitly; previously accepted
+buttons remain usable. This differs from rejecting a command after a click.
+Builder-aware begin resolves previous-build IDs synchronously. Rendering retains
+no queue pointer. Keep the queue across builds to preserve command values.
+The legacy one-argument begin still requires stable queue storage through render.
+Reset before changing modes. `typed_commands_unavailable` counts descriptors
+whose history expired, overflowed, or belonged to another builder/generation.
+Do not supply `options.action` or `options.activated` to command buttons:
+Actions conflict with command delivery, and the output destination is owned by
+the queue. The current implementation returns `.Accepted` or `.Full`, not `.Invalid`.
 
 Command payloads must own everything they carry. Borrowed strings, slices,
 frame pointers, and callback closures are not safe queue payloads. An

@@ -1,5 +1,10 @@
 # Why immediate mode
 
+Fit keeps bounded button activation history for one subsequent build, not a
+retained behavioral widget tree. Prefer builder-aware typed commands or owned
+`button_result` queries over deferred output pointers. Application model state
+remains application-owned; custom userdata and editable values remain borrowed.
+
 Ingot starts from a simple position: a retained widget tree is not required to
 build a complete desktop interface.
 

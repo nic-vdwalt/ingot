@@ -88,6 +88,41 @@ headless web gate. Hosted native gates provide compile, link, and headless test
 evidence; they do not establish D3D12, Metal, ConPTY, PTY, accessibility, or
 assistive-technology validation.
 
+## Compiler crash retry
+
+The pinned Odin `dev-2026-10:93f71c2` has two identified compiler races:
+`lb_get_entity_name` (`src/llvm_backend_general.cpp:2572-2588`) publishes a
+cached entity name without synchronization, allowing a torn pointer/length read
+by backend workers; `thread_pool_queue_push` (`src/thread_pool.cpp:112-117`)
+publishes work before incrementing `tasks_left`, allowing an early wait return
+and freeing the escape graph under `escape_group_worker`
+(`src/check_escape.cpp:3826`). Local crashes included SIGSEGV and SIGTRAP.
+The investigation, crash reports, and candidate source patch are in the sibling
+`../ingot-artifacts/odin-93f71c2-compiler-races/` snapshot. Neither 349 pinned
+nor 400 patched stress builds reproduced a crash; this is not an A/B proof of
+the patch or a measured failure rate.
+
+The shell gates `check.sh`, `test.sh`, `check-web.sh`, and `check-linux.sh`
+retry eligible Odin invocations exactly once, logging the retry and returning
+the final attempt's status. `ingot_odin` uses shell status >= 128 as a
+signal-death heuristic; an explicit exit in that range is indistinguishable.
+For supervised Odin commands in `test.sh`, `--retry-signal-exit` instead
+requires a negative POSIX subprocess return code, with no timeout, output-limit
+failure, or supervisor interruption. The first attempt's failure log is saved.
+Exit 1 is never retried; ordinary positive test failures are not retried by the
+supervisor. A retry message does not prove that either known race caused it.
+
+On Windows, `Invoke-Odin` in `check.ps1` and the odingate build in `test.ps1`
+retry any exit other than 0 or 1, including NTSTATUS crash codes. This is a
+broader heuristic, not proof of a compiler crash: `check.ps1` also wraps
+`odin test`, so a propagated test-binary failure with another status can be
+retried. Supervised `odin test` runs in `test.ps1` deliberately remain without
+retry because Windows exit codes cannot distinguish compiler and test-binary
+crashes. Manual smoke/capture tools, `check-cross.sh`, `build_web.sh`, and Odin
+calls launched inside other helpers are outside this workaround's coverage.
+Remove the retry once the toolchain pin includes fixes for both races; the
+current pin is unchanged and no compiler source patch is carried here.
+
 ## Standard checks
 
 Run the package tests:

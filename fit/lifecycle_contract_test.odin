@@ -102,6 +102,45 @@ fit_async_ticket_completes_once_before_owner_teardown :: proc(t: ^testing.T) {
 
 when ODIN_OS != .Windows || INGOT_FIT_EXPECTED_ASSERTS {
 	@(test)
+	fit_button_output_nil_is_rejected :: proc(t: ^testing.T) {
+		testing.expect_assert_message(t, "fit.button_output: nil destination")
+		button_output(Parent{}, "button", "Button", nil)
+	}
+
+	@(test)
+	fit_button_output_duplicate_is_rejected :: proc(t: ^testing.T) {
+		activated: bool
+		testing.expect_assert_message(t, "fit.button_output: duplicate output")
+		button_output(Parent{}, "button", "Button", &activated, {activated = &activated})
+	}
+
+	@(test)
+	fit_button_output_action_is_rejected :: proc(t: ^testing.T) {
+		activated: bool
+		testing.expect_assert_message(t, "fit.button_output: conflicting action")
+		button_output(
+			Parent{},
+			"button",
+			"Button",
+			&activated,
+			{action = action(proc(data: rawptr) {_ = data})},
+		)
+	}
+
+	@(test)
+	fit_button_output_tagged_action_is_rejected :: proc(t: ^testing.T) {
+		activated: bool
+		testing.expect_assert_message(t, "fit.button_output: conflicting tagged action")
+		button_output(
+			Parent{},
+			"button",
+			"Button",
+			&activated,
+			{action = action(proc(data: rawptr, tag: u64) {_ = data; _ = tag}, nil, 1)},
+		)
+	}
+
+	@(test)
 	fit_async_duplicate_completion_is_rejected :: proc(t: ^testing.T) {
 		builder: Builder
 		debug_owner_prepare(&builder)

@@ -11,21 +11,25 @@ CASE_TIMEOUT_SECONDS = 15
 MAX_OUTPUT_BYTES = 1 << 20
 
 
-async def websocket_server(reader, writer, valid_upgrade=True):
+async def websocket_server(reader, writer, valid_upgrade=True, delivery="delayed"):
     try:
         request = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 5)
         key_line = next(line for line in request.split(b"\r\n") if line.lower().startswith(b"sec-websocket-key:"))
         key = key_line.split(b":", 1)[1].strip()
         accept = base64.b64encode(hashlib.sha1(key + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
+        frame = b"\x81\x06secure"
+        sent = len(frame) if delivery == "coalesced" else 5 if delivery == "split" else 0
         if valid_upgrade:
-            writer.write(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + b"\r\n\r\n")
+            response = b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + b"\r\n\r\n"
+            writer.write(response + frame[:sent])
         else:
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
         await writer.drain()
         if valid_upgrade:
-            await asyncio.sleep(0.2)
-            writer.write(b"\x81\x06secure")
-            await writer.drain()
+            if sent < len(frame):
+                await asyncio.sleep(0.2)
+                writer.write(frame[sent:])
+                await writer.drain()
             await asyncio.sleep(0.2)
     except (asyncio.IncompleteReadError, ConnectionError, StopAsyncIteration):
         pass
@@ -37,11 +41,11 @@ async def websocket_server(reader, writer, valid_upgrade=True):
             pass
 
 
-async def run_case(name, fixture, collection, odin_flags, pki, certificate, key, ca_file, expected_error, expect_message, valid_upgrade=True):
+async def run_case(name, fixture, collection, odin_flags, pki, certificate, key, ca_file, expected_error, expect_message, valid_upgrade=True, delivery="delayed"):
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(pki / certificate, pki / key)
     server = await asyncio.start_server(
-        lambda reader, writer: websocket_server(reader, writer, valid_upgrade),
+        lambda reader, writer: websocket_server(reader, writer, valid_upgrade, delivery),
         "127.0.0.1",
         0,
         ssl=context,
@@ -78,6 +82,8 @@ async def run_case(name, fixture, collection, odin_flags, pki, certificate, key,
 
 async def run_matrix(fixture, collection, odin_flags, pki):
     await run_case("valid", fixture, collection, odin_flags, pki, "localhost.pem", "localhost-key.pem", "root-ca.pem", 0, True)
+    await run_case("coalesced", fixture, collection, odin_flags, pki, "localhost.pem", "localhost-key.pem", "root-ca.pem", 0, True, delivery="coalesced")
+    await run_case("split", fixture, collection, odin_flags, pki, "localhost.pem", "localhost-key.pem", "root-ca.pem", 0, True, delivery="split")
     await run_case("untrusted", fixture, collection, odin_flags, pki, "localhost.pem", "localhost-key.pem", "", 4, False)
     await run_case("wrong-host", fixture, collection, odin_flags, pki, "wrong.pem", "wrong-key.pem", "root-ca.pem", 4, False)
     await run_case("bad-upgrade", fixture, collection, odin_flags, pki, "localhost.pem", "localhost-key.pem", "root-ca.pem", 5, False, False)

@@ -56,15 +56,25 @@ Fit_Custom_Options :: struct {
 Fit_Storage :: struct {
 	nodes:   []Prepared_Node,
 	outputs: []^bool,
+	results: []Widget_Id,
 }
 
 Fit_Builder :: struct {
-	prepared:        Prepared_Ui,
-	outputs:         [MAX_PREPARED_NODES]^bool,
-	external:        []^bool,
-	output_count:    i32,
-	direct_children: [MAX_LAYOUT_DEPTH]i32,
-	container_kinds: [MAX_LAYOUT_DEPTH]Prepared_Kind,
+	prepared:                Prepared_Ui,
+	outputs:                 [MAX_PREPARED_NODES]^bool,
+	external:                []^bool,
+	output_count:            i32,
+	direct_children:         [MAX_LAYOUT_DEPTH]i32,
+	container_kinds:         [MAX_LAYOUT_DEPTH]Prepared_Kind,
+	result_ids:              [2 * MAX_PREPARED_NODES]Widget_Id,
+	result_external:         []Widget_Id,
+	result_read_count:       int,
+	result_pending_count:    int,
+	result_read_valid:       bool,
+	result_pending_valid:    bool,
+	result_read_overflow:    bool,
+	result_pending_overflow: bool,
+	result_dropped:          u64,
 }
 
 fit_builder_set_storage :: proc(builder: ^Fit_Builder, storage: Fit_Storage) {
@@ -72,6 +82,8 @@ fit_builder_set_storage :: proc(builder: ^Fit_Builder, storage: Fit_Storage) {
 	fit_storage_assert_valid(storage)
 	prepared_set_storage(&builder.prepared, {nodes = storage.nodes})
 	builder.external = storage.outputs
+	builder.result_external = storage.results
+	fit_results_reset(builder)
 }
 
 fit_builder_reset_storage :: proc(builder: ^Fit_Builder) {
@@ -79,6 +91,8 @@ fit_builder_reset_storage :: proc(builder: ^Fit_Builder) {
 	assert(builder.output_count >= 0, "fit_builder_reset_storage: invalid count")
 	prepared_reset_storage(&builder.prepared)
 	builder.external = nil
+	builder.result_external = nil
+	fit_results_reset(builder)
 }
 
 @(private = "package")
@@ -87,6 +101,9 @@ fit_storage_assert_valid :: proc(storage: Fit_Storage) {
 	assert(len(storage.nodes) == len(storage.outputs), "fit storage: capacity mismatch")
 	assert(len(storage.nodes) >= MAX_LAYOUT_DEPTH, "fit storage: capacity too small")
 	assert(len(storage.nodes) <= MAX_PREPARED_NODES_HARD, "fit storage: capacity too large")
+	assert(len(storage.results) % 2 == 0, "fit storage: results require two equal banks")
+	assert(len(storage.results) <= 2 * MAX_PREPARED_NODES_HARD)
+	assert(storage.results == nil || len(storage.results) > 0)
 }
 
 @(private = "package")
@@ -100,6 +117,7 @@ fit_begin :: proc(builder: ^Fit_Builder, u: ^Ui) {
 	assert(builder != nil, "fit_begin: nil builder")
 	assert(u != nil && u.open && u.frame != nil, "fit_begin: invalid UI")
 	assert(!builder.prepared.open, "fit_begin: builder already open")
+	fit_results_begin(builder)
 	outputs := fit_builder_outputs(builder)
 	assert(len(outputs) == prepared_capacity(&builder.prepared), "fit_begin: capacity mismatch")
 	assert(builder.output_count >= 0 && builder.output_count <= i32(len(outputs)))
@@ -566,6 +584,7 @@ fit_render_at :: proc(builder: ^Fit_Builder, rect: Rect_I32) {
 	fit_outputs_clear(outputs, builder.output_count)
 	prepared_phase_end(builder.prepared.u.frame, .Output_Clear, clear_started)
 	prepared_render_at(builder.prepared.u, &builder.prepared, rect)
+	fit_results_collect(builder)
 	fit_actions_dispatch(builder)
 }
 
@@ -580,6 +599,7 @@ fit_render :: proc(builder: ^Fit_Builder) -> Rect_I32 {
 	fit_outputs_clear(outputs, builder.output_count)
 	prepared_phase_end(builder.prepared.u.frame, .Output_Clear, clear_started)
 	rect := prepared_fit(builder.prepared.u, &builder.prepared)
+	fit_results_collect(builder)
 	fit_actions_dispatch(builder)
 	return rect
 }
@@ -614,6 +634,82 @@ fit_actions_dispatch :: proc(builder: ^Fit_Builder) {
 		dispatched = true
 	}
 	if dispatched do request_redraw(builder.prepared.u.frame)
+}
+
+Fit_Button_Result :: struct {
+	available: bool,
+	activated: bool,
+}
+
+fit_results_reset :: proc(builder: ^Fit_Builder) {
+	assert(builder != nil)
+	builder.result_read_count = 0
+	builder.result_pending_count = 0
+	builder.result_read_valid = false
+	builder.result_pending_valid = false
+	builder.result_read_overflow = false
+	builder.result_pending_overflow = false
+}
+
+@(private = "file")
+fit_results_storage :: proc(builder: ^Fit_Builder) -> []Widget_Id {
+	assert(builder != nil)
+	if builder.result_external != nil do return builder.result_external
+	return builder.result_ids[:]
+}
+
+@(private = "package")
+fit_results_begin :: proc(builder: ^Fit_Builder) {
+	storage := fit_results_storage(builder)
+	capacity := len(storage) / 2
+	assert(builder.result_pending_count <= capacity)
+	builder.result_read_count = builder.result_pending_count
+	builder.result_read_valid = builder.result_pending_valid
+	builder.result_read_overflow = builder.result_pending_overflow
+	for index in 0 ..< builder.result_pending_count {
+		storage[index] = storage[capacity + index]
+	}
+	builder.result_pending_count = 0
+	builder.result_pending_valid = false
+	builder.result_pending_overflow = false
+}
+
+fit_button_result :: proc(builder: ^Fit_Builder, id: Widget_Id) -> Fit_Button_Result {
+	assert(builder != nil)
+	storage := fit_results_storage(builder)
+	assert(builder.result_read_count <= len(storage) / 2)
+	if !builder.result_read_valid do return {}
+	for index in 0 ..< builder.result_read_count {
+		if storage[index] == id do return {available = true, activated = true}
+	}
+	return {available = !builder.result_read_overflow}
+}
+
+@(private = "package")
+fit_results_collect :: proc(builder: ^Fit_Builder) {
+	assert(builder != nil && builder.prepared.rendered)
+	storage := fit_results_storage(builder)
+	capacity := len(storage) / 2
+	nodes := prepared_nodes(&builder.prepared)
+	assert(builder.prepared.count <= i32(len(nodes)))
+	builder.result_pending_valid = true
+	for index in 0 ..< builder.prepared.count {
+		node := &nodes[index]
+		if node.kind != .Button || !node.activated do continue
+		request_redraw(builder.prepared.u.frame)
+		duplicate := false
+		for recorded in 0 ..< builder.result_pending_count {
+			if storage[capacity + recorded] == node.button.id do duplicate = true
+		}
+		if duplicate do continue
+		if builder.result_pending_count == capacity {
+			builder.result_pending_overflow = true
+			builder.result_dropped += 1
+			continue
+		}
+		storage[capacity + builder.result_pending_count] = node.button.id
+		builder.result_pending_count += 1
+	}
 }
 
 @(private = "file")

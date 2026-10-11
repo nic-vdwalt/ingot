@@ -24,6 +24,7 @@ typed_commands_partial_drain_discards_snapshot_only :: proc(t: ^testing.T) {
 Typed_Command_Fixture :: struct {
 	queue:   Typed_Commands(u8, 2),
 	results: [3]Typed_Command_Result,
+	counts:  [3]i32,
 }
 
 typed_capacity_draw :: proc(builder: ^Builder, user_data: rawptr) {
@@ -39,6 +40,7 @@ typed_capacity_draw :: proc(builder: ^Builder, user_data: rawptr) {
 			&state.queue,
 			u8(index),
 		)
+		state.counts[index] = builder.inner.prepared.count
 	}
 }
 
@@ -56,9 +58,37 @@ typed_commands_activation_capacity_is_observable :: proc(t: ^testing.T) {
 	testing.expect_value(t, ready, u64(0))
 	testing.expect_value(t, activation, u64(1))
 	testing.expect_value(t, state.queue.activation_count, 2)
+	testing.expect_value(t, state.counts[1], state.counts[0] + 1)
+	testing.expect_value(t, state.counts[2], state.counts[1])
 	typed_commands_reset(&state.queue)
 	_, activation = typed_commands_dropped(&state.queue)
 	testing.expect_value(t, activation, u64(1))
+}
+
+@(test)
+typed_commands_accepted_button_survives_saturation :: proc(t: ^testing.T) {
+	driver: Test_Driver
+	test_driver_init(&driver)
+	defer test_driver_destroy(&driver)
+	state: Typed_Command_Fixture
+	base := Test_Input {
+		screen_size = {320, 240},
+		dpi_scale   = 1,
+	}
+	testing.expect(t, test_driver_frame(&driver, base, typed_capacity_draw, &state))
+	tab := base
+	tab.keys_pressed[int(Key.Tab)] = true
+	testing.expect(t, test_driver_frame(&driver, tab, typed_capacity_draw, &state))
+	enter := base
+	enter.keys_pressed[int(Key.Enter)] = true
+	testing.expect(t, test_driver_frame(&driver, enter, typed_capacity_draw, &state))
+	typed_commands_begin(&state.queue)
+	value: u8
+	testing.expect(t, typed_commands_take(&state.queue, &value))
+	testing.expect_value(t, value, u8(0))
+	testing.expect(t, !typed_commands_take(&state.queue, &value))
+	typed_commands_end(&state.queue)
+	testing.expect_value(t, state.counts[2], state.counts[1])
 }
 
 Typed_Test_Command :: struct {

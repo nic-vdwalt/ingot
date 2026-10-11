@@ -35,7 +35,11 @@ to_storage :: proc(value: Storage) -> ui.Fit_Storage {
 	assert(value.outputs != nil, "fit.Storage: nil outputs")
 	assert(len(value.nodes) == len(value.outputs), "fit.Storage: capacity mismatch")
 	assert(len(value.nodes) <= STORAGE_NODE_HARD_MAX, "fit.Storage: capacity too large")
-	return {nodes = transmute([]ui.Prepared_Node)value.nodes, outputs = value.outputs}
+	return {
+		nodes = transmute([]ui.Prepared_Node)value.nodes,
+		outputs = value.outputs,
+		results = value.results,
+	}
 }
 
 @(private = "package")

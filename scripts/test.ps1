@@ -18,12 +18,25 @@ function Invoke-Supervised {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+# Retries once when the compiler process itself crashed (an NTSTATUS exit such
+# as 0xC0000005), never on exit 1 from diagnostics. Odin dev-2026-10:93f71c2
+# has two data races that kill roughly one invocation in several hundred; see
+# docs/testing.md. The supervised `odin test` runs below are not retried: a
+# Windows exit code cannot separate a compiler crash from a test-binary crash.
+function Invoke-Odin {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    & odin @Arguments
+    if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 1) { return }
+    Write-Warning "odin $($Arguments[0]) exited with $LASTEXITCODE (known compiler race in $(& odin version), see docs/testing.md); retrying once"
+    & odin @Arguments
+}
+
 & "$PSScriptRoot/check-ui-state.ps1"
 $OdingateDir = Join-Path $env:TEMP "ingot-odingate"
 New-Item -ItemType Directory -Force -Path $OdingateDir | Out-Null
 $Odingate = Join-Path $OdingateDir "odingate.exe"
 $OdingateFiles = Join-Path $OdingateDir "files.txt"
-& odin build "$Root/tools/odingate" $Collection $Linker "-out:$Odingate"
+Invoke-Odin build "$Root/tools/odingate" $Collection $Linker "-out:$Odingate"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & git -C $Root ls-files "*.odin" | Set-Content -Encoding ascii $OdingateFiles
 & $Odingate gfx-context --root $Root --files-from $OdingateFiles

@@ -28,7 +28,7 @@ main :: proc() {
 Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	assert(builder != nil && user_data != nil, "typed commands draw: invalid argument")
 	data := cast(^State)user_data
-	fit.typed_commands_begin(&data.commands)
+	fit.typed_commands_begin(&data.commands, builder)
 	defer fit.typed_commands_end(&data.commands)
 	command: Command
 	for _ in 0 ..< COMMAND_CAPACITY {
@@ -55,4 +55,14 @@ Draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
 	continued := fit.button_command(root, "continue", "Continue", &data.commands, Command.Continue)
 	reset := fit.button_command(root, "reset", "Reset", &data.commands, Command.Reset)
 	data.declaration_failed = continued != .Accepted || reset != .Accepted
+	polling := fit.scope(root, "polling")
+	result := fit.button_result(polling, "inspect")
+	if result.status == .Available && result.activated {
+		fit.label(polling, "Polling activation from the previous build")
+	}
+	fit.button(polling, "inspect", "Inspect result")
+	unavailable := fit.typed_commands_unavailable(&data.commands)
+	if unavailable > 0 {
+		fit.label(root, fmt.tprintf("Unavailable interaction results: %d", unavailable))
+	}
 }

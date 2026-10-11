@@ -38,3 +38,19 @@ ingot_use_pinned_odin() {
 	done
 	return 0
 }
+
+# ingot_odin <odin args...>
+#   Runs odin once more when the compiler process dies from a signal (status
+#   >= 128). Odin dev-2026-10:93f71c2 has two data races (a torn cached name
+#   in lb_get_entity_name; a task counted after it is published in
+#   thread_pool_queue_push) that kill roughly one invocation in several
+#   hundred; see docs/testing.md. Diagnostics exit 1 and are never retried.
+ingot_odin() {
+	local rc=0
+	odin "$@" || rc=$?
+	if [ "$rc" -lt 128 ]; then
+		return "$rc"
+	fi
+	echo "odin ${1:-} died with signal $((rc - 128)) (known compiler race in $(odin version 2>/dev/null | tr -d '\n'), see docs/testing.md); retrying once" >&2
+	odin "$@"
+}

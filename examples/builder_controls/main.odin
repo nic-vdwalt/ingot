@@ -8,6 +8,8 @@ Workspace_Preference :: struct {
 
 State :: struct {
 	local_preferences:     [2]Workspace_Preference,
+	preference_keys:       [2]u64,
+	reset_count:           int,
 	notifications_enabled: bool,
 	telemetry_enabled:     bool,
 	quality:               i32,
@@ -28,6 +30,7 @@ WORKSPACE_ITEMS := [4]fit.Combobox_Item {
 
 app: fit.App
 state := State {
+	preference_keys       = {101, 205},
 	notifications_enabled = true,
 	quality               = 1,
 	workspace             = 101,
@@ -121,14 +124,41 @@ draw_editor :: proc(parent: fit.Parent, data: ^State) {
 	fit.checkbox(parent, "telemetry", "Share diagnostics", &data.telemetry_enabled)
 }
 
+reset_preference :: proc(user_data: rawptr, stable_key: u64) {
+	assert(user_data != nil)
+	assert(stable_key != 0)
+	data := cast(^State)user_data
+	for key, index in data.preference_keys {
+		if key != stable_key do continue
+		data.local_preferences[index].enabled = false
+		data.reset_count += 1
+		return
+	}
+}
+
+draw_preference_reset :: proc(parent: fit.Parent, stable_key: u64, data: ^State) {
+	assert(data != nil)
+	assert(stable_key != 0)
+	scoped := fit.scope(parent, stable_key)
+	fit.button(
+		scoped,
+		"reset",
+		"Reset local settings",
+		fit.action(reset_preference, data, stable_key),
+	)
+}
+
 draw_account :: proc(parent: fit.Parent, data: ^State) {
 	assert(data != nil, "builder controls account: nil state")
 	fit.label(parent, "Account", {role = .Title})
 	fit.label(parent, "Account settings are synchronized with the selected workspace.")
 	fit.progress(parent, 0.75)
 	fit.canvas_leaf(parent, {intrinsic = {w = 160, h = 48}}, preview_render)
-	draw_preference(parent, 101, &data.local_preferences[0])
-	draw_preference(parent, 205, &data.local_preferences[1])
+	for key, index in data.preference_keys {
+		if key == 0 do continue
+		draw_preference(parent, key, &data.local_preferences[index])
+		draw_preference_reset(parent, key, data)
+	}
 }
 
 status_text :: proc(data: ^State) -> string {
