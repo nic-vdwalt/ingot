@@ -53,6 +53,14 @@ class GateManifestTest(unittest.TestCase):
             for test_name in MANIFEST[key]:
                 self.assertRegex(test_name, rf"^{package}\.[a-z][a-z0-9_]*$")
 
+    def test_powershell_odin_wrapper_flags_are_quoted(self):
+        for launcher in ("check.ps1", "test.ps1"):
+            source = (ROOT / "scripts" / launcher).read_text(encoding="utf-8")
+            for line in source.splitlines():
+                if line.lstrip().startswith("Invoke-Odin "):
+                    with self.subTest(launcher=launcher, line=line):
+                        self.assertNotRegex(line, r"(?:^|\s)-[a-zA-Z][\w-]*:")
+
     def test_launchers_consume_shared_manifest(self):
         launchers = ["check.sh", "check.ps1", "test.sh", "test.ps1"]
         for launcher in launchers:

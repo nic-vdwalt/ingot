@@ -277,9 +277,12 @@ when INGOT_WS_SIM {
 		}
 		first_count := count
 		#partial switch event {
-		case .Handshake_Split_Header: first_count = len(header) + 1
-		case .Handshake_Split_Payload: first_count = len(header) + 4
-		case .Handshake_Frame_And_Partial: first_count = count - 3
+		case .Handshake_Split_Header:
+			first_count = len(header) + 1
+		case .Handshake_Split_Payload:
+			first_count = len(header) + 4
+		case .Handshake_Frame_And_Partial:
+			first_count = count - 3
 		}
 		delivered := copy(buf, wire[:first_count])
 		if delivered < count do sim_store_tail(wire[delivered:count])

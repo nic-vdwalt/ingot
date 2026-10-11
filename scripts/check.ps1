@@ -48,7 +48,7 @@ Invoke-Odin build "$Root/tools/odingate" $Collection $Linker "-out:$Odingate" @O
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & git -C $Root ls-files "*.odin" | Set-Content -Encoding ascii $OdingateFiles
 Write-Host "== odingate tests =="
-Invoke-Odin test "$Root/tools/odingate" $Collection $Linker -define:ODIN_TEST_THREADS=1 @OdinFlags
+Invoke-Odin test "$Root/tools/odingate" $Collection $Linker "-define:ODIN_TEST_THREADS=1" @OdinFlags
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "== repository hygiene =="
 Invoke-CheckedPython "check_repository_hygiene_test.py"
@@ -79,16 +79,16 @@ foreach ($Package in $Manifest.check_packages) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 Write-Host "== checking net (INGOT_WS_SIM=true, vet) =="
-Invoke-Odin check "$Root/net" $Collection -vet -strict-style -vet-shadowing -no-entry-point -define:INGOT_WS_SIM=true @OdinFlags
+Invoke-Odin check "$Root/net" $Collection -vet -strict-style -vet-shadowing -no-entry-point "-define:INGOT_WS_SIM=true" @OdinFlags
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "== checking ui_gfx (INGOT_ACCESSKIT=false, vet) =="
-Invoke-Odin check "$Root/ui_gfx" $Collection -vet -strict-style -vet-shadowing -no-entry-point -define:INGOT_ACCESSKIT=false @OdinFlags
+Invoke-Odin check "$Root/ui_gfx" $Collection -vet -strict-style -vet-shadowing -no-entry-point "-define:INGOT_ACCESSKIT=false" @OdinFlags
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($Mode in $Manifest.simulation_modes) {
     $Package = $Mode[0]
     $Define = $Mode[1]
     Write-Host "== checking $Package ($Define) =="
-    Invoke-Odin test "$Root/$Package" $Collection $Linker "-define:$Define" -define:ODIN_TEST_NAMES=__compile_only__ @OdinFlags
+    Invoke-Odin test "$Root/$Package" $Collection $Linker "-define:$Define" "-define:ODIN_TEST_NAMES=__compile_only__" @OdinFlags
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 foreach ($Package in $Manifest.binding_packages) {

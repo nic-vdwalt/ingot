@@ -13,8 +13,8 @@ package ingotnet
 // other's tape and fail intermittently. scripts/test.sh and fuzz/run.sh pin
 // the same value for the term fuzzers, for the same reason.
 
-import "core:strings"
 import "base:runtime"
+import "core:strings"
 import "core:sync"
 import "core:testing"
 import "core:time"
@@ -78,12 +78,7 @@ when INGOT_WS_SIM {
 		ws_sim_expect_delivery(t, {.Handshake_Cut, .Handshake_Frame}, {"first"})
 		ws_sim_expect_delivery(t, {.Handshake_Close}, {})
 		ws_sim_expect_delivery(t, {.Server_Close}, {})
-		ws_sim_expect_delivery(
-			t,
-			{.Handshake_Frame, .Cut, .Handshake_Close},
-			{"first"},
-			2,
-		)
+		ws_sim_expect_delivery(t, {.Handshake_Frame, .Cut, .Handshake_Close}, {"first"}, 2)
 	}
 
 	@(test)
