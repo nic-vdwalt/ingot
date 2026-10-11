@@ -207,12 +207,14 @@ _close_window_context :: proc(ctx: ^Context) -> bool {
 		if !_submission_shutdown(&ctx.submissions) do return false
 		if !_screenshot_retire(ctx, true) do return false
 		if !_gpu_timing_retire(ctx) do return false
+		if !_frame_delivery_shutdown(ctx) do return false
 		context_close_accessibility(ctx)
 		platform_drop_shutdown(ctx)
 		_graphics_resources_destroy(ctx, &ctx.resources)
 		renderer_shutdown(&ctx.rend)
-		_frame_delivery_shutdown(ctx)
 		_gpu_timing_release(ctx)
+	} else {
+		if !_frame_delivery_shutdown(ctx) do return false
 	}
 	if ctx.surface != nil do wg.SurfaceRelease(ctx.surface)
 	if ctx.queue != nil do wg.QueueRelease(ctx.queue)

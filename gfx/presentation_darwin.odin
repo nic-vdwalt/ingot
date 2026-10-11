@@ -3,6 +3,7 @@ package gfx
 
 import "base:intrinsics"
 @(require) import "base:runtime"
+import "core:sync"
 @(require) import NS "core:sys/darwin/Foundation"
 @(require) import CA "vendor:darwin/QuartzCore"
 @(require) import "vendor:glfw"
@@ -29,19 +30,30 @@ when !INGOT_GFX_SDL3 {
 	g_presentation_subclass: rawptr
 	@(private = "file")
 	g_presentation_next: Presentation_Next_Proc
+	@(private = "file")
+	g_presentation_registry_mutex: sync.Mutex
 
 	@(private = "file")
-	_presentation_owner_for_layer :: proc "contextless" (layer: rawptr) -> ^Context {
-		if layer == nil do return nil
+	_presentation_reserve :: proc(layer: rawptr) -> (^Context, Frame_Delivery_Identity) {
+		assert(layer != nil, "_presentation_reserve: nil layer")
+		sync.mutex_lock(&g_presentation_registry_mutex)
+		defer sync.mutex_unlock(&g_presentation_registry_mutex)
 		for index in 0 ..< len(g_presentation_layers) {
-			if g_presentation_layers[index] == layer do return g_presentation_owners[index]
+			if g_presentation_layers[index] != layer do continue
+			owner := g_presentation_owners[index]
+			assert(owner != nil, "_presentation_reserve: missing owner")
+			identity, reserved := _frame_delivery_callback_reserve(owner)
+			if reserved do return owner, identity
+			return nil, {}
 		}
-		return nil
+		return nil, {}
 	}
 
 	@(private = "file")
-	_presentation_layer_for_owner :: proc "contextless" (ctx: ^Context) -> rawptr {
+	_presentation_layer_for_owner :: proc(ctx: ^Context) -> rawptr {
 		if ctx == nil do return nil
+		sync.mutex_lock(&g_presentation_registry_mutex)
+		defer sync.mutex_unlock(&g_presentation_registry_mutex)
 		for index in 0 ..< len(g_presentation_owners) {
 			if g_presentation_owners[index] == ctx do return g_presentation_layers[index]
 		}
@@ -51,6 +63,8 @@ when !INGOT_GFX_SDL3 {
 	@(private = "file")
 	_presentation_bind_layer :: proc(layer: rawptr, ctx: ^Context) {
 		assert(layer != nil && ctx != nil, "_presentation_bind_layer: invalid argument")
+		sync.mutex_lock(&g_presentation_registry_mutex)
+		defer sync.mutex_unlock(&g_presentation_registry_mutex)
 		for index in 0 ..< len(g_presentation_layers) {
 			if g_presentation_layers[index] == layer || g_presentation_owners[index] == ctx {
 				g_presentation_layers[index] = layer
@@ -71,6 +85,8 @@ when !INGOT_GFX_SDL3 {
 	@(private = "file")
 	_presentation_unbind_owner :: proc(ctx: ^Context) -> rawptr {
 		if ctx == nil do return nil
+		sync.mutex_lock(&g_presentation_registry_mutex)
+		defer sync.mutex_unlock(&g_presentation_registry_mutex)
 		for index in 0 ..< len(g_presentation_owners) {
 			if g_presentation_owners[index] == ctx {
 				layer := g_presentation_layers[index]
@@ -96,8 +112,11 @@ when !INGOT_GFX_SDL3 {
 		owner := callback.owner
 		identity := callback.identity
 		free(callback)
-		if owner == nil || drawable == nil do return
-		_frame_delivery_presented(owner, identity, f64(drawable->presentedTime()))
+		assert(owner != nil, "presentation_done: missing owner")
+		if drawable != nil {
+			_frame_delivery_presented(owner, identity, f64(drawable->presentedTime()))
+		}
+		_frame_delivery_callback_release(owner)
 	}
 
 	@(private = "file")
@@ -105,19 +124,27 @@ when !INGOT_GFX_SDL3 {
 		context = runtime.default_context()
 		if g_presentation_next == nil do return nil
 		drawable := g_presentation_next(self, cmd)
-		owner := _presentation_owner_for_layer(rawptr(self))
-		if drawable == nil || owner == nil || owner.delivery.closing do return drawable
-		frame_index := owner.stats_current.frame_index
-		if frame_index == 0 do return drawable
+		if drawable == nil do return drawable
+		owner, identity := _presentation_reserve(rawptr(self))
+		if owner == nil do return drawable
 		callback := new(Presentation_Callback)
-		if callback == nil do return drawable
-		callback.owner = owner
-		callback.identity = {
-			epoch       = owner.epoch,
-			frame_index = frame_index,
+		if callback == nil {
+			_frame_delivery_callback_release(owner)
+			_frame_delivery_hook_release(owner)
+			return drawable
 		}
+		callback.owner = owner
+		callback.identity = identity
 		block := NS.Block_createLocalWithParam(rawptr(callback), presentation_done)
+		if block == nil {
+			free(callback)
+			_frame_delivery_callback_release(owner)
+			_frame_delivery_hook_release(owner)
+			return drawable
+		}
 		drawable->addPresentedHandler(block)
+		NS.release(block)
+		_frame_delivery_hook_release(owner)
 		return drawable
 	}
 

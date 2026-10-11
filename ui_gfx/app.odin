@@ -269,7 +269,9 @@ app_destroy :: proc(app: ^App) -> bool {
 		app.last_error = .Close_Refused
 		return false
 	}
+	last_error := app.last_error
 	app^ = {}
+	app.last_error = last_error
 	return true
 }
 

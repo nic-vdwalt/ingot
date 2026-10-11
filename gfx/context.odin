@@ -436,7 +436,8 @@ context_quiesce_gpu :: proc(ctx: ^Context) -> bool {
 	if !ctx.initialized do return true
 	if !_submission_quiesce(&ctx.submissions) do return false
 	if !_screenshot_retire(ctx, true) do return false
-	return _gpu_timing_quiesce(ctx)
+	if !_gpu_timing_quiesce(ctx) do return false
+	return _frame_delivery_callbacks_quiesce(ctx)
 }
 
 context_should_close :: proc(ctx: ^Context) -> bool {

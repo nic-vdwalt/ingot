@@ -88,12 +88,77 @@ Frame_Delivery_Slot :: struct {
 }
 
 Frame_Delivery_State :: struct {
-	mutex:          sync.Mutex,
-	slots:          [FRAME_DELIVERY_MAX]Frame_Delivery_Slot,
-	last_presented: f64,
-	dropped:        u64,
-	supported:      bool,
-	closing:        bool,
+	mutex:             sync.Mutex,
+	slots:             [FRAME_DELIVERY_MAX]Frame_Delivery_Slot,
+	last_presented:    f64,
+	dropped:           u64,
+	supported:         bool,
+	closing:           bool,
+	pending_callbacks: u32,
+	active_hooks:      u32,
+}
+
+@(private)
+FRAME_DELIVERY_CALLBACKS_MAX :: FRAME_DELIVERY_MAX
+@(private)
+FRAME_DELIVERY_HOOKS_MAX :: FRAME_DELIVERY_MAX
+
+@(private)
+_frame_delivery_callback_reserve :: proc(ctx: ^Context) -> (Frame_Delivery_Identity, bool) {
+	assert(ctx != nil, "_frame_delivery_callback_reserve: nil context")
+	sync.mutex_lock(&ctx.delivery.mutex)
+	defer sync.mutex_unlock(&ctx.delivery.mutex)
+	assert(ctx.delivery.pending_callbacks <= FRAME_DELIVERY_CALLBACKS_MAX)
+	assert(ctx.delivery.active_hooks <= FRAME_DELIVERY_HOOKS_MAX)
+	if ctx.delivery.closing || ctx.epoch == 0 || ctx.stats_current.frame_index == 0 {
+		return {}, false
+	}
+	if ctx.delivery.pending_callbacks == FRAME_DELIVERY_CALLBACKS_MAX ||
+	   ctx.delivery.active_hooks == FRAME_DELIVERY_HOOKS_MAX {
+		ctx.delivery.dropped += 1
+		return {}, false
+	}
+	ctx.delivery.pending_callbacks += 1
+	ctx.delivery.active_hooks += 1
+	return {epoch = ctx.epoch, frame_index = ctx.stats_current.frame_index}, true
+}
+
+@(private)
+_frame_delivery_callback_release :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_frame_delivery_callback_release: nil context")
+	sync.mutex_lock(&ctx.delivery.mutex)
+	assert(ctx.delivery.pending_callbacks > 0)
+	ctx.delivery.pending_callbacks -= 1
+	sync.mutex_unlock(&ctx.delivery.mutex)
+}
+
+@(private)
+_frame_delivery_hook_release :: proc(ctx: ^Context) {
+	assert(ctx != nil, "_frame_delivery_hook_release: nil context")
+	sync.mutex_lock(&ctx.delivery.mutex)
+	assert(ctx.delivery.active_hooks > 0)
+	ctx.delivery.active_hooks -= 1
+	sync.mutex_unlock(&ctx.delivery.mutex)
+}
+
+@(private)
+_frame_delivery_callbacks_pending :: proc(ctx: ^Context) -> bool {
+	assert(ctx != nil, "_frame_delivery_callbacks_pending: nil context")
+	sync.mutex_lock(&ctx.delivery.mutex)
+	defer sync.mutex_unlock(&ctx.delivery.mutex)
+	assert(ctx.delivery.pending_callbacks <= FRAME_DELIVERY_CALLBACKS_MAX)
+	assert(ctx.delivery.active_hooks <= FRAME_DELIVERY_HOOKS_MAX)
+	return ctx.delivery.pending_callbacks != 0 || ctx.delivery.active_hooks != 0
+}
+
+@(private)
+_frame_delivery_callbacks_quiesce :: proc(ctx: ^Context) -> bool {
+	assert(ctx != nil, "_frame_delivery_callbacks_quiesce: nil context")
+	for _ in 0 ..< FRAME_DELIVERY_QUIESCE_POLLS {
+		if !_frame_delivery_callbacks_pending(ctx) do return true
+		platform_sleep(FRAME_DELIVERY_QUIESCE_SECONDS)
+	}
+	return !_frame_delivery_callbacks_pending(ctx)
 }
 
 context_frame_delivery_supported :: proc(ctx: ^Context) -> bool {
@@ -218,16 +283,18 @@ _frame_delivery_init :: proc(ctx: ^Context) {
 }
 
 @(private)
-_frame_delivery_shutdown :: proc(ctx: ^Context) {
+_frame_delivery_shutdown :: proc(ctx: ^Context) -> bool {
 	assert(ctx != nil, "_frame_delivery_shutdown: nil context")
 	sync.mutex_lock(&ctx.delivery.mutex)
 	ctx.delivery.closing = true
 	sync.mutex_unlock(&ctx.delivery.mutex)
 	platform_frame_delivery_shutdown(ctx)
+	if !_frame_delivery_callbacks_quiesce(ctx) do return false
 	sync.mutex_lock(&ctx.delivery.mutex)
 	ctx.delivery.slots = {}
 	ctx.delivery.supported = false
 	sync.mutex_unlock(&ctx.delivery.mutex)
+	return true
 }
 
 @(private)

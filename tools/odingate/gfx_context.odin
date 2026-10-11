@@ -108,6 +108,7 @@ GFX_ALLOWED_PACKAGE_GLOBALS := [?]Gfx_Allowed_Globals {
 			"g_presentation_original_class",
 			"g_presentation_subclass",
 			"g_presentation_next",
+			"g_presentation_registry_mutex",
 		},
 	},
 	{"gfx/submission.odin", {"g_submission_id_next"}},
