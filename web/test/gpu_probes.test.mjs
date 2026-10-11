@@ -20,7 +20,12 @@ const { hook } = await install();
 
 function loadWebGPUInterface() {
 	const source = fs.readFileSync(fileURLToPath(new URL("../wgpu.js", import.meta.url)), "utf8");
-	const sandbox = { window: {}, console };
+	const sandbox = {
+		window: {}, console,
+		GPUValidationError: class GPUValidationError extends Error {},
+		GPUOutOfMemoryError: class GPUOutOfMemoryError extends Error {},
+		GPUInternalError: class GPUInternalError extends Error {},
+	};
 	vm.createContext(sandbox);
 	vm.runInContext(source, sandbox);
 	return sandbox.window.odin.WebGPUInterface;
@@ -30,6 +35,59 @@ const WebGPUInterface = loadWebGPUInterface();
 
 function makeInterface() {
 	return new WebGPUInterface({ intSize: 4 });
+}
+
+for (const operation of ["queue", "map"]) {
+	for (const rejected of [false, true]) {
+		test(`${operation} completion reports ${rejected ? "error" : "success"} exactly once`, async () => {
+			const gpu = makeInterface();
+			const calls = [];
+			const freed = [];
+			gpu.CallbackInfo = () => ({});
+			gpu.makeMessageArg = () => 64;
+			gpu.zeroMessageArg = () => 0;
+			gpu.callCallback = (_info, args) => calls.push(Array.from(args));
+			gpu.mem.exports = { wgpu_free: (ptr) => freed.push(ptr) };
+			const complete = () => rejected
+				? Promise.reject(new Error("injected GPU failure")) : Promise.resolve();
+			const iface = gpu.getInterface();
+			if (operation === "queue") {
+				const handle = gpu.queues.create({ onSubmittedWorkDone: complete });
+				iface.wgpuQueueOnSubmittedWorkDone(handle, 0);
+			} else {
+				const handle = gpu.buffers.create({ buffer: { mapAsync: complete } });
+				iface.wgpuBufferMapAsync(handle, 1, 0, 16, 0);
+			}
+			await new Promise((resolve) => setImmediate(resolve));
+			assert.deepEqual(calls, [[rejected ? 3 : 1, rejected ? 64 : 0]]);
+			assert.deepEqual(freed, rejected ? [64] : []);
+		});
+	}
+}
+
+for (const outcome of ["empty", "error", "rejected"]) {
+	test(`error scope ${outcome} marshals one callback`, async () => {
+		const gpu = makeInterface();
+		const calls = [];
+		const messages = [];
+		const freed = [];
+		gpu.CallbackInfo = () => ({});
+		gpu.makeMessageArg = (message) => { messages.push(message); return 64; };
+		gpu.zeroMessageArg = () => 0;
+		gpu.callCallback = (_info, args) => calls.push(Array.from(args));
+		gpu.mem.exports = { wgpu_free: (ptr) => freed.push(ptr) };
+		const handle = gpu.devices.create({
+			popErrorScope: () => outcome === "rejected"
+				? Promise.reject(new Error("scope failure"))
+				: Promise.resolve(outcome === "empty" ? null : new Error("scope failure")),
+		});
+		gpu.getInterface().wgpuDevicePopErrorScope(handle, 0);
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.deepEqual(calls, [[outcome === "rejected" ? 3 : 1,
+			outcome === "empty" ? 1 : 5, outcome === "empty" ? 0 : 64]]);
+		assert.deepEqual(messages, outcome === "empty" ? [] : ["scope failure"]);
+		assert.deepEqual(freed, outcome === "empty" ? [] : [64]);
+	});
 }
 
 test("live() tracks create and release per manager", () => {

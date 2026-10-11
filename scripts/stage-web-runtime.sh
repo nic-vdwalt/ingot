@@ -210,7 +210,38 @@ TRANSFORMS = (
     ("getCurrentTexture", "let texture; // ingot: guarded acquire",                  TEX_OLD, TEX_NEW),
 )
 
-changed = False
+import re
+
+for operation in (
+    "queue.onSubmittedWorkDone()",
+    "buffer.buffer.mapAsync(mode, offset, size)",
+    "device.popErrorScope()",
+):
+    pattern = (
+        re.escape(operation) + r"\n\t{5}\.catch\(\(e\) => \{\n"
+        r"(?P<failure>.*?)\n\t{5}\}\)\n\t{5}\.then\((?P<argument>.*?) => \{\n"
+        r"(?P<success>.*?)\n\t{5}\}\);"
+    )
+    match = re.search(pattern, source, re.S)
+    if match is None:
+        if operation + "\n\t\t\t\t\t.then(" in source:
+            continue
+        raise SystemExit("unexpected Odin WebGPU completion: " + operation)
+    replacement = (
+        operation + "\n\t\t\t\t\t.then(" + match["argument"] + " => {\n"
+        + match["success"] + "\n\t\t\t\t\t}, (e) => {\n"
+        + match["failure"] + "\n\t\t\t\t\t});"
+    )
+    source = source[:match.start()] + replacement + source[match.end():]
+
+old_message = "const messageAddr = error.message;"
+new_message = "const messageAddr = this.makeMessageArg(error.message);"
+if source.count(old_message) == 1:
+    source = source.replace(old_message, new_message, 1)
+elif source.count(new_message) != 1:
+    raise SystemExit("unexpected Odin WebGPU error-scope message")
+
+changed = True
 for label, sentinel, old, new in TRANSFORMS:
     if sentinel in source:
         continue
