@@ -3,7 +3,7 @@ package gfx
 
 import "base:intrinsics"
 @(require) import "base:runtime"
-import "core:sync"
+@(require) import "core:sync"
 @(require) import NS "core:sys/darwin/Foundation"
 @(require) import CA "vendor:darwin/QuartzCore"
 @(require) import "vendor:glfw"
