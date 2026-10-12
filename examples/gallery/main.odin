@@ -558,7 +558,7 @@ nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
 		// Consistency within the list beats the theory. Both controls now
 		// answer the same question: what is switched on right now.
 		if compact do return PALETTE_NAMES[palette]
-		return fmt.tprintf("Theme: %s", PALETTE_NAMES[palette])
+		return label_join("Theme: ", PALETTE_NAMES[palette])
 	case .Motion:
 		if compact do return "Motion"
 		return "Motion: reduced" if reduced_motion else "Motion: full"
@@ -901,22 +901,22 @@ draw_buttons :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	if fit.region_icon_button(u, "close", "\u2715") do click_count += 1
 	if fit.region_back_button(u, "back", "Back") do click_count += 1
 	fit.region_row_end(u)
-	fit.region_label(u, fmt.tprintf("clicks: %d", click_count), .Body, .Secondary)
+	fit.region_label(u, label_int("clicks: ", i64(click_count)), .Body, .Secondary)
 
 	fit.region_section_header(u, "KEYBOARD FOCUS (Tab shows ring, Space/Enter activates)")
 	fit.region_row_begin(u, 32, gap = .SM)
 	for i in 0 ..< 3 {
-		label := fmt.tprintf("Focusable %d", i + 1)
+		label := label_int("Focusable ", i64(i + 1))
 		if fit.region_button(u, u64(i + 1), label) do click_count += 1
 	}
 	fit.region_row_end(u)
 
 	fit.region_section_header(u, "COLLAPSIBLE HEADERS")
 	for i in 0 ..< 3 {
-		label := fmt.tprintf("Section %d", i + 1)
+		label := label_int("Section ", i64(i + 1))
 		_ = fit.region_collapsible_header(
 			u,
-			fmt.tprintf("header:%d", i),
+			label_int("header:", i64(i)),
 			label,
 			&headers_open[i],
 			{icon = 0x25C6, right_label = "Details", motion = &header_motion[i]},
@@ -975,10 +975,10 @@ draw_inputs :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	}
 	fit.region_space(u, .XS)
 
-	summary := fmt.tprintf(
-		"name: %q \u00b7 notes: %d bytes",
-		fit.input_box_text(&state.name),
-		len(fit.input_box_text(&state.notes)),
+	summary := label_join(
+		"name: ",
+		label_quoted(fit.input_box_text(&state.name)),
+		label_int(" \u00b7 notes: ", i64(len(fit.input_box_text(&state.notes))), " bytes"),
 	)
 	fit.region_label(u, summary, .Label, .Secondary)
 
@@ -1013,7 +1013,11 @@ draw_inputs :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	if fit.calendar_date_valid(state.date_value) {
 		date_text = fit.calendar_format(state.date_value)
 	}
-	picked := fmt.tprintf("language id: %d \u00b7 date: %s", state.combo_selected, date_text)
+	picked := label_join(
+		label_int("language id: ", i64(state.combo_selected)),
+		" \u00b7 date: ",
+		date_text,
+	)
 	fit.region_label(u, picked, .Label, .Secondary)
 
 	fit.region_space(u, .XL)
@@ -1052,7 +1056,12 @@ draw_widget_volume :: proc(u: ^fit.Region, surface: ^fit.Surface, state: ^Widget
 		"Volume",
 		&state.slider_motion,
 	)
-	fit.region_label(u, fmt.tprintf("%.0f%%", state.volume), fit.Text_Role.Body, fit.Ink.Secondary)
+	fit.region_label(
+		u,
+		label_float("", f64(state.volume), 0, "%"),
+		fit.Text_Role.Body,
+		fit.Ink.Secondary,
+	)
 	fit.region_row_end(u)
 }
 
@@ -1168,7 +1177,7 @@ draw_widget_backend_list :: proc(
 			{
 				{x, y, width, fit.px(surface, 24)},
 				label,
-				fmt.tprintf("gallery:backend:%d", i),
+				label_int("gallery:backend:", i64(i)),
 				i,
 				false,
 				"Rendering backend option",
@@ -1185,7 +1194,7 @@ draw_widget_backend_list :: proc(
 		assert(state.list_activated < len(labels), "draw_widget_backend_list: invalid index")
 		fit.text(
 			surface,
-			fmt.tprintf("activated: %s", labels[state.list_activated]),
+			label_join("activated: ", labels[state.list_activated]),
 			x,
 			y,
 			.Label,
@@ -1312,7 +1321,11 @@ draw_widget_tabs_table :: proc(surface: ^fit.Surface, x, y0, w: i32, state: ^Wid
 	_ = fit.region_tab_bar(u, "tabs", tabs, &state.tab_active, &state.tabs_motion)
 	fit.region_label(
 		u,
-		fmt.tprintf("active tab: %s \u00b7 state is one caller-owned i32", tabs[state.tab_active]),
+		label_join(
+			"active tab: ",
+			tabs[state.tab_active],
+			" \u00b7 state is one caller-owned i32",
+		),
 		fit.Text_Role.Label,
 		fit.Ink.Secondary,
 	)
@@ -1337,7 +1350,7 @@ draw_widget_tabs_table :: proc(surface: ^fit.Surface, x, y0, w: i32, state: ^Wid
 		draw_widget_table_cell(
 			surface,
 			fit.region_flex_slot_next(u, row_h),
-			fmt.tprintf("%d", row.procs),
+			label_int("", i64(row.procs)),
 			true,
 		)
 		fit.region_flex_row_end(u)
@@ -1580,9 +1593,10 @@ draw_overlay_controls :: proc(surface: ^fit.Surface, x, y: i32) -> i32 {
 	}
 	content := fit.grid_end(&grid)
 	info_y := content.y + content.h + gap
-	summary := fmt.tprintf(
-		"shielded clicks: %d (should not rise while the popup covers them)",
-		shielded_clicks,
+	summary := label_int(
+		"shielded clicks: ",
+		i64(shielded_clicks),
+		" (should not rise while the popup covers them)",
 	)
 	cursor: fit.Vertical_Cursor_State
 	fit.vertical_cursor_begin(surface, &cursor, x, info_y, fit.px(surface, 340))
@@ -1711,13 +1725,13 @@ draw_docked_panel_over_canvas :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i
 	metrics := fit.get_metrics(surface)
 	fit.text(
 		surface,
-		fmt.tprintf("canvas wheel: %d", dock_canvas_wheel),
+		label_int("canvas wheel: ", i64(dock_canvas_wheel)),
 		x + fit.px(surface, 12),
 		y + fit.px(surface, 12),
 	)
 	fit.text(
 		surface,
-		fmt.tprintf("canvas clicks: %d", dock_canvas_clicks),
+		label_int("canvas clicks: ", i64(dock_canvas_clicks)),
 		x + fit.px(surface, 12),
 		y + fit.px(surface, 12) + metrics.line_height,
 	)
@@ -1759,8 +1773,8 @@ draw_dock_panel :: proc(surface: ^fit.Surface, panel: fit.Rect) {
 	fit.region_label(u, "Claims Z_PANEL over the canvas.", .Note, .Secondary)
 	if fit.region_button(u, "dock-a", "Panel button A") do dock_panel_clicks += 1
 	if fit.region_button(u, "dock-b", "Panel button B") do dock_panel_clicks += 1
-	fit.region_label(u, fmt.tprintf("panel clicks: %d", dock_panel_clicks))
-	for row in 0 ..< 8 do fit.region_label(u, fmt.tprintf("scroll row %d", row), .Note, .Secondary)
+	fit.region_label(u, label_int("panel clicks: ", i64(dock_panel_clicks)))
+	for row in 0 ..< 8 do fit.region_label(u, label_int("scroll row ", i64(row)), .Note, .Secondary)
 	end_y := fit.region_close(u)
 	fit.pane_end(surface, &dock_panel_pane, panel, end_y, padding = 10)
 }
@@ -1873,10 +1887,9 @@ draw_stress :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	y := fit.surface_section_header(
 		surface,
 		{x, y0, w, 0},
-		fmt.tprintf(
-			"STRESS: %d BUTTONS (batcher, hover-anim bound, culling: %d drawn)",
-			STRESS_BUTTONS,
-			end - first,
+		label_join(
+			label_int("STRESS: ", i64(STRESS_BUTTONS), " BUTTONS"),
+			label_int(" (batcher, hover-anim bound, culling: ", i64(end - first), " drawn)"),
 		),
 	)
 	assert(y == bounds.y, "draw_stress: header height mismatch")
@@ -1884,7 +1897,7 @@ draw_stress :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	fit.grid_begin(surface, &grid, bounds, cols, row_h, gap, gap)
 	fit.grid_skip_to(&grid, first)
 	for i in first ..< end {
-		label := fmt.tprintf("btn %d", i)
+		label := label_int("btn ", i64(i))
 		if fit.surface_button(
 			surface,
 			fit.widget_id_from_u64(0x4000 + u64(i)),
@@ -1900,7 +1913,7 @@ draw_stress :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
 	content := fit.grid_end(&grid)
 	y = content.y + content.h + fit.px(surface, 10)
 	if stress_clicked >= 0 {
-		msg := fmt.tprintf("last clicked: btn %d", stress_clicked)
+		msg := label_int("last clicked: btn ", i64(stress_clicked))
 		fit.text(surface, msg, x, y, .Label, .Secondary)
 		y += fit.px(surface, 24)
 	}

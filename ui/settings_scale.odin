@@ -4,8 +4,6 @@
 // Ported from Alloy's settings_panel.odin with the app coupling removed.
 package ui
 
-import "core:fmt"
-
 
 // A selectable UI-scale preset. A value of 0 means "auto" (follow the OS DPI).
 Settings_Scale_Preset :: struct {
@@ -199,12 +197,19 @@ settings_scale_rows :: proc(
 		// Label (Auto shows the resolved system scale on the right).
 		label := p.label
 		if idx == 0 {
-			label = fmt.tprintf("Auto (system \u2014 %d%%)", int(auto_scale * 100 + 0.5))
+			auto_label: Label_Text
+			label_text_string(&auto_label, "Auto (system \u2014 ")
+			label_text_int(&auto_label, i64(int(auto_scale * 100 + 0.5)))
+			label_text_string(&auto_label, "%)")
+			label = label_text_temp(&auto_label)
 		}
 		text(frame, label, text_x, list_y + (item_h - body_h) / 2, .Body, .Primary)
 		// Effective pixel percentage on the far right for non-auto rows.
 		if idx != 0 {
-			pct := fmt.tprintf("%d%%", int(p.value * 100 + 0.5))
+			pct_label: Label_Text
+			label_text_int(&pct_label, i64(int(p.value * 100 + 0.5)))
+			label_text_byte(&pct_label, '%')
+			pct := label_text_temp(&pct_label)
 			pct_w := text_width(frame, pct, .Label)
 			label_h := text_role_size(frame, .Label)
 			text(

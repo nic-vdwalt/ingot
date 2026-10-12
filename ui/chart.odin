@@ -4,7 +4,6 @@
 // enter animation and last hover index so redraws can be event-driven).
 package ui
 
-import "core:fmt"
 import "core:math"
 import "core:strings"
 
@@ -185,10 +184,30 @@ Chart_Layout :: struct {
 @(private = "file")
 chart_format_value :: proc(opts: Chart_Opts, v: f32, buf: []u8) -> string {
 	if opts.format != nil do return opts.format(v, buf)
-	if v == math.floor(v) && abs(v) < 1e6 {
-		return fmt.bprintf(buf, "%.0f", v)
+	decimals := 0 if v == math.floor(v) && abs(v) < 1e6 else 1
+	label_text: Label_Text
+	label_text_float(&label_text, f64(v), decimals)
+	// Like the bprintf this replaces, the result lives in the caller's buffer
+	// and is cut short when the buffer is smaller than the text.
+	written := copy(buf, label_text.bytes[:label_text.len])
+	assert(written <= len(buf))
+	return string(buf[:written])
+}
+
+// Tooltip row text "name: value"; unnamed series read "series N" (1-based).
+@(private = "file")
+chart_tooltip_row :: proc(name: string, series_index: int, value: string) -> string {
+	assert(series_index >= 0)
+	label_text: Label_Text
+	if len(name) > 0 {
+		label_text_string(&label_text, name)
+	} else {
+		label_text_string(&label_text, "series ")
+		label_text_int(&label_text, i64(series_index + 1))
 	}
-	return fmt.bprintf(buf, "%.1f", v)
+	label_text_string(&label_text, ": ")
+	label_text_string(&label_text, value)
+	return label_text_temp(&label_text)
 }
 
 // chart_layout computes the plot rect (reserving margins for tick labels,
@@ -410,8 +429,8 @@ chart_draw_tooltip :: proc(
 	for s, si in series {
 		if idx >= len(s.values) do continue
 		val := chart_format_value(opts, s.values[idx], buf[:])
-		name := s.name if len(s.name) > 0 else fmt.tprintf("series %d", si + 1)
-		c := strings.clone_to_cstring(fmt.tprintf("%s: %s", name, val), context.temp_allocator)
+		row := chart_tooltip_row(s.name, si, val)
+		c := strings.clone_to_cstring(row, context.temp_allocator)
 		wmax = max(
 			wmax,
 			measure_text_frame(frame, c, chart_text_size(frame)) + sw + ui_frame_sc(frame, 5),
@@ -461,10 +480,9 @@ chart_draw_tooltip :: proc(
 			col,
 		)
 		val := chart_format_value(opts, s.values[idx], buf[:])
-		name := s.name if len(s.name) > 0 else fmt.tprintf("series %d", si + 1)
 		draw_text_string(
 			frame,
-			fmt.tprintf("%s: %s", name, val),
+			chart_tooltip_row(s.name, si, val),
 			sx + pad + sw + ui_frame_sc(frame, 5),
 			ry,
 			chart_text_size(frame),

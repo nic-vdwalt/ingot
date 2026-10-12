@@ -4,7 +4,6 @@
 // leap years and week alignment without a frame.
 package ui
 
-import "core:fmt"
 import "core:strconv"
 import "core:strings"
 
@@ -81,7 +80,14 @@ calendar_date_valid :: proc(date: Calendar_Date) -> bool {
 // calendar_format renders "YYYY-MM-DD" into the temp allocator.
 calendar_format :: proc(date: Calendar_Date) -> string {
 	assert(calendar_date_valid(date), "calendar_format: invalid date")
-	return fmt.tprintf("%04d-%02d-%02d", date.year, date.month, date.day)
+	label_text: Label_Text
+	label_text_int_padded(&label_text, i64(date.year), 4)
+	label_text_byte(&label_text, '-')
+	label_text_int_padded(&label_text, i64(date.month), 2)
+	label_text_byte(&label_text, '-')
+	label_text_int_padded(&label_text, i64(date.day), 2)
+	assert(!label_text.truncated, "calendar_format: label overflow")
+	return label_text_temp(&label_text)
 }
 
 // calendar_parse reads "YYYY-MM-DD"; ok is false for malformed input.
@@ -418,7 +424,11 @@ date_picker_popup_header :: proc(
 		metrics.FONT_SIZE_TITLE,
 		style.fg_primary,
 	)
-	title := fmt.tprintf("%s %d", CALENDAR_MONTH_NAMES[month_index], st.view_year)
+	title_text: Label_Text
+	label_text_string(&title_text, CALENDAR_MONTH_NAMES[month_index])
+	label_text_byte(&title_text, ' ')
+	label_text_int(&title_text, i64(st.view_year))
+	title := label_text_temp(&title_text)
 	title_w := text_width(frame, title, .Body)
 	draw_text_string(
 		frame,
@@ -466,7 +476,9 @@ date_picker_days :: proc(
 			draw_rectangle_rec(frame, screen_cell, color)
 		}
 		if hovered do request_cursor(frame, .POINTING_HAND)
-		day_text := fmt.tprintf("%d", day)
+		day_label: Label_Text
+		label_text_int(&day_label, i64(day))
+		day_text := label_text_temp(&day_label)
 		day_w := text_width(frame, day_text, .Label)
 		day_color := style.button_text if is_selected else style.fg_primary
 		draw_text_string(

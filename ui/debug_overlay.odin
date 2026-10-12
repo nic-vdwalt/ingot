@@ -1,7 +1,5 @@
 package ui
 
-import "core:fmt"
-
 DEBUG_OVERLAY_MAX_ROWS :: 24
 
 Renderer_Diagnostics :: struct {
@@ -28,6 +26,44 @@ debug_overlay_push :: proc(rows: []Debug_Overlay_Cell, count: ^int, key, value: 
 	count^ += 1
 }
 
+// Joins counters as "a / b / c". Counters are formatted with Label_Text, not
+// core:fmt, because this runs every frame while the overlay is open and hot
+// fmt procedures crash Safari's optimizing WASM tier (see ui/label_text.odin).
+@(private = "file")
+debug_overlay_counts :: proc(values: []i64, suffix: string = "") -> string {
+	assert(len(values) > 0 && len(values) <= 4, "debug_overlay_counts: bad value count")
+	label_text: Label_Text
+	for value, index in values {
+		if index > 0 do label_text_string(&label_text, " / ")
+		label_text_int(&label_text, value)
+	}
+	label_text_string(&label_text, suffix)
+	return label_text_temp(&label_text)
+}
+
+// Formats "a (b noun)", e.g. "12 (3 evicted)".
+@(private = "file")
+debug_overlay_count_note :: proc(value, note_value: i64, note: string) -> string {
+	assert(len(note) > 0, "debug_overlay_count_note: empty note")
+	label_text: Label_Text
+	label_text_int(&label_text, value)
+	label_text_string(&label_text, " (")
+	label_text_int(&label_text, note_value)
+	label_text_byte(&label_text, ' ')
+	label_text_string(&label_text, note)
+	label_text_byte(&label_text, ')')
+	return label_text_temp(&label_text)
+}
+
+@(private = "file")
+debug_overlay_frame_time :: proc(frame_time: f32) -> string {
+	assert(frame_time >= 0, "debug_overlay_frame_time: negative frame time")
+	label_text: Label_Text
+	label_text_float(&label_text, f64(frame_time * 1000), 2)
+	label_text_string(&label_text, " ms")
+	return label_text_temp(&label_text)
+}
+
 @(private = "file")
 debug_overlay_rows :: proc(
 	frame: ^Ui_Frame,
@@ -36,71 +72,46 @@ debug_overlay_rows :: proc(
 ) -> int {
 	assert(frame != nil, "debug_overlay_rows: nil frame")
 	count := 0
-	debug_overlay_push(rows, &count, "fps", fmt.tprintf("%d", frame_input(frame).fps))
-	debug_overlay_push(
-		rows,
-		&count,
-		"frame",
-		fmt.tprintf("%.2f ms", frame_input(frame).frame_time * 1000),
-	)
-	debug_overlay_push(rows, &count, "flushes", fmt.tprintf("%d", stats.flush_count))
-	debug_overlay_push(rows, &count, "vertices", fmt.tprintf("%d", stats.vertices_uploaded))
-	debug_overlay_push(rows, &count, "uploaded", fmt.tprintf("%d KB", stats.bytes_uploaded / 1024))
-	debug_overlay_push(
-		rows,
-		&count,
-		"buffers new/grown",
-		fmt.tprintf("%d / %d", stats.buffer_creations, stats.buffer_growths),
-	)
-	debug_overlay_push(
-		rows,
-		&count,
-		"pipeline switches",
-		fmt.tprintf("%d", stats.pipeline_switches),
-	)
-	debug_overlay_push(rows, &count, "render passes", fmt.tprintf("%d", stats.render_passes))
-	debug_overlay_push(
-		rows,
-		&count,
-		"peak geom arena",
-		fmt.tprintf("%d KB", stats.peak_arena_bytes / 1024),
-	)
+	input := frame_input(frame)
+	debug_overlay_push(rows, &count, "fps", debug_overlay_counts({i64(input.fps)}))
+	debug_overlay_push(rows, &count, "frame", debug_overlay_frame_time(input.frame_time))
+	debug_overlay_push(rows, &count, "flushes", debug_overlay_counts({i64(stats.flush_count)}))
+	vertices := debug_overlay_counts({i64(stats.vertices_uploaded)})
+	debug_overlay_push(rows, &count, "vertices", vertices)
+	uploaded := debug_overlay_counts({i64(stats.bytes_uploaded / 1024)}, " KB")
+	debug_overlay_push(rows, &count, "uploaded", uploaded)
+	buffers := debug_overlay_counts({i64(stats.buffer_creations), i64(stats.buffer_growths)})
+	debug_overlay_push(rows, &count, "buffers new/grown", buffers)
+	switches := debug_overlay_counts({i64(stats.pipeline_switches)})
+	debug_overlay_push(rows, &count, "pipeline switches", switches)
+	passes := debug_overlay_counts({i64(stats.render_passes)})
+	debug_overlay_push(rows, &count, "render passes", passes)
+	arena := debug_overlay_counts({i64(stats.peak_arena_bytes / 1024)}, " KB")
+	debug_overlay_push(rows, &count, "peak geom arena", arena)
 	entries, evictions := measure_cache_stats_with(ui_frame_text(frame))
-	debug_overlay_push(
-		rows,
-		&count,
-		"measure cache",
-		fmt.tprintf("%d (%d evicted)", entries, evictions),
+	cache := debug_overlay_count_note(i64(entries), i64(evictions), "evicted")
+	debug_overlay_push(rows, &count, "measure cache", cache)
+	overlay := debug_overlay_count_note(
+		i64(overlay_cmd_count(frame)),
+		i64(overlay_dropped(frame)),
+		"dropped",
 	)
-	debug_overlay_push(
-		rows,
-		&count,
-		"overlay cmds",
-		fmt.tprintf("%d (%d dropped)", overlay_cmd_count(frame), overlay_dropped(frame)),
-	)
-	debug_overlay_push(rows, &count, "route claims", fmt.tprintf("%d", route_claim_count(frame)))
+	debug_overlay_push(rows, &count, "overlay cmds", overlay)
+	claims := debug_overlay_counts({i64(route_claim_count(frame))})
+	debug_overlay_push(rows, &count, "route claims", claims)
 	diagnostics := ui_frame_diagnostics(frame)
-	debug_overlay_push(
-		rows,
-		&count,
-		"input / geometry drops",
-		fmt.tprintf(
-			"%d / %d",
-			diagnostics.input_characters_dropped,
-			diagnostics.degenerate_widgets_dropped,
-		),
+	drops := debug_overlay_counts(
+		{i64(diagnostics.input_characters_dropped), i64(diagnostics.degenerate_widgets_dropped)},
 	)
-	debug_overlay_push(
-		rows,
-		&count,
-		"semantic drops",
-		fmt.tprintf(
-			"%d / %d / %d",
-			diagnostics.semantic_nodes_dropped,
-			diagnostics.semantic_focus_dropped,
-			diagnostics.semantic_actions_dropped,
-		),
+	debug_overlay_push(rows, &count, "input / geometry drops", drops)
+	semantic := debug_overlay_counts(
+		{
+			i64(diagnostics.semantic_nodes_dropped),
+			i64(diagnostics.semantic_focus_dropped),
+			i64(diagnostics.semantic_actions_dropped),
+		},
 	)
+	debug_overlay_push(rows, &count, "semantic drops", semantic)
 	debug_overlay_diagnostic_rows(rows, &count, diagnostics)
 	return count
 }
@@ -112,37 +123,22 @@ debug_overlay_diagnostic_rows :: proc(
 	diagnostics: Ui_Frame_Diagnostics,
 ) {
 	assert(count != nil, "debug_overlay_diagnostic_rows: nil count")
-	debug_overlay_push(
-		rows,
-		count,
-		"semantic ids / text",
-		fmt.tprintf(
-			"%d / %d",
-			diagnostics.semantic_id_collisions,
-			diagnostics.semantic_text_truncations,
-		),
+	ids := debug_overlay_counts(
+		{i64(diagnostics.semantic_id_collisions), i64(diagnostics.semantic_text_truncations)},
 	)
-	debug_overlay_push(
-		rows,
-		count,
-		"paint cmd drops",
-		fmt.tprintf(
-			"%d / %d",
-			diagnostics.main_commands_dropped,
-			diagnostics.overlay_commands_dropped,
-		),
+	debug_overlay_push(rows, count, "semantic ids / text", ids)
+	paint := debug_overlay_counts(
+		{i64(diagnostics.main_commands_dropped), i64(diagnostics.overlay_commands_dropped)},
 	)
-	debug_overlay_push(
-		rows,
-		count,
-		"paint text / controls",
-		fmt.tprintf(
-			"%d / %d / %d",
-			diagnostics.main_text_bytes_dropped,
-			diagnostics.overlay_text_bytes_dropped,
-			diagnostics.platform_controls_dropped,
-		),
+	debug_overlay_push(rows, count, "paint cmd drops", paint)
+	text_drops := debug_overlay_counts(
+		{
+			i64(diagnostics.main_text_bytes_dropped),
+			i64(diagnostics.overlay_text_bytes_dropped),
+			i64(diagnostics.platform_controls_dropped),
+		},
 	)
+	debug_overlay_push(rows, count, "paint text / controls", text_drops)
 }
 
 draw_debug_overlay :: proc(frame: ^Ui_Frame, x, y: i32, stats: Renderer_Diagnostics = {}) -> i32 {

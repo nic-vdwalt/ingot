@@ -216,7 +216,7 @@ test("no switches in the test URL leaves the dpr cap untouched", () => {
 test("iOS WebKit gets default limits; URL values and off override them", () => {
 	const off = hook.parseBisectSwitches("");
 	assert.deepEqual(hook.resolveFrameLimits(off, false), { fps: 0, dpr: 0, ios: false });
-	assert.deepEqual(hook.resolveFrameLimits(off, true), { fps: 30, dpr: 1.5, ios: true });
+	assert.deepEqual(hook.resolveFrameLimits(off, true), { fps: 30, dpr: 2, ios: true });
 	assert.deepEqual(hook.resolveFrameLimits(hook.parseBisectSwitches("?ingot_fps=20&ingot_dpr=1"), true), { fps: 20, dpr: 1, ios: true });
 	assert.deepEqual(hook.resolveFrameLimits(hook.parseBisectSwitches("?ingot_fps=off&ingot_dpr=off"), true), { fps: 0, dpr: 0, ios: true });
 	assert.equal(hook.describeFrameLimits({ fps: 30, dpr: 1.5, ios: true }), "fps=30 dpr=1.5 ios");

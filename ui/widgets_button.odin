@@ -1,6 +1,5 @@
 package ui
 
-import "core:fmt"
 
 // Button visual style variants.
 Btn_Style :: enum {
@@ -649,7 +648,10 @@ icon_button_at :: proc(
 // so callers can right-align it before drawing.
 back_btn_w :: proc(frame: ^Ui_Frame, label: string) -> i32 {
 	assert(frame != nil, "back_btn_w: nil frame")
-	txt := fmt.ctprintf("\u2190 %s", label)
+	label_text: Label_Text
+	label_text_string(&label_text, "\u2190 ")
+	label_text_string(&label_text, label)
+	txt := label_text_ctemp(&label_text)
 	metrics := ui_frame_metrics(frame)
 	return measure_text_frame(frame, txt, metrics.FONT_SIZE_LABEL) + metrics.CONTROL_GAP * 2
 }
@@ -666,7 +668,10 @@ back_btn_at :: proc(
 	widget: Widget_Id = WIDGET_ID_NONE,
 ) -> bool {
 	assert(frame != nil, "back_btn_at: nil frame")
-	txt := fmt.tprintf("\u2190 %s", label)
+	label_text: Label_Text
+	label_text_string(&label_text, "\u2190 ")
+	label_text_string(&label_text, label)
+	txt := label_text_temp(&label_text)
 	box := Rect_I32{rect.x, rect.y, back_btn_w(frame, label), ui_frame_sc(frame, 22)}
 	return button_at(frame, box, txt, .Ghost, focus = focus, widget = widget)
 }

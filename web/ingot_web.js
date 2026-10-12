@@ -276,7 +276,7 @@ let semanticTextInputsNext = [];
 	// smaller frames are the only levers the page has. `off` in the URL
 	// switch removes a default so the uncapped path stays reproducible.
 	const IOS_WEBKIT_FPS_DEFAULT = 30;
-	const IOS_WEBKIT_DPR_DEFAULT = 1.5;
+	const IOS_WEBKIT_DPR_DEFAULT = 2;
 	const BISECT_OFF = -1;
 	const GC_NUDGE_BYTES = 8 * 1024 * 1024;
 	const GC_NUDGE_INTERVAL_MS = 1000;
@@ -393,41 +393,54 @@ let semanticTextInputsNext = [];
 			? win.performance.now() : Date.now();
 		const interval = 1000 / fps;
 		let last = -Infinity;
-		let nextId = 1;
+		let nextId = -1;
+		let raf = 0, timer = 0;
+		let delivering = false, stopped = false;
 		const pending = new Map();
-		const capped = function (callback) {
-			const id = nextId++;
-			const entry = { raf: 0, timer: 0 };
-			pending.set(id, entry);
-			const request = () => {
-				entry.timer = 0;
-				entry.raf = original.call(win, run);
-			};
-			const wait = (at) => {
-				const early = interval - (at - last);
-				if (early <= 1) return false;
-				entry.timer = win.setTimeout(request, Math.max(0, early - FRAME_CAP_TIMER_SLACK_MS));
-				return true;
-			};
-			function run(timestamp) {
-				entry.raf = 0;
-				if (wait(timestamp)) return;
-				pending.delete(id);
-				last = timestamp;
-				callback(timestamp);
+		const request = () => {
+			timer = 0;
+			if (!stopped && pending.size) raf = original.call(win, run);
+		};
+		const schedule = () => {
+			if (stopped || delivering || raf || timer || !pending.size) return;
+			const early = interval - (now() - last);
+			if (early > 1) timer = win.setTimeout(request, Math.max(0, early - FRAME_CAP_TIMER_SLACK_MS));
+			else request();
+		};
+		function run(timestamp) {
+			raf = 0;
+			if (stopped) return;
+			if (interval - (timestamp - last) > 1) { schedule(); return; }
+			last = timestamp;
+			delivering = true;
+			const batch = Array.from(pending.keys());
+			try {
+				for (const id of batch) {
+					const callback = pending.get(id);
+					if (!callback) continue;
+					pending.delete(id);
+					try { callback(timestamp); }
+					catch (error) { win.setTimeout(() => { throw error; }, 0); }
+				}
+			} finally {
+				delivering = false;
+				schedule();
 			}
-			if (!wait(now())) request();
+		}
+		const capped = function (callback) {
+			const id = nextId--;
+			pending.set(id, callback);
+			schedule();
 			return id;
 		};
 		const cappedCancel = function (id) {
-			const entry = pending.get(id);
-			if (!entry) {
-				return typeof originalCancel === "function" ? originalCancel.call(win, id) : undefined;
-			}
+			if (id >= 0) return typeof originalCancel === "function" ? originalCancel.call(win, id) : undefined;
 			pending.delete(id);
-			if (entry.timer && typeof win.clearTimeout === "function") win.clearTimeout(entry.timer);
-			if (entry.raf && typeof originalCancel === "function") originalCancel.call(win, entry.raf);
-			return undefined;
+			if (!pending.size) {
+				if (timer) win.clearTimeout(timer);
+				if (raf && typeof originalCancel === "function") originalCancel.call(win, raf);
+				timer = raf = 0;
+			}
 		};
 		win.requestAnimationFrame = capped;
 		win.cancelAnimationFrame = cappedCancel;

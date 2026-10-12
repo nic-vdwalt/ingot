@@ -26,7 +26,6 @@
 // also break the capture harness, whose output must be byte-reproducible.
 package main
 
-import "core:fmt"
 import fit "ingot:fit"
 
 // Column geometry in design units. Everything horizontal is expressed against
@@ -332,14 +331,14 @@ draw_surface_states :: proc(page: ^Page) {
 	head := page_rows(page, 1)
 	for state, index in fit.Visual_State {
 		x := body + label_w + i32(index) * (cell_w + gap)
-		fit.text(page.surface, fmt.tprint(state), x, head.y, .Note, .Muted)
+		fit.text(page.surface, VISUAL_STATE_NAMES[state], x, head.y, .Note, .Muted)
 	}
 
 	for surface in fit.Surface_Kind {
 		row := page_rows(page, 1)
 		fit.text_truncated(
 			page.surface,
-			fmt.tprint(surface),
+			SURFACE_KIND_NAMES[surface],
 			body,
 			row.y,
 			label_w - gap,
@@ -428,7 +427,7 @@ draw_ink_chips :: proc(page: ^Page) {
 	worst := f64(21)
 	for ink in fit.Ink {
 		if column >= per_row {
-			annotate(page, row, fmt.tprintf("min %.1f:1", worst))
+			annotate(page, row, label_float("min ", worst, 1, ":1"))
 			row = page_rows(page, 1)
 			column = 0
 			worst = 21
@@ -446,7 +445,7 @@ draw_ink_chips :: proc(page: ^Page) {
 		fit.draw_wash(page.surface, cell, color)
 		fit.text_truncated(
 			page.surface,
-			fmt.tprint(ink),
+			INK_NAMES[ink],
 			i32(cell.x) + fit.px(page.surface, 4),
 			i32(cell.y),
 			chip_w - fit.px(page.surface, 8),
@@ -455,7 +454,7 @@ draw_ink_chips :: proc(page: ^Page) {
 		)
 		column += 1
 	}
-	annotate(page, row, fmt.tprintf("min %.1f:1", worst))
+	annotate(page, row, label_float("min ", worst, 1, ":1"))
 	page_rows(page, 1)
 }
 
@@ -480,7 +479,7 @@ draw_taped_accent :: proc(page: ^Page) {
 	fit.draw_shadow(page.surface, swatch, .SM, .Lifted)
 	fit.draw_pigment_block(page.surface, swatch, accent)
 	fit.draw_tape(page.surface, swatch, f32(fit.px(page.surface, 26)), theme.tape)
-	annotate(page, row, fmt.tprintf("#%02X%02X%02X", accent.r, accent.g, accent.b))
+	annotate(page, row, label_hex_color(accent.r, accent.g, accent.b))
 	page_rows(page, 1)
 }
 
@@ -501,7 +500,15 @@ draw_type_specimen :: proc(page: ^Page) {
 			role,
 			.Primary,
 		)
-		annotate(page, row, fmt.tprintf("%v %dpx", role, fit.text_size(page.surface, role)))
+		annotate(
+			page,
+			row,
+			label_int(
+				label_join(TEXT_ROLE_NAMES[role], " "),
+				i64(fit.text_size(page.surface, role)),
+				"px",
+			),
+		)
 	}
 	page_rows(page, 1)
 }
@@ -569,7 +576,7 @@ draw_shape_notes :: proc(page: ^Page) {
 		fit.draw_surface(page.surface, block, .Chip, .Rest, radius, .None, .Flat)
 		fit.text(
 			page.surface,
-			fmt.tprint(radius),
+			RADIUS_NAMES[radius],
 			i32(block.x) + fit.px(page.surface, 4),
 			i32(block.y) + page.line * 2,
 			.Note,
@@ -597,7 +604,7 @@ draw_measure_notes :: proc(page: ^Page) {
 			fit.Rect{body, row.y + fit.px(page.surface, 5), max(width, 1), bar_h},
 			theme.foreground_accent,
 		)
-		annotate(page, row, fmt.tprintf("%v %dpx", space, width))
+		annotate(page, row, label_int(label_join(SPACE_NAMES[space], " "), i64(width), "px"))
 	}
 	page_rows(page, 1)
 
@@ -610,7 +617,11 @@ draw_measure_notes :: proc(page: ^Page) {
 			f32(page.line - fit.px(page.surface, 6)),
 		}
 		fit.fill_rect(page.surface, bar, fit.color_tinted(theme.foreground_accent, tint))
-		annotate(page, row, fmt.tprintf("%v %d", tint, fit.tint_alpha(tint)))
+		annotate(
+			page,
+			row,
+			label_int(label_join(TINT_NAMES[tint], " "), i64(fit.tint_alpha(tint))),
+		)
 	}
 	page_rows(page, 1)
 }
