@@ -298,6 +298,31 @@ ui_layers_fit_approved_public_alias_to_ui_is_allowed :: proc(t: ^testing.T) {
 }
 
 @(test)
+ui_layers_fit_label_text_aliases_are_allowed :: proc(t: ^testing.T) {
+	names := []string {
+		"LABEL_TEXT_BYTES_MAX",
+		"Label_Text",
+		"label_text_byte",
+		"label_text_ctemp",
+		"label_text_float",
+		"label_text_hex2",
+		"label_text_int",
+		"label_text_int_padded",
+		"label_text_reset",
+		"label_text_string",
+		"label_text_temp",
+	}
+	for name in names {
+		source := strings.concatenate({name, " :: ui.", name, "\n"}, context.temp_allocator)
+		testing.expect_value(t, len(fit_public(source)), 0)
+	}
+	testing.expect(
+		t,
+		any_contains(fit_public("label_text_other :: ui.label_text_other\n"), "internal UI type"),
+	)
+}
+
+@(test)
 ui_layers_fit_unapproved_public_alias_to_ui_is_rejected :: proc(t: ^testing.T) {
 	testing.expect(t, any_contains(fit_public("Unexpected :: ui.Track\n"), "internal UI type"))
 }

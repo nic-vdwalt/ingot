@@ -60,6 +60,7 @@ label_text_byte :: proc(text: ^Label_Text, value: u8) {
 		text.truncated = true
 		return
 	}
+	assert(text.len >= 0 && text.len < len(text.bytes))
 	text.bytes[text.len] = value
 	text.len += 1
 	assert(label_text_valid(text))
@@ -100,8 +101,11 @@ label_text_hex2 :: proc(text: ^Label_Text, value: u8) {
 	HEX_DIGITS :: "0123456789ABCDEF"
 	#assert(len(HEX_DIGITS) == 16)
 	digits := HEX_DIGITS
-	label_text_byte(text, digits[value >> 4])
-	label_text_byte(text, digits[value & 0xF])
+	high := value >> 4
+	low := value & 0xF
+	assert(int(high) < len(digits) && int(low) < len(digits))
+	label_text_byte(text, digits[high])
+	label_text_byte(text, digits[low])
 }
 
 // Matches fmt's `%.Nf`. strconv always emits a sign; fmt drops the `+` unless
