@@ -281,6 +281,13 @@
 		// isTouch centralises the one predicate every branch below depends on.
 		// Pen reports its own type and keeps the mouse path: a stylus has the
 		// precision to hit a scrollbar, a fingertip does not.
+		let touchOwner = null;
+		const sliderAt = (px, py) => {
+			const web = window.ingotWeb;
+			const rects = web && web.sliderRects ? web.sliderRects() : [];
+			return rects.some((rect) => !rect.disabled && px >= rect.x && py >= rect.y &&
+				px < rect.x + rect.w && py < rect.y + rect.h);
+		};
 		const isTouch = (e) => e.pointerType === "touch";
 		const pointerRecord = (e) => ({
 			id: e.pointerId >>> 0,
@@ -311,10 +318,11 @@
 			forwardPointer(POINTER_KIND.move, { ...record, button: -1 });
 			if (isTouch(e)) {
 				const touch = touches.get(e.pointerId);
-				if (touch === undefined) return;
+				if (touch === undefined || touchOwner !== e.pointerId) return;
 				// Hover follows the finger either way, so widgets under it
 				// light up exactly as they would under a mouse.
 				x.ingot_web_mouse_move(e.offsetX, e.offsetY);
+				if (touch.slider) return;
 				if (!touch.panning) {
 					const moved = Math.hypot(
 						e.clientX - touch.startX,
@@ -336,6 +344,7 @@
 		});
 
 		listen(canvas, "pointerdown", function (e) {
+			cancelTouchLeave();
 			const x = ex();
 			if (!x) return;
 			// preventScroll: iOS otherwise scrolls the page to the canvas on
@@ -351,6 +360,7 @@
 			activePointers.set(record.id, record);
 			forwardPointer(POINTER_KIND.down, record);
 			canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
+			if (isTouch(e) && touchOwner !== null) return;
 			x.ingot_web_mouse_move(e.offsetX, e.offsetY);
 			const b = BTN[e.button];
 			if (isTouch(e)) {
@@ -358,7 +368,14 @@
 				// would activate whatever button the finger started on. It is
 				// emitted on pointerup only if the gesture stayed a tap.
 				if (touches.size >= TOUCH_POINTERS_MAX) return;
+				touchOwner = e.pointerId;
+				const slider = sliderAt(e.offsetX, e.offsetY);
+				if (slider && b !== undefined) {
+					pressedButtons.add(b);
+					x.ingot_web_mouse_button(b, true);
+				}
 				touches.set(e.pointerId, {
+					slider,
 					startX: e.clientX,
 					startY: e.clientY,
 					lastY: e.clientY,
@@ -384,7 +401,16 @@
 			if (isTouch(e)) {
 				const touch = touches.get(e.pointerId);
 				touches.delete(e.pointerId);
-				if (touch === undefined) return;
+				if (touch === undefined || touchOwner !== e.pointerId) return;
+				touchOwner = null;
+				x.ingot_web_mouse_move(e.offsetX, e.offsetY);
+				if (touch.slider) {
+					if (touch.button !== undefined) {
+						pressedButtons.delete(touch.button);
+						x.ingot_web_mouse_button(touch.button, false);
+					}
+					return;
+				}
 				// A gesture that never exceeded the slop was a tap: replay it
 				// as a full press+release so the widget under the finger
 				// activates on this frame.
@@ -441,14 +467,17 @@
 				...active, button: -1, buttons: 0, pressure: 0,
 			});
 			activePointers.delete(record.id);
+			const touch = touches.get(record.id);
 			touches.delete(record.id);
-			if (active.type !== POINTER_TYPE.touch && active.button >= 0) {
+			if (touchOwner === record.id) touchOwner = null;
+			if ((active.type !== POINTER_TYPE.touch || touch?.slider) && active.button >= 0) {
 				pressedButtons.delete(active.button);
 				const x = ex();
 				if (x) x.ingot_web_mouse_button(active.button, false);
 			}
 		};
 		const releaseHeldInput = () => {
+			cancelTouchLeave();
 			const x = ex();
 			if (x) {
 				for (const pointer of activePointers.values()) {
@@ -466,6 +495,7 @@
 			// gesture is the OS taking the touch away (a system swipe, an
 			// incoming call), which must not press a button.
 			touches.clear();
+			touchOwner = null;
 		};
 		listen(canvas, "pointercancel", cancelPointer);
 		listen(canvas, "lostpointercapture", cancelPointer);
@@ -473,17 +503,10 @@
 		listen(document, "visibilitychange", function () {
 			if (document.visibilityState !== "visible") releaseHeldInput();
 		});
-		// Touch fires pointerleave right after pointerup, in the same task as
-		// the replayed tap. Clearing hover then makes pointer_snapshot_sanitize
-		// (ui_gfx/input.odin) drop the press before any frame sees it, so the
-		// tap is lost. The hover clear is deferred one animation frame instead:
-		// the engine's step, already scheduled, consumes the tap first.
-		let touchLeaveFrame = 0;
+		let cancelPendingLeave = null;
 		const cancelTouchLeave = () => {
-			if (touchLeaveFrame && typeof window.cancelAnimationFrame === "function") {
-				window.cancelAnimationFrame(touchLeaveFrame);
-			}
-			touchLeaveFrame = 0;
+			if (cancelPendingLeave) cancelPendingLeave();
+			cancelPendingLeave = null;
 		};
 		listen(canvas, "pointerenter", function (e) {
 			cancelTouchLeave();
@@ -494,17 +517,15 @@
 		});
 		listen(canvas, "pointerleave", function (e) {
 			if (pressedButtons.size > 0) return;
-			const deferrable = e && isTouch(e) &&
-				typeof window.requestAnimationFrame === "function";
-			if (deferrable) {
-				if (touchLeaveFrame) return;
-				touchLeaveFrame = window.requestAnimationFrame(() => {
-					touchLeaveFrame = 0;
-					// Same release a mouse leave performs, just one frame
-					// later; a new touch re-enters first and cancels this.
-					releaseHeldInput();
-					const x = ex(); if (x) x.ingot_web_hover(false);
-				});
+			if (e && isTouch(e)) {
+				if (activePointers.size || cancelPendingLeave) return;
+				if (window.ingotWeb && window.ingotWeb.afterInputFrame) {
+					cancelPendingLeave = window.ingotWeb.afterInputFrame(() => {
+						cancelPendingLeave = null;
+						if (activePointers.size || pressedButtons.size) return;
+						const x = ex(); if (x) x.ingot_web_hover(false);
+					});
+				}
 				return;
 			}
 			releaseHeldInput();
@@ -514,6 +535,7 @@
 			// Focus moving to the IME proxy is still "ours" - don't clear
 			// held keys mid-typing.
 			if (e.relatedTarget && e.relatedTarget.id === "ingot-ime") return;
+			releaseHeldInput();
 			const x = ex(); if (x) x.ingot_web_hover(false);
 		});
 		// Suppress the browser context menu so right-click works as a UI button.

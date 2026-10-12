@@ -352,12 +352,22 @@ semantic_push :: proc(
 			return nil
 		}
 	}
+	semantic_rect := rect
+	if role == .Slider {
+		origin := frame_pane_origin(frame)
+		bounds := Rect{f32(rect.x) + origin.x, f32(rect.y) + origin.y, f32(rect.w), f32(rect.h)}
+		paint := frame_paint_list(frame)
+		if paint.clip_count > 0 {
+			bounds = paint_clip_intersection(bounds, paint.clip_stack[paint.clip_count - 1])
+		}
+		semantic_rect = {i32(bounds.x), i32(bounds.y), i32(bounds.width), i32(bounds.height)}
+	}
 	node := &sem.cur.nodes[sem.cur.count]
 	sem.cur.count += 1
 	node^ = {
 		id              = id,
 		role            = role,
-		rect            = rect,
+		rect            = semantic_rect,
 		state           = state,
 		value           = value,
 		lo              = lo,

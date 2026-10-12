@@ -605,7 +605,7 @@ slider_at_state :: proc(
 		focus,
 		a11y_label,
 		widget,
-		it.held,
+		it.pressed || it.held,
 		mouse.x,
 		it.hovered || state.dragging || focus_opt_focused(focus),
 		motion,

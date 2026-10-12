@@ -36,9 +36,28 @@
 // Canvas-drawn text fields (Sem_Role 5) get no DOM mirror; their rects are
 // kept so a touch tap can focus the IME proxy inside the user gesture, the
 // only way iOS and Android will raise the soft keyboard.
+const afterInputFrameCallbacks = new Map();
+let afterInputFrameId = 0;
+function afterInputFrame(callback) {
+	if (afterInputFrameCallbacks.size >= SEMANTIC_CONTROLS_MAX) throw new Error("input frame callback limit");
+	const id = ++afterInputFrameId;
+	afterInputFrameCallbacks.set(id, callback);
+	return () => afterInputFrameCallbacks.delete(id);
+}
+function finishInputFrame() {
+	endSemanticFrame();
+	const batch = Array.from(afterInputFrameCallbacks.keys());
+	for (const id of batch) {
+		const callback = afterInputFrameCallbacks.get(id);
+		afterInputFrameCallbacks.delete(id);
+		if (callback) callback();
+	}
+}
 let semanticTextInputs = [];
 const IME_TAP_FOCUS_GRACE_MS = 300;
 let semanticTextInputsNext = [];
+let semanticSliderRects = [];
+let semanticSliderRectsNext = [];
 	// Gallery section most recently announced through ingot_web_mark
 	// ("section <name>"); the ?ingot_autoscroll driver only runs on Stress.
 	let currentSection = "";
@@ -445,6 +464,7 @@ let semanticTextInputsNext = [];
 		win.requestAnimationFrame = capped;
 		win.cancelAnimationFrame = cappedCancel;
 		return () => {
+			stopped = true;
 			for (const id of Array.from(pending.keys())) cappedCancel(id);
 			if (win.requestAnimationFrame === capped) win.requestAnimationFrame = original;
 			if (win.cancelAnimationFrame === cappedCancel) win.cancelAnimationFrame = originalCancel;
@@ -1755,6 +1775,10 @@ let semanticTextInputsNext = [];
 	}
 
 	function endSemanticFrame() {
+		semanticSliderRects = semanticSliderRectsNext;
+		semanticSliderRectsNext = [];
+		semanticSliderRects = semanticSliderRectsNext;
+		semanticSliderRectsNext = [];
 		semanticTextInputs = semanticTextInputsNext;
 		semanticTextInputsNext = [];
 		for (const [fieldId, state] of semanticInputs) {
@@ -1889,7 +1913,7 @@ let semanticTextInputsNext = [];
 				semanticControlsSynced = 0;
 				canvasRectCache = null;
 			},
-			ingot_web_input_frame_end: endSemanticFrame,
+			ingot_web_input_frame_end: finishInputFrame,
 			ingot_web_mark: (ptr, len) => {
 				if (!ptr || len <= 0) return;
 				let text;
@@ -2327,6 +2351,11 @@ let semanticTextInputsNext = [];
 		semanticInputs.clear();
 		semanticForms.clear();
 		semanticControls.clear();
+		afterInputFrameCallbacks.clear();
+		semanticTextInputs = [];
+		semanticTextInputsNext = [];
+		semanticSliderRects = [];
+		semanticSliderRectsNext = [];
 	}
 
 	function box3dWorkerImports(box3dWorkers) {
@@ -2603,6 +2632,8 @@ let semanticTextInputsNext = [];
 		ingotImports: ingotImports,
 		httpImports: httpImports,
 		audioImports: audioImports,
+		afterInputFrame,
+		sliderRects: () => semanticSliderRects,
 		textInputs: () => semanticTextInputs,
 	};
 
@@ -2617,7 +2648,9 @@ let semanticTextInputsNext = [];
 			endSemanticFrame,
 			beginSemanticFrame: () => { semanticFrame += 1; },
 			semanticState: () => ({ semanticInputs, semanticForms, semanticControls }),
-			textInputs: () => semanticTextInputs,
+			afterInputFrame,
+		sliderRects: () => semanticSliderRects,
+		textInputs: () => semanticTextInputs,
 			attachDrop,
 			box3dWorkerImports,
 			clearDeviceLost,
