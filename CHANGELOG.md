@@ -20,9 +20,12 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 - Replace the Windows libvterm archive with the checksum-verified artifact from
   successful Windows run `38216972728`, including all four vendored robustness
-  patches. Update provenance and third-party notices. Windows CI now tests the
-  committed archive before rebuilding, as well as testing the rebuilt archive.
-  This correction is not present in the immutable `v0.4.0` source tag.
+  patches. Update provenance and third-party notices. This correction is not
+  present in the immutable `v0.4.0` source tag.
+- Prevent libvterm REP from looping forever when the saved glyph width is zero.
+  Add deterministic regression coverage and rebuild both macOS archives. The
+  committed Windows archive still lacks this additional fix, so Windows CI
+  rebuilds from vendored source before running terminal tests.
 
 ## v0.4.0 — source release candidate (not yet published)
 

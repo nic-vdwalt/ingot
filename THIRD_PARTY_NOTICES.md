@@ -143,8 +143,13 @@ after the fix all 300 iterations completed in approximately 250 ms.
 prefixes and verifies normal ASCII repetition afterward. Both macOS archives
 include this fix. The Windows archive still needs a native rebuild; the local
 host lacks MSVC/UCRT headers. Windows CI rebuilds before testing until that
-replacement is available. The hygiene gate verifies checksums, not source
-correspondence. For future archive replacements:
+replacement is available. Windows run `38360454882` at revision
+`0114b41579db30e7287e0b996e0b3fdeab67ab0c` rebuilt and uploaded the fixed
+archive, but failed in `ui.layout_facade_button_key_paths` before reaching
+terminal tests; it is not successful Windows runtime evidence. The committed
+archive remains unchanged pending a validated replacement.
+The hygiene gate verifies checksums, not source correspondence. For future
+archive replacements:
 
 1. Download `windows-libvterm-patched` from a green run, or run
    `scripts\build-libvterm.bat` on Windows.
