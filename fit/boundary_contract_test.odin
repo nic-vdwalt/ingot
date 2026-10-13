@@ -57,20 +57,32 @@ fit_metrics_projection_complete :: proc(t: ^testing.T) {
 			any{metrics, typeid_of(type_of(metrics^))},
 			names[1],
 		)
-		testing.expect_value(t, field.id, typeid_of(i32))
-		if field.id != typeid_of(i32) do continue
-		(cast(^i32)field.data)^ = i32(index + 11)
+		if names[0] == "card_radius" || names[0] == "slider_knob_radius" {
+			testing.expect_value(t, field.id, typeid_of(f32))
+			if field.id != typeid_of(f32) do continue
+			(cast(^f32)field.data)^ = f32(index + 11) + 0.5
+		} else {
+			testing.expect_value(t, field.id, typeid_of(i32))
+			if field.id != typeid_of(i32) do continue
+			(cast(^i32)field.data)^ = i32(index + 11)
+		}
 	}
 	for square in ([2]bool{false, true}) {
 		ui.ui_frame_theme(&frame).square_corners = square
 		projected := surface_metrics(&surface)
 		for names, index in metrics_contract_fields {
 			field := reflect.struct_field_value_by_name(projected, names[0])
-			testing.expect_value(t, field.id, typeid_of(i32))
-			if field.id != typeid_of(i32) do continue
-			expected := i32(index + 11)
-			if square && names[0] == "card_radius" do expected = 0
-			testing.expect_value(t, (cast(^i32)field.data)^, expected)
+			if names[0] == "card_radius" || names[0] == "slider_knob_radius" {
+				testing.expect_value(t, field.id, typeid_of(f32))
+				if field.id != typeid_of(f32) do continue
+				expected := f32(index + 11) + 0.5
+				if square && names[0] == "card_radius" do expected = 0
+				testing.expect_value(t, (cast(^f32)field.data)^, expected)
+			} else {
+				testing.expect_value(t, field.id, typeid_of(i32))
+				if field.id != typeid_of(i32) do continue
+				testing.expect_value(t, (cast(^i32)field.data)^, i32(index + 11))
+			}
 		}
 	}
 	for name in reflect.struct_field_names(Metrics) {
