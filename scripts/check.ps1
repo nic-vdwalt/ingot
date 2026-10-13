@@ -59,7 +59,7 @@ Write-Host "== gfx context ownership guard =="
 Invoke-Odingate @("gfx-context", "--root", $Root, "--files-from", $OdingateFiles)
 Write-Host "== gfx @(init) ordering guard =="
 Invoke-Odingate @("init-order", "--root", $Root, "--files-from", $OdingateFiles)
-Write-Host "== gfx expected-assert isolation guard =="
+Write-Host "== expected-assert isolation guard (gfx, ui, fit) =="
 Invoke-CheckedPython "check_gfx_expected_asserts_test.py"
 Invoke-CheckedPython "check_gfx_expected_asserts.py" @($Root)
 Write-Host "== assertion discipline =="

@@ -11,6 +11,8 @@ $LogDir = if ($env:INGOT_TEST_FAILURE_LOG_DIR) { $env:INGOT_TEST_FAILURE_LOG_DIR
 $Manifest = Get-Content (Join-Path $PSScriptRoot "gate-manifest.json") | ConvertFrom-Json
 $Supervisor = Join-Path $PSScriptRoot "test-supervisor.py"
 $env:PYTHONDONTWRITEBYTECODE = "1"
+& python "$PSScriptRoot/check_gfx_expected_asserts.py" $Root
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 function Invoke-Supervised {
     param([string]$Label, [string[]]$Command)
@@ -53,41 +55,20 @@ foreach ($Package in $Manifest.test_packages) {
     $Command = @("odin", "test", "$Root/$Package", $Collection, $Guard, $Linker, "-define:ODIN_TEST_FAIL_ON_EMPTY=true") + $Extra + $OdinFlags
     Invoke-Supervised $Label $Command
 }
-foreach ($TestName in $Manifest.windows_gfx_expected_assert_tests) {
-    Write-Host "== testing isolated $TestName =="
-    $Label = "gfx-expected-assert-" + $TestName.Replace("gfx.", "").Replace("_", "-")
-    $Command = @(
-        "odin", "test", "$Root/gfx", $Collection, $Guard, $Linker,
-        "-define:INGOT_GFX_EXPECTED_ASSERTS=true",
-        "-define:ODIN_TEST_NAMES=$TestName",
-        "-define:ODIN_TEST_THREADS=1",
-        "-define:ODIN_TEST_FAIL_ON_EMPTY=true"
-    ) + $OdinFlags
-    Invoke-Supervised $Label $Command
-}
-foreach ($TestName in $Manifest.windows_ui_expected_assert_tests) {
-    Write-Host "== testing isolated $TestName =="
-    $Label = "ui-expected-assert-" + $TestName.Replace("ui.", "").Replace("_", "-")
-    $Command = @(
-        "odin", "test", "$Root/ui", $Collection, $Guard, $Linker,
-        "-define:INGOT_UI_EXPECTED_ASSERTS=true",
-        "-define:ODIN_TEST_NAMES=$TestName",
-        "-define:ODIN_TEST_THREADS=1",
-        "-define:ODIN_TEST_FAIL_ON_EMPTY=true"
-    ) + $OdinFlags
-    Invoke-Supervised $Label $Command
-}
-foreach ($TestName in $Manifest.windows_fit_expected_assert_tests) {
-    Write-Host "== testing isolated $TestName =="
-    $Label = "fit-expected-assert-" + $TestName.Replace("fit.", "").Replace("_", "-")
-    $Command = @(
-        "odin", "test", "$Root/fit", $Collection, $Guard, $Linker,
-        "-define:INGOT_FIT_EXPECTED_ASSERTS=true",
-        "-define:ODIN_TEST_NAMES=$TestName",
-        "-define:ODIN_TEST_THREADS=1",
-        "-define:ODIN_TEST_FAIL_ON_EMPTY=true"
-    ) + $OdinFlags
-    Invoke-Supervised $Label $Command
+foreach ($Suite in $Manifest.windows_expected_assert_suites) {
+    foreach ($TestName in $Suite.tests) {
+        Write-Host "== testing isolated $TestName =="
+        $Package = $Suite.package
+        $Label = "$Package-expected-assert-" + $TestName.Replace("$Package.", "").Replace("_", "-")
+        $Command = @(
+            "odin", "test", "$Root/$Package", $Collection, $Guard, $Linker,
+            "-define:$($Suite.define)=true",
+            "-define:ODIN_TEST_NAMES=$TestName",
+            "-define:ODIN_TEST_THREADS=1",
+            "-define:ODIN_TEST_FAIL_ON_EMPTY=true"
+        ) + $OdinFlags
+        Invoke-Supervised $Label $Command
+    }
 }
 foreach ($Example in $Manifest.test_examples) {
     Write-Host "== testing examples/$Example =="

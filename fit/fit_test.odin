@@ -788,6 +788,57 @@ fit_controls_forward_caller_owned_motion :: proc(t: ^testing.T) {
 }
 
 @(test)
+fit_region_button_overloads_preserve_layout :: proc(t: ^testing.T) {
+	baseline: ui.Rect_I32
+	for variant in 0 ..< 4 {
+		runtime: ui.Ui_Runtime
+		backend := i32(1)
+		fit_test_runtime(&runtime, &backend)
+		frame: ui.Ui_Frame
+		output := new(ui.Ui_Output)
+		frame.output = output
+		ui.ui_frame_begin(&frame, &runtime)
+		region: Region
+		ui.begin(&region.inner, &frame, {0, 0, 300, 200})
+		motion: Control_Motion_State
+		clicked: bool
+		switch variant {
+		case 0:
+			clicked = region_button(&region, "item", "Item", .Primary, false, &motion)
+		case 1:
+			clicked = region_button(
+				&region,
+				region_id(&region, "item"),
+				"Item",
+				.Primary,
+				false,
+				&motion,
+			)
+		case 2:
+			clicked = region_button(&region, u64(7), "Item", .Primary, false, &motion)
+		case 3:
+			clicked = region_button(
+				&region,
+				region_id(&region, u64(7)),
+				"Item",
+				.Primary,
+				false,
+				&motion,
+			)
+		}
+		remaining := ui.remaining_rect(&region.inner)
+		if variant == 0 do baseline = remaining
+		testing.expect_value(t, remaining, baseline)
+		testing.expect(t, !clicked)
+		ui.end(&region.inner)
+		ui.ui_frame_end(&frame)
+		ui.ui_frame_destroy(&frame)
+		free(output)
+		ui.ui_runtime_destroy(&runtime)
+	}
+}
+
+@(test)
 fit_regions_forward_caller_owned_motion :: proc(t: ^testing.T) {
 	runtime: ui.Ui_Runtime
 	backend := i32(1)

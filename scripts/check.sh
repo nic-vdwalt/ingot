@@ -54,7 +54,7 @@ echo "== gfx context ownership guard =="
 echo "== gfx @(init) ordering guard =="
 "$INGOT_ODINGATE" init-order --root "$root" --files-from "$odingate_files"
 
-echo "== gfx expected-assert isolation guard =="
+echo "== expected-assert isolation guard (gfx, ui, fit) =="
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_expected_asserts_test.py"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/scripts/check_gfx_expected_asserts.py" "$root"
 

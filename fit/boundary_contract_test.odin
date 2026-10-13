@@ -1,9 +1,87 @@
 #+build !js
 package fit
 
+import "core:reflect"
 import "core:testing"
 import "ingot:gfx"
 import "ingot:ui"
+
+@(private = "file")
+metrics_contract_fields :: [][2]string {
+	{"font_title", "FONT_SIZE_TITLE"},
+	{"font_body", "FONT_SIZE_BODY"},
+	{"font_label", "FONT_SIZE_LABEL"},
+	{"font_note", "FONT_SIZE_NOTE"},
+	{"line_height", "LINE_HEIGHT"},
+	{"tab_bar_height", "TAB_BAR_HEIGHT"},
+	{"caption_button_w", "CAPTION_BTN_W"},
+	{"padding", "PADDING"},
+	{"row_small", "ROW_H_SM"},
+	{"row_medium", "ROW_H_MD"},
+	{"panel_header_h", "PANEL_HEADER_H"},
+	{"card_radius", "CARD_RADIUS_PX"},
+	{"control_box", "CONTROL_BOX"},
+	{"control_gap", "CONTROL_GAP"},
+	{"slider_track_h", "SLIDER_TRACK_H"},
+	{"slider_knob_radius", "SLIDER_KNOB_R"},
+	{"menu_item_h", "MENU_ITEM_H"},
+	{"menu_padding", "MENU_PAD"},
+	{"menu_min_w", "MENU_MIN_W"},
+	{"tooltip_padding", "TOOLTIP_PAD"},
+	{"code_block_padding", "CODE_BLOCK_PAD"},
+	{"bullet_indent", "BULLET_INDENT"},
+	{"table_cell_padding", "TABLE_CELL_PAD"},
+	{"split_divider_w", "SPLIT_DIVIDER_W"},
+}
+
+@(test)
+fit_metrics_projection_complete :: proc(t: ^testing.T) {
+	runtime: ui.Ui_Runtime
+	ui.ui_runtime_init(&runtime)
+	defer ui.ui_runtime_destroy(&runtime)
+	frame: ui.Ui_Frame
+	output := new(ui.Ui_Output)
+	defer free(output)
+	frame.output = output
+	ui.ui_frame_begin(&frame, &runtime)
+	defer ui.ui_frame_end(&frame)
+	root: ui.Ui
+	ui.begin(&root, &frame, {0, 0, 320, 240})
+	defer ui.end(&root)
+	surface := Surface {
+		inner = &root,
+	}
+	metrics := ui.ui_frame_metrics(&frame)
+	for names, index in metrics_contract_fields {
+		field := reflect.struct_field_value_by_name(
+			any{metrics, typeid_of(type_of(metrics^))},
+			names[1],
+		)
+		testing.expect_value(t, field.id, typeid_of(i32))
+		if field.id != typeid_of(i32) do continue
+		(cast(^i32)field.data)^ = i32(index + 11)
+	}
+	for square in ([2]bool{false, true}) {
+		ui.ui_frame_theme(&frame).square_corners = square
+		projected := surface_metrics(&surface)
+		for names, index in metrics_contract_fields {
+			field := reflect.struct_field_value_by_name(projected, names[0])
+			testing.expect_value(t, field.id, typeid_of(i32))
+			if field.id != typeid_of(i32) do continue
+			expected := i32(index + 11)
+			if square && names[0] == "card_radius" do expected = 0
+			testing.expect_value(t, (cast(^i32)field.data)^, expected)
+		}
+	}
+	for name in reflect.struct_field_names(Metrics) {
+		matches := 0
+		for names in metrics_contract_fields {
+			if names[0] == name do matches += 1
+		}
+		testing.expect_value(t, matches, 1)
+	}
+	testing.expect_value(t, reflect.struct_field_count(Metrics), len(metrics_contract_fields))
+}
 
 @(private = "file")
 Contract_Key_Pair :: struct {

@@ -127,16 +127,24 @@ machine that produced it.
 The Windows archive includes all four patches. It was imported from successful
 Windows workflow run `38216972728`, artifact `11731239833`
 (`windows-libvterm-patched`), built from Ingot revision
-`8cd2d9447d81139efd387be46378abefc6363fd0`. The vendored source and Windows
-build script are unchanged between that revision and this replacement.
+`8cd2d9447d81139efd387be46378abefc6363fd0`. It predates the additional REP
+progress fix described below.
 Its SHA-256 was verified against the artifact's `vterm.lib.sha256` sidecar;
 that run passed both native and SDL3 test gates with this archive.
 
 The v0.4.0 tag still contains the older unpatched archive; this replacement is
-post-release work and does not move that tag. Windows CI now tests the committed
-archive before rebuilding, then tests the rebuilt archive as well. The hygiene
-gate verifies checksums, not correspondence to vendored source. For future
-archive replacements:
+post-release work and does not move that tag.
+
+An additional `state.c` `on_csi` REP fix ignores nonpositive saved glyph widths.
+Otherwise repeating a zero-width glyph never advances the cursor and hangs the
+parser. Windows fuzz seed `1791872852732517200` reproduced the hang locally;
+after the fix all 300 iterations completed in approximately 250 ms.
+`term.vterm_repeat_zero_width_makes_progress` covers empty, C1 and combining
+prefixes and verifies normal ASCII repetition afterward. Both macOS archives
+include this fix. The Windows archive still needs a native rebuild; the local
+host lacks MSVC/UCRT headers. Windows CI rebuilds before testing until that
+replacement is available. The hygiene gate verifies checksums, not source
+correspondence. For future archive replacements:
 
 1. Download `windows-libvterm-patched` from a green run, or run
    `scripts\build-libvterm.bat` on Windows.
@@ -174,8 +182,8 @@ THE SOFTWARE.
 SHA-256:
 
 ```text
-d69b38ecefdf7d23d56df592cb799760833ddff1154bf759d4940f51c6fc0f24  libvterm/lib/darwin_arm64/libvterm.a
-f8ccd0e741df7368fb79f915d334774f2d3f173ffcb7f3d7fe8024648b4e1d09  libvterm/lib/darwin_amd64/libvterm.a
+63589ada3a115e5fc79610f746996972cd250831f380b9cc89fcc0b7cf0ef383  libvterm/lib/darwin_arm64/libvterm.a
+7c1163513fd8da5881033572bbcc61fc1804e49bb52bcf6e60236d268144b084  libvterm/lib/darwin_amd64/libvterm.a
 8c07e3362a6e056b372417f950dc000d262ad3db9c54c2f78332380e5a6fd03d  libvterm/lib/windows_amd64/vterm.lib
 ```
 

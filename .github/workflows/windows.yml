@@ -135,12 +135,6 @@ jobs:
       - name: Run Windows SDL3 strict gate
         shell: pwsh
         run: ./scripts/check.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
-      - name: Test committed Windows libvterm
-        shell: pwsh
-        run: ./scripts/test.ps1
-      - name: Test committed Windows libvterm with SDL3
-        shell: pwsh
-        run: ./scripts/test.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
       - name: Rebuild patched Windows libvterm
         shell: pwsh
         run: cmd /c scripts\build-libvterm.bat

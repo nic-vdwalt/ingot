@@ -328,6 +328,48 @@ layout_facade_fit_builder_dynamic_children_and_outputs_are_bounded :: proc(t: ^t
 }
 
 @(test)
+layout_facade_button_key_paths :: proc(t: ^testing.T) {
+	for variant in 0 ..< 4 {
+		runtime: Ui_Runtime
+		text_backend: Test_Text_Backend_State
+		test_runtime_init(&runtime, &text_backend)
+		frame: Ui_Frame
+		output := new(Ui_Output)
+		frame.output = output
+		ui_frame_begin(&frame, &runtime)
+		u: Ui
+		begin(&u, &frame, {0, 0, 300, 200})
+		builder: Fit_Builder
+		fit_begin(&builder, &u)
+		fit_builder_row(&builder)
+		active := true
+		options := Fit_Button_Options {
+			activated = &active,
+		}
+		switch variant {
+		case 0:
+			fit_builder_button(&builder, "item", "Item", options)
+		case 1:
+			fit_builder_button(&builder, id(&u, "item"), "Item", options)
+		case 2:
+			fit_builder_button(&builder, u64(7), "Item", options)
+		case 3:
+			fit_builder_button(&builder, id(&u, u64(7)), "Item", options)
+		}
+		fit_end(&builder)
+		rect := fit_render(&builder)
+		testing.expect(t, rect.w > 0 && rect.h > 0)
+		testing.expect(t, !active)
+		testing.expect_value(t, u.focus_count, 1)
+		end(&u)
+		ui_frame_end(&frame)
+		ui_frame_destroy(&frame)
+		free(output)
+		ui_runtime_destroy(&runtime)
+	}
+}
+
+@(test)
 layout_facade_fit_builder_reuse_clears_stale_outputs :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	text_backend: Test_Text_Backend_State

@@ -402,12 +402,7 @@ region_button_string :: proc(
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "fit.region_button: region not open")
-	return ui.button(
-		&region.inner,
-		key,
-		label,
-		ui.Button_Options{style = style, disabled = !enabled, motion = motion},
-	)
+	return region_button_id(region, region_id(region, key), label, style, enabled, motion)
 }
 
 region_button_id :: proc(
@@ -436,12 +431,7 @@ region_button_u64 :: proc(
 	motion: ^Control_Motion_State = nil,
 ) -> bool {
 	assert(region != nil && region.inner.open, "fit.region_button: region not open")
-	return ui.button(
-		&region.inner,
-		key,
-		label,
-		ui.Button_Options{style = style, disabled = !enabled, motion = motion},
-	)
+	return region_button_id(region, region_id(region, key), label, style, enabled, motion)
 }
 
 region_button :: proc {

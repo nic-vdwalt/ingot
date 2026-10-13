@@ -233,9 +233,17 @@ fields do not automatically become public snapshot fields.
 
 ## Boundary maintenance contract
 
-`fit` owns the consumer vocabulary, `ui` owns renderer-independent behavior and
-layout, and `ui_gfx` owns graphics integration. New overloads adapt arguments to
-one canonical implementation; they must not duplicate widget behavior.
+`fit` is the primary consumer UI API and owns the consumer vocabulary; `ui`
+owns renderer-independent behavior and layout, and `ui_gfx` owns graphics
+integration. New overloads adapt arguments to one canonical implementation per
+semantic tier; they must not duplicate widget behavior. Builder and Surface
+controls retain separate timing and ownership contracts.
+
+Intentional snapshots such as `Theme_Tokens` and `Metrics` remain selected
+consumer projections, not aliases of backend state. Their independent contract
+tests classify every consumer field and verify populated values, including
+non-color theme fields and square-corner radius behavior. Adding an internal
+field does not automatically extend the public snapshot.
 
 Boundary types use the following categories to decide whether a
 `fit` type may alias its `ui` counterpart:

@@ -2,6 +2,8 @@
 
 import json
 import unittest
+
+from check_gfx_expected_asserts import validate_suites
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -13,7 +15,7 @@ class GateManifestTest(unittest.TestCase):
     def test_manifest_is_bounded_and_unique(self):
         for key, records in MANIFEST.items():
             self.assertLessEqual(len(records), MAX_GATE_RECORDS, key)
-            normalized = [tuple(record) if isinstance(record, list) else record for record in records]
+            normalized = [json.dumps(record, sort_keys=True) for record in records]
             self.assertEqual(len(normalized), len(set(normalized)), key)
 
     def test_packages_and_examples_exist(self):
@@ -44,14 +46,10 @@ class GateManifestTest(unittest.TestCase):
             self.assertIn(package, checked, package)
 
     def test_windows_expected_assert_tests_are_fully_qualified(self):
-        expected_assert_suites = {
-            "windows_gfx_expected_assert_tests": "gfx",
-            "windows_ui_expected_assert_tests": "ui",
-            "windows_fit_expected_assert_tests": "fit",
-        }
-        for key, package in expected_assert_suites.items():
-            for test_name in MANIFEST[key]:
-                self.assertRegex(test_name, rf"^{package}\.[a-z][a-z0-9_]*$")
+        suites = validate_suites(MANIFEST)
+        self.assertEqual({suite["package"] for suite in suites}, {"gfx", "ui", "fit"})
+        for suite in suites:
+            self.assertLessEqual(len(suite["tests"]), MAX_GATE_RECORDS)
 
     def test_powershell_odin_wrapper_flags_are_quoted(self):
         for launcher in ("check.ps1", "test.ps1"):

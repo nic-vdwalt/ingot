@@ -1232,6 +1232,8 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
     break;
 
   case 0x62: { // REP - ECMA-48 8.3.103
+    if(state->combine_width <= 0)
+      break;
     const int row_width = THISROWWIDTH(state);
     count = CSI_ARG_COUNT(args[0]);
     col = state->pos.col + count;

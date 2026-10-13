@@ -11,6 +11,13 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ### Fixed
 
+- Preserve Fit's primary consumer API while routing button overloads through
+  canonical implementations per tier and strengthening theme/metrics projection
+  contracts. No consumer signature changes are required.
+- Register the four missing Fit button-output assertion tests for Windows
+  isolation. One manifest suite schema now drives isolation and drift checks
+  across gfx, ui, and fit; Windows runtime validation remains separate.
+
 - Replace the Windows libvterm archive with the checksum-verified artifact from
   successful Windows run `38216972728`, including all four vendored robustness
   patches. Update provenance and third-party notices. Windows CI now tests the

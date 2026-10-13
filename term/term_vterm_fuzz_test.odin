@@ -492,3 +492,27 @@ vterm_c1_control_text_keeps_cursor_in_grid :: proc(t: ^testing.T) {
 		fuzz_vt_check_invariants(t, ts)
 	}
 }
+
+@(test)
+vterm_repeat_zero_width_makes_progress :: proc(t: ^testing.T) {
+	prefixes := []string{"", "\xc2\x80", "\xcc\x81"}
+	for prefix in prefixes {
+		ts := fuzz_vt_make(80, 4)
+		testing.expect(t, ts != nil)
+		if ts == nil do continue
+		defer fuzz_vt_destroy(ts)
+		if len(prefix) > 0 {
+			count := copy(ts.read_buf[:], transmute([]u8)prefix)
+			_term_ingest(ts, count, false)
+		}
+		repeat := "\x1b[5bA\x1b[3b"
+		count := copy(ts.read_buf[:], transmute([]u8)repeat)
+		_term_ingest(ts, count, false)
+		fuzz_vt_check_invariants(t, ts)
+		for column in 0 ..< 4 {
+			cell: lv.VTerm_Screen_Cell
+			testing.expect(t, lv.vterm_screen_get_cell(ts.screen, {0, c.int(column)}, &cell) != 0)
+			testing.expect(t, cell.chars[0] == 'A')
+		}
+	}
+}

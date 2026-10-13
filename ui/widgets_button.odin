@@ -185,14 +185,12 @@ button_id :: proc(
 	assert(u != nil && u.open, "button: frame not open")
 	assert(id != WIDGET_ID_NONE, "button: zero stable id")
 	assert(label != "", "button: empty accessible label")
-	spec := button_spec(
+	return button_id_options(
 		u,
 		id,
 		label,
 		{style = style, disabled = !enabled, web_form_id = web_form_id},
 	)
-	size := button_spec_size(u, spec)
-	return button_spec_at(u, spec, slot_next_px(u, size.w, size.h))
 }
 
 @(private = "package")

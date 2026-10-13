@@ -63,7 +63,8 @@
     "gallery",
     "typed_commands"
   ],
-  "windows_gfx_expected_assert_tests": [
+  "windows_expected_assert_suites": [
+  {"package": "gfx", "define": "INGOT_GFX_EXPECTED_ASSERTS", "tests": [
     "gfx.frame_owner_rejects_stale_epoch",
     "gfx.camera_update_rejects_parallel_up",
     "gfx.camera_update_rejects_non_finite_input",
@@ -72,8 +73,8 @@
     "gfx.intersections_reject_reversed_bounds",
     "gfx.intersections_reject_non_positive_sphere",
     "gfx.texture_lookup_rejects_an_unassigned_context_id"
-  ],
-  "windows_ui_expected_assert_tests": [
+  ]},
+  {"package": "ui", "define": "INGOT_UI_EXPECTED_ASSERTS", "tests": [
     "ui.paint_command_reservation_rejects_nested_scope",
     "ui.paint_command_reservation_rejects_sink_backed_list",
     "ui.paint_command_reservation_rejects_open_clip",
@@ -83,12 +84,17 @@
     "ui.paint_command_reservation_rejects_finalize_while_active",
     "ui.focus_duplicate_reports_registration_indices",
     "ui.prepared_capacity_reports_parent_and_limit"
-  ],
-  "windows_fit_expected_assert_tests": [
+  ]},
+  {"package": "fit", "define": "INGOT_FIT_EXPECTED_ASSERTS", "tests": [
+    "fit.fit_button_output_nil_is_rejected",
+    "fit.fit_button_output_duplicate_is_rejected",
+    "fit.fit_button_output_action_is_rejected",
+    "fit.fit_button_output_tagged_action_is_rejected",
     "fit.fit_async_duplicate_completion_is_rejected",
     "fit.fit_owner_teardown_with_async_completion_is_rejected",
     "fit.fit_async_completion_into_retired_owner_is_rejected",
     "fit.fit_parent_mutation_outside_build_phase_is_rejected"
+  ]}
   ],
   "examples": [
     "advanced_ui",

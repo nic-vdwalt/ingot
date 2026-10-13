@@ -64,6 +64,7 @@
           "summary": "Clamp negative codepoint widths to zero. vterm_unicode_width() returns -1 for C1 controls (U+0080..U+009F) delivered as UTF-8 text, and adding that to the cursor column moved it to -1 and produced an inverted damage rect; a following resize then failed to place the cursor. Found by term.term_pump_resize_fuzz (seed 1790829414776857500) in Windows CI."
         }
       ],
+      "pending_windows_patch": "on_csi REP: ignore nonpositive combine_width to prevent a nonadvancing loop. Fixed in vendored state.c and macOS archives; Windows archive requires rebuilding from this source.",
       "license": "MIT",
       "build": "scripts/build-libvterm.sh and scripts/build-libvterm.bat",
       "notices": [
@@ -73,18 +74,19 @@
       "artifacts": [
         {
           "path": "libvterm/lib/darwin_arm64/libvterm.a",
-          "sha256": "bd0d125e5153c0054d3d05c9597910eb6d7a7cd743dc4f2a1d180638bcf9baca",
+          "sha256": "63589ada3a115e5fc79610f746996972cd250831f380b9cc89fcc0b7cf0ef383",
           "built_from": "patched"
         },
         {
           "path": "libvterm/lib/darwin_amd64/libvterm.a",
-          "sha256": "c7347787890b7c759f3dbf8adf57bce2adf1e71f5e84f78750a1dddd7c7f707a",
+          "sha256": "7c1163513fd8da5881033572bbcc61fc1804e49bb52bcf6e60236d268144b084",
           "built_from": "patched"
         },
         {
           "path": "libvterm/lib/windows_amd64/vterm.lib",
           "sha256": "8c07e3362a6e056b372417f950dc000d262ad3db9c54c2f78332380e5a6fd03d",
-          "built_from": "patched"
+          "built_from": "patched",
+          "stale": "Includes the first four patches but predates the REP zero-width progress fix. Rebuild with scripts/build-libvterm.bat before running terminal tests."
         }
       ]
     },

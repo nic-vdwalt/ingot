@@ -57,8 +57,11 @@ named upper bounds, and assertions plus inspectable derived output as oracles.
   type-check + `-vet -strict-style -vet-shadowing`, 100-line procedure and
   100-character physical-line checks, plus an `odinfmt` format check.
 - **Windows native gate**: `./scripts/test.ps1` then `./scripts/check.ps1`.
-  Ordinary gfx tests run in parallel; expected-assert gfx tests are isolated per
-  process due to Odin issue #7035, and shared-state gfx tests use one test guard.
+  Ordinary gfx tests run in parallel; expected-assert tests for gfx, ui, and fit
+  are isolated per process due to Odin issue #7035. The manifest's
+  `windows_expected_assert_suites` owns package, define, and test registration;
+  `check_gfx_expected_asserts.py` rejects drift across all three packages.
+  Shared-state gfx tests use one test guard.
   Both launchers link with `-linker:msvc`: Odin dev-2026-10 made radlink the
   Windows default, and radlink rejects the Rust runtime symbols that
   `vendor:wgpu` and `accesskit.lib` both define while ignoring the

@@ -268,19 +268,8 @@ fit_button_builder_string :: proc(
 	options: Fit_Button_Options = {},
 ) {
 	assert(builder != nil, "fit_builder_button: nil builder")
-	fit_builder_add_child(builder)
 	assert(key != "" && label != "", "fit_button: invalid button")
-	handle := prepared_button(
-		&builder.prepared,
-		key,
-		label,
-		fit_button_options(options),
-		options.track,
-	)
-	node := &prepared_nodes(&builder.prepared)[i32(handle)]
-	node.sizing = options.size
-	fit_builder_action_set(node, options.activated, options.action)
-	fit_builder_output(builder, handle, options.activated)
+	fit_button_builder_id(builder, id(builder.prepared.u, key), label, options)
 }
 
 @(private = "package")
@@ -291,19 +280,8 @@ fit_button_builder_u64 :: proc(
 	options: Fit_Button_Options = {},
 ) {
 	assert(builder != nil, "fit_builder_button: nil builder")
-	fit_builder_add_child(builder)
 	assert(key != 0 && label != "", "fit_button: invalid button")
-	handle := prepared_button(
-		&builder.prepared,
-		key,
-		label,
-		fit_button_options(options),
-		options.track,
-	)
-	node := &prepared_nodes(&builder.prepared)[i32(handle)]
-	node.sizing = options.size
-	fit_builder_action_set(node, options.activated, options.action)
-	fit_builder_output(builder, handle, options.activated)
+	fit_button_builder_id(builder, id(builder.prepared.u, key), label, options)
 }
 
 @(private = "package")

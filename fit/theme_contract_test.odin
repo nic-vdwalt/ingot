@@ -70,6 +70,16 @@ theme_contract_fields :: [][2]string {
 	{"bevel_shade", "bevel_shade"},
 }
 
+@(private = "file")
+theme_contract_value_fields :: []string {
+	"substrate",
+	"margin_rule",
+	"square_corners",
+	"font_face",
+	"reading_font_face",
+	"surface_style",
+}
+
 @(test)
 fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	theme: ui.Theme
@@ -98,14 +108,8 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	}
 	for name in reflect.struct_field_names(Theme_Tokens) {
 		matches := 0
-		switch name {
-		case "substrate",
-		     "margin_rule",
-		     "square_corners",
-		     "font_face",
-		     "reading_font_face",
-		     "surface_style":
-			matches += 1
+		for value_name in theme_contract_value_fields {
+			if value_name == name do matches += 1
 		}
 		for names in theme_contract_fields {
 			if names[0] == name do matches += 1
@@ -115,8 +119,34 @@ fit_theme_snapshot_complete :: proc(t: ^testing.T) {
 	testing.expect_value(
 		t,
 		reflect.struct_field_count(Theme_Tokens),
-		len(theme_contract_fields) + 6,
+		len(theme_contract_fields) + len(theme_contract_value_fields),
 	)
+}
+
+@(test)
+fit_theme_snapshot_value_fields :: proc(t: ^testing.T) {
+	theme: ui.Theme
+	for face in Font_Face {
+		theme.font_face = face
+		testing.expect_value(t, theme_tokens(theme).font_face, face)
+	}
+	for face in Font_Face {
+		theme.reading_font_face = face
+		testing.expect_value(t, theme_tokens(theme).reading_font_face, face)
+	}
+	for style in Surface_Style {
+		theme.surface_style = style
+		testing.expect_value(t, theme_tokens(theme).surface_style, style)
+	}
+	for square in ([2]bool{false, true}) {
+		theme.square_corners = square
+		for margin in ([2]bool{false, true}) {
+			theme.substrate.margin_rule = margin
+			tokens := theme_tokens(theme)
+			testing.expect_value(t, tokens.square_corners, square)
+			testing.expect_value(t, tokens.margin_rule, margin)
+		}
+	}
 }
 
 @(test)

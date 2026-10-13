@@ -80,7 +80,12 @@ macOS arm64 runners. Windows runs `scripts/test.ps1` and `scripts/check.ps1`;
 macOS runs `scripts/test.sh -define:ODIN_TEST_THREADS=1` and `scripts/check.sh`.
 Windows keeps ordinary gfx tests parallel. Tests that mutate package-global gfx
 state use the shared test guard, while intentional assertion tests listed in
-`scripts/gate-manifest.json` run one per supervised process. This works around
+`scripts/gate-manifest.json` run one per supervised process. Its
+`windows_expected_assert_suites` entries own each package, isolation define,
+and test list for gfx, ui, and fit. `check_gfx_expected_asserts.py` checks every
+suite for missing, stale, duplicate, or malformed registrations before the
+Windows test launcher runs. Add new expected-assert tests to the corresponding
+suite; conditional declarations are included in discovery. This works around
 Odin issue #7035 and may be removed after the pinned toolchain contains the fix
 from Odin PR #7086. Runtime rendering and application concurrency are unaffected.
 Both gates execute package tests, loopback WSS, strict checks, binding links,
