@@ -83,9 +83,8 @@
         },
         {
           "path": "libvterm/lib/windows_amd64/vterm.lib",
-          "sha256": "726100141eba902aeef49ee134ea3b88767f558ef691d35091526ae29d89e369",
-          "built_from": "upstream-unpatched",
-          "stale": "Predates the erase_internal and putglyph patches; rebuild with scripts/build-libvterm.bat on Windows."
+          "sha256": "8c07e3362a6e056b372417f950dc000d262ad3db9c54c2f78332380e5a6fd03d",
+          "built_from": "patched"
         }
       ]
     },

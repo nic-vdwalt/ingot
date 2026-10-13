@@ -124,14 +124,19 @@ source reproduces the recorded checksum byte for byte; without it `ar` stamps
 each member with the build time and the manifest would only ever match the one
 machine that produced it.
 
-**`libvterm/lib/windows_amd64/vterm.lib` predates all of these patches** and
-the manifest marks it `"built_from": "upstream-unpatched"`. The hygiene gate
-verifies each archive against its recorded checksum rather than against
-`vendor/libvterm`, so it cannot detect an archive that is merely stale against
-the source. `.github/workflows/windows.yml` rebuilds the patched archive with
-the pinned toolchain on every run, tests against it, and publishes it as the
-`windows-libvterm-patched` artifact (`vterm.lib` plus `vterm.lib.sha256`). To
-replace the committed archive:
+The Windows archive includes all four patches. It was imported from successful
+Windows workflow run `38216972728`, artifact `11731239833`
+(`windows-libvterm-patched`), built from Ingot revision
+`8cd2d9447d81139efd387be46378abefc6363fd0`. The vendored source and Windows
+build script are unchanged between that revision and this replacement.
+Its SHA-256 was verified against the artifact's `vterm.lib.sha256` sidecar;
+that run passed both native and SDL3 test gates with this archive.
+
+The v0.4.0 tag still contains the older unpatched archive; this replacement is
+post-release work and does not move that tag. Windows CI now tests the committed
+archive before rebuilding, then tests the rebuilt archive as well. The hygiene
+gate verifies checksums, not correspondence to vendored source. For future
+archive replacements:
 
 1. Download `windows-libvterm-patched` from a green run, or run
    `scripts\build-libvterm.bat` on Windows.
@@ -171,7 +176,7 @@ SHA-256:
 ```text
 d69b38ecefdf7d23d56df592cb799760833ddff1154bf759d4940f51c6fc0f24  libvterm/lib/darwin_arm64/libvterm.a
 f8ccd0e741df7368fb79f915d334774f2d3f173ffcb7f3d7fe8024648b4e1d09  libvterm/lib/darwin_amd64/libvterm.a
-726100141eba902aeef49ee134ea3b88767f558ef691d35091526ae29d89e369  libvterm/lib/windows_amd64/vterm.lib
+8c07e3362a6e056b372417f950dc000d262ad3db9c54c2f78332380e5a6fd03d  libvterm/lib/windows_amd64/vterm.lib
 ```
 
 ## JetBrains Mono Regular 2.304

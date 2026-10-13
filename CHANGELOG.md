@@ -7,6 +7,16 @@ Ingot uses pre-`1.0` versioning: source tags may contain documented public API
 changes, including breaking changes. Pin an exact tag and read the changelog.
 See the [versioning policy](docs/compatibility.md#versioning-policy).
 
+## Unreleased
+
+### Fixed
+
+- Replace the Windows libvterm archive with the checksum-verified artifact from
+  successful Windows run `38216972728`, including all four vendored robustness
+  patches. Update provenance and third-party notices. Windows CI now tests the
+  committed archive before rebuilding, as well as testing the rebuilt archive.
+  This correction is not present in the immutable `v0.4.0` source tag.
+
 ## v0.4.0 — source release candidate (not yet published)
 
 Proposed immutable source: `8cd2d9447d81139efd387be46378abefc6363fd0`.

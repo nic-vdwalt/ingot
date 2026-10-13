@@ -135,13 +135,12 @@ jobs:
       - name: Run Windows SDL3 strict gate
         shell: pwsh
         run: ./scripts/check.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
-      # The committed libvterm/lib/windows_amd64/vterm.lib predates the
-      # erase_internal and putglyph patches (docs/provenance/third-party-artifacts.json
-      # marks it stale), so tests need a rebuilt archive. The strict gates above
-      # run first because scripts/check-repository-hygiene.py compares that file
-      # against its recorded checksum and MSVC lib.exe output is not reproducible;
-      # rebuilding after the gates lets one archive serve both test passes with no
-      # restore step. See THIRD_PARTY_NOTICES.md for replacing the committed file.
+      - name: Test committed Windows libvterm
+        shell: pwsh
+        run: ./scripts/test.ps1
+      - name: Test committed Windows libvterm with SDL3
+        shell: pwsh
+        run: ./scripts/test.ps1 -OdinFlags '-define:INGOT_GFX_SDL3=true'
       - name: Rebuild patched Windows libvterm
         shell: pwsh
         run: cmd /c scripts\build-libvterm.bat
