@@ -16,6 +16,12 @@ compatibility facade for one minor release. Immediate removal is reserved for
 security, correctness, or toolchain changes that cannot support such a window,
 and the changelog records the reason.
 
+The v0.4.0 Fit naming migration is an explicit exception: public procedures
+become snake_case without a compatibility window to avoid maintaining a second
+naming vocabulary. This does not broaden the exception policy for future
+removals. See the [migration guide](migration-0.4.0.md) and
+[immutable candidate ledger](releases/v0.4.0.md).
+
 Every tag is a **source** tag. Ingot distributes no binaries, installers, or web
 bundles, and a tag does not authorize redistributing them; the
 [binary and web release checklist](oss-release-checklist.md) governs that
@@ -30,7 +36,8 @@ and source changes, then run native, web, and application-specific validation
 before updating the pin.
 
 The tested compiler revision is recorded in `ODIN_VERSION`. Use that compiler,
-its bundled `odinfmt`, and the repository `.odinfmt.json`. Compiler development
+a separate OLS `odinfmt` installation matching the CI platform's `OLS_ASSET`,
+and the repository `.odinfmt.json`. Compiler development
 revisions can change language, ABI, vendor packages, and WebGPU runtime behavior;
 a newer revision is not assumed compatible until the full gates pass. This
 compiler and vendor ABI constraint is separate from Ingot's public source API
@@ -58,11 +65,11 @@ fails on any new risk and on any entry that no longer applies.
 
 The compatibility classes are:
 
-- Documented application APIs in `ingot:gfx`, `ingot:ui`, `ingot:ui_gfx`,
+- Documented application APIs in `ingot:fit`, `ingot:gfx`, `ingot:ui`, `ingot:ui_gfx`,
   `ingot:net`, `ingot:prefs`, `ingot:sys`, and `ingot:term` receive the patch
   compatibility and migration policy above.
-- Documented PascalCase graphics procedures and public type layouts are a
-  targeted migration facade for common raylib-style 2D applications. This is
+- Documented raylib-shaped graphics procedures (using Ingot's snake_case names)
+  and public type layouts are a targeted migration surface for common 2D applications. This is
   not complete raylib, raymath, 3D, shader, or `rlgl` parity.
 - `ingot:gfx/rlgl`, legacy networking entry points, direct `ui_gfx.Adapter`
   lifecycle procedures, and low-level binding packages are compatibility or

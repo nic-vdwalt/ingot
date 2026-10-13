@@ -1,6 +1,6 @@
 # Ingot hot reload
 
-This native example keeps the Ingot window, WebGPU context, and `fit.Session`
+This native example keeps the Ingot window, WebGPU context, and `fit.App`
 in a persistent host while application state and Builder-based immediate-mode UI
 code live in a reloadable shared library.
 
@@ -30,7 +30,7 @@ compatible reload and the reload generation increases.
 
 `host/main.odin` owns every native and GPU lifetime. It watches `build/game`,
 copies each build to a versioned filename, resolves the `game_*` ABI, and calls
-the reloadable `game_draw` with the current caller-owned `ui.Ui_Frame`.
+the reloadable `game_draw` with a borrowed `^fit.Builder` for the current build.
 
 `game/game.odin` owns only `Game_State` and UI declaration. Mutable state that
 must survive reload belongs in `Game_State`, not library globals. A reload reuses

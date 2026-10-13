@@ -99,7 +99,9 @@ A later declaration in the same Draw still reads pre-render state. See
 | Surface | Only its render callback; never retain it |
 | Control destination / Action context | Through rendering and dispatch, not just the declaring helper |
 | Borrowed labels, tracks, item slices | Through their current-build consumers |
-| Typed queue activation slots | Through render and collection on the following build |
+| Legacy typed queue activation slots | Through render and collection on the following build |
+| Builder-aware typed queue | Retain across builds for delivery; no render-time pointer into activation slots |
+| Command payload references | Caller-owned backing storage must survive command consumption |
 
 Do not pass a component helper's local bool or stack-local callback context to a
 Builder control. The helper returns before rendering. Use fields of the
@@ -207,7 +209,7 @@ Draw N+1: resolve descriptors against that history
 ```
 
 `examples/typed_commands/main.odin` is the executable recipe. Pair Begin with
-`defer Typed_Commands_End` immediately, not End before declaring buttons.
+`defer fit.typed_commands_end(&queue)` immediately, not End before declaring buttons.
 
 - `.Accepted` means an activation slot was reserved, not that a click occurred.
 - `.Full` means no control was declared by that call. Handle it without automatic

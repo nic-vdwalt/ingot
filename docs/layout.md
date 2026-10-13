@@ -50,17 +50,18 @@ Scope values do not add layout nodes or invoke callbacks.
 
 ## Activation timing
 
-An `Action` is the primary prepared Button result. Fit dispatches it once, in
+Prefer owned `button_result` polling or builder-aware typed commands. An
+`Action` remains an advanced prepared Button result. Fit dispatches it once, in
 declaration order, after the complete tree renders in the activating frame.
 Actions may mutate caller-owned state or enqueue work but cannot alter the
-current prepared description. `Button_Delayed` uses zero-value caller-owned
+current prepared description. `button_delayed` uses zero-value caller-owned
 `Signal` state when activation must instead be consumed during a later Builder
 call. Signals and raw output pointers must outlive render.
 
 ## Containers
 
 - `Center` is root-only shorthand for a Column with centered cross/main
-  alignment and `Grow()` on both axes.
+  alignment and `grow()` on both axes.
 - `Column` lays children on the vertical axis.
 - `Row` lays children on the horizontal axis.
 - `Flow` wraps measured children left to right and can align, justify, or grow
@@ -98,7 +99,7 @@ for tag in state.tags do fit.button(tags, tag.id, tag.label)
 Flow remains current-frame data. At most `fit.FLOW_GROW_ITEM_MAX` grow children
 may occur on one line; ordinary wrapped children retain the existing bounded
 flow capacity. Default start justification and stretch alignment preserve the
-legacy geometry. A child's explicit `Grow()` track consumes the line's remaining
+legacy geometry. A child's explicit `grow()` track consumes the line's remaining
 width without storing state across frames.
 
 ## Track grid
@@ -156,7 +157,7 @@ hierarchy.
 
 `fit.fit`, `fit.grow`, `fit.fixed`, `fit.percent`, and `fit.hug` construct
 tracks. A leaf's `track` controls its parent main axis; `Size_Options` controls
-both axes. Default prepared children and explicit `Hug()` tracks use their
+both axes. Default prepared children and explicit `hug()` tracks use their
 current-frame intrinsic measurement as the preferred main-axis size. Under
 constraint, explicit `Fit` and `Grow` capacity compresses before Hug. If the
 layout remains impossible, Hug compresses deterministically so geometry stays
@@ -175,8 +176,8 @@ Neither callback nor Surface may be retained.
 
 ## Explicit Surface layout
 
-The explicit-geometry layer remains separate. `Layout_Begin`, `Grid_Begin`,
-`Flow_Begin`, and `Fit_Column_Begin` bind a borrowed Surface to caller-owned
+The explicit-geometry layer remains separate. `layout_begin`, `grid_begin`,
+`flow_begin`, and `fit_column_begin` bind a borrowed Surface to caller-owned
 state and retain their matching End calls:
 
 ```odin

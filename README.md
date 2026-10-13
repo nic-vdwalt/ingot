@@ -37,8 +37,10 @@ SDL3 and pass `-define:INGOT_GFX_SDL3=true` to select the optional SDL3 host.
 - Deterministic, bounded test harnesses
 
 > [!IMPORTANT]
-> `0.3.3` is the latest source tag for a young `0.x` API. Pin an exact revision
-> and validate every platform your application ships on.
+> `v0.4.0` is the next source release candidate, not yet published. Pin its exact
+> revision and read the [migration guide](docs/migration-0.4.0.md) and
+> [release ledger](docs/releases/v0.4.0.md). Validate every platform you ship;
+> the candidate's Windows libvterm archive still requires rebuilding for fixes.
 
 ## The experiment
 
@@ -59,11 +61,20 @@ through explicit imports; there is no umbrella runtime profile.
 
 ```sh
 git submodule add https://github.com/Nic-vdwalt/ingot.git libs/ingot
-git -C libs/ingot checkout 0.3.3
+git -C libs/ingot checkout 8cd2d9447d81139efd387be46378abefc6363fd0
 odin build src -collection:ingot=libs/ingot
 ```
 
-Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION).
+Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION). The exact
+revision above is the proposed `v0.4.0` pin; use that tag only after publication.
+On Windows, add `-linker:msvc` (or `-linker:lld`) to graphics-linked build/run
+commands, including the examples below:
+
+```sh
+odin build src -collection:ingot=libs/ingot -linker:msvc
+```
+
+This is a source pin, not binary distribution or platform-validation approval.
 
 The recommended
 entry point for UI applications is `ingot:fit`:

@@ -39,7 +39,8 @@ named upper bounds, and assertions plus inspectable derived output as oracles.
   `../tools/odin-93f71c2`), or point `INGOT_ODIN_ROOT` at it. The gate scripts
   source `scripts/odin-toolchain.sh`, which puts that install ahead of any other
   `odin` on `PATH` (Homebrew Odin is a different revision). Put `../ols` on
-  `PATH` for `odinfmt`.
+  `PATH` for separately installed OLS `odinfmt`; CI pins each platform's
+  formatter archive with `OLS_ASSET`, rather than bundling it with Odin.
 - **Odin pin policy**: the current pin is `dev-2026-10:93f71c2`, built from
   upstream commit `93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d` (PR #7842).
   This explicitly pinned post-release fix resolves October's macOS Objective-C

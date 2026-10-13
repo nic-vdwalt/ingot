@@ -172,8 +172,8 @@ key with `fit.key_pressed_consume` before the owning modal or popup ends.
 
 `Layout_State`, `Grid_State`, `Flow_State`, `Fit_Column_State`, and
 `Vertical_Cursor_State` are zero-value ready, must be balanced, and may be reused
-after their `End`. The longer `Surface_Layout_*`, `Surface_Grid_*`,
-`Surface_Flow_*`, and `Surface_Fit_Column_*` spellings remain source-compatible.
+after their matching end call. The longer `surface_layout_*`, `surface_grid_*`,
+`surface_flow_*`, and `surface_fit_column_*` spellings remain source-compatible.
 Neither vocabulary implicitly scales geometry.
 
 For caller-owned scheduling, use the `fit.App` lifecycle explicitly:
@@ -208,9 +208,10 @@ storage for reuse. That storage remains caller-owned and must outlive its use.
 `Session` integrates into an externally owned graphics loop and does not close
 that graphics context. `session_destroy` clears the wrapper, including Builder
 storage bindings; rebind custom storage after reinitialization. Its draw callback
-and user data are borrowed for `session_draw` only. A successful draw call may
-skip the callback when no graphics frame is available; success does not promise
-that a frame was presented. Callback bindings are cleared on that path too.
+and user data are borrowed for `session_draw` only. When no graphics frame is
+available, the call returns `false` and skips the callback; `app_tick` does not
+stop for that skipped frame. Success does not promise presentation. Callback
+bindings are cleared on the skipped-frame path too.
 
 Parents and Surfaces must not escape their build/render callbacks. Balance begun
 layout and region scopes before returning; never destroy an App or Session with
@@ -236,7 +237,7 @@ fields do not automatically become public snapshot fields.
 layout, and `ui_gfx` owns graphics integration. New overloads adapt arguments to
 one canonical implementation; they must not duplicate widget behavior.
 
-Boundary types fall into two categories, and the category decides whether a
+Boundary types use the following categories to decide whether a
 `fit` type may alias its `ui` counterpart:
 
 - **Vocabulary** may alias. A `fit` type is vocabulary when it is closed value
@@ -247,21 +248,20 @@ Boundary types fall into two categories, and the category decides whether a
   vocabulary. Each alias is listed in `UI_LAYERS_FIT_PUBLIC_ALIAS_ALLOW` in
   `tools/odingate/ui_api_layers.odin`; adding one is a reviewed allowlist edit.
   Aliasing buys literal compatibility with `ui` and removes a converter.
-- **Engine, host, and renderer** types must be distinct projections or mapped
-  enums, never aliases. These are `ui.Prepared_*` (layout engine), `ui.Ui_*`
-  (frame internals), `ui_gfx.*` (managed host), `gfx.*` (renderer), and any
-  `fit` type that embeds one of them. `State`, `Frame_Pacing`, `Error`,
-  `Graphics_Error`, `Session_Config`, `Frame_Diagnostics`, `Renderer_Peaks`,
-  `Size_Options`, `Transition`, `Container_*`, `Flow_Options`, `Grid_Options`,
-  `Attachment_Options`, and every `*_Options` that carries a `Size_Options` are
-  in this category. `UI_LAYERS_FIT_INTERNAL_NAMES` in
-  `tools/odingate/ui_api_layers.odin` rejects a public alias to any of those
-  namespaces regardless of the allowlist. Projecting buys insulation: the engine can add, rename, or remove
-  backend fields and members without changing what a `fit` consumer compiles
-  against, and `fit` may expose a selected field set rather than every backend
-  field.
+- **Reviewed layout/widget options** also alias UI definitions in the current
+  source, including `Transition`, `Size_Options`, `Container_*`, `Flow_Options`,
+  `Grid_Options`, `Attachment_Options`, `Label_Options`, `Button_Options`,
+  `Control_Options`, `Leaf_Options`, and `Custom_Options`. These include approved
+  `ui.Prepared_*` aliases; their namespace alone does not prohibit an alias.
+- **Host/lifecycle and renderer boundaries** retain separate wrappers,
+  projections or mapped enums where declared in `fit/types.odin`, including
+  `State`, `Frame_Pacing`, `Error`, `Graphics_Error` and `Session_Config`.
+  The AST gate reviews public aliases; it does not imply every Fit type is
+  assignment-compatible with an internal type. Use the receiving declaration
+  when crossing layers. Projections can expose selected fields without
+  mirroring every backend field.
 
-Within the second category:
+For projected structs and mapped enums:
 
 - Distinct enums map by meaning, not declaration order. Where the backing type
   and ordinals are identical the conversion casts through the backing integer

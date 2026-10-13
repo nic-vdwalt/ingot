@@ -5,6 +5,10 @@ authorize native binaries, installers, web bundles, or production-readiness
 claims; those remain governed by `oss-release-checklist.md` and
 `production-readiness.md`.
 
+The [v0.4.0 candidate ledger](releases/v0.4.0.md) tracks source-release
+preparation separately. The dated confirmations below are historical publication
+evidence, not fresh validation of that candidate or its committed archives.
+
 ## Completed technical evidence
 
 - [x] Repository code is offered under Apache License 2.0.

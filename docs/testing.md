@@ -27,8 +27,9 @@ contract differs from the baseline.
 
 ## Toolchain
 
-`ODIN_VERSION` is the canonical compiler pin. Install that exact Odin revision,
-including its bundled `odinfmt`, then place both executables on `PATH`. The
+`ODIN_VERSION` is the canonical compiler pin. Install that exact Odin revision
+and install `odinfmt` separately from OLS, as the CI workflows do using their
+platform-specific `OLS_ASSET` pins. Place both executables on `PATH`. The
 repository `.odinfmt.json` pins formatting behavior. `scripts/test.sh` requires
 Python 3 for process supervision, and `scripts/check-web.sh` additionally
 requires Node with `node --test`. `bash scripts/check.sh` checks `odin version`

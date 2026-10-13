@@ -17,8 +17,8 @@ needed after the frame into a bounded caller-owned structure.
 A `Cancel` means the host took the sequence away. Remove that pointer without
 activating it. Never reinterpret cancellation as `Up`.
 
-The queue retains its first 64 events. If `Pointer_Events_Overflowed`,
-`Surface_Pointer_Events_Overflowed`, `ui.frame_pointer_events_overflowed`, or
+The queue retains its first 64 events. If `pointer_events_overflowed`,
+`surface_pointer_events_overflowed`, `ui.frame_pointer_events_overflowed`, or
 `gfx.context_pointer_events_overflowed` is true, discard all caller-owned active
 pointer state. The stream's causal lifecycle is incomplete, so an application
 must not infer a missing `Up` or continue a gesture.

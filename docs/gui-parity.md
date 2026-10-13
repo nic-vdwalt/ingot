@@ -24,14 +24,14 @@ The capability gate checks public symbols and evidence paths so this matrix cann
 | Button | builder | Builder/direct tests and gallery |
 | Checkbox | builder | Builder/direct tests and gallery |
 | Radio | builder | Builder/direct tests and gallery |
-| Toggle | absent | Add a first-party control rather than restyling checkbox at call sites |
+| Toggle | builder | First-party Builder control, direct tests and gallery |
 | Slider | builder | Builder/direct tests and gallery |
 | Progress | builder | Builder/direct tests and gallery |
-| Select/dropdown | surface | Complete UI control and Fit Surface/Region facade; Builder promotion pending |
-| Combobox | surface | Complete UI control and Fit Surface/Region facade; Builder promotion pending |
+| Select/dropdown | builder | Builder control and Fit Surface/Region facade |
+| Combobox | builder | Builder control and Fit Surface/Region facade |
 | Single-line text input | builder | Editing, IME, semantics, and gallery tests |
 | Multi-line text input | builder | Editing, wrapping, semantics, and gallery tests |
-| Tabs | surface | Complete UI tab bar and Fit Region facade; Builder promotion and focused tests pending |
+| Tabs | builder | Builder tabs and UI tab bar with Fit Region facade |
 | Menus/context menus | surface | Context menu exists; menu bar and nested menus are absent |
 | Modal/dialog | surface | Modal, popup, and confirmation APIs exist; ordinary Builder conveniences pending |
 | Image | absent | Renderer-independent paint has no image command |
@@ -69,7 +69,7 @@ The high-level API is evaluated with these bounded examples:
 
 | Fixture | Required behavior |
 |---|---|
-| Counter | Direct Action remains the shortest primary path |
+| Counter | Prefer owned button-result polling; Actions remain advanced compatibility |
 | Form | Caller-owned values, validation, submit, and focus |
 | Typed commands | Optional fixed-capacity typed queue without a reducer/runtime |
 | Delayed completion | Explicit owner appends completion and requests redraw |
@@ -98,7 +98,8 @@ reinterpret that scope.
 
 ## Completion rules
 
-A row moves to `supported` only when all applicable evidence exists:
+A row uses `builder`, `surface`, or `ui` for its implemented API layer.
+Runtime validation is separate and requires all applicable evidence below:
 
 1. Caller-owned persistent state and bounded current-frame work.
 2. Public `fit` and/or `ui` API with explicit ownership and saturation behavior.

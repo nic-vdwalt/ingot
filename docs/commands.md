@@ -89,12 +89,12 @@ Draw :: proc(builder: ^fit.Builder, _: rawptr) {
 }
 ```
 
-The queue copies values into fixed storage. `Begin` promotes activations from
+The queue copies values into fixed storage. `typed_commands_begin` promotes activations from
 the preceding rendered declaration and captures the drain limit. Entries
 appended while draining wait for the next explicit drain, so dispatch is never
-recursive. `Button_Command` reports `.Full` if no activation slot remains;
-`Typed_Commands_Append` reports `.Full` when ready storage is saturated. Drop
-counts remain inspectable through `Typed_Commands_Dropped`.
+recursive. `button_command` reports `.Full` if no activation slot remains;
+`typed_commands_append` reports `.Full` when ready storage is saturated. Drop
+counts remain inspectable through `typed_commands_dropped`.
 
 On activation-slot `.Full`, `button_command` declares no widget: layout and focus
 order exclude that button. Handle its result explicitly; previously accepted

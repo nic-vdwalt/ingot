@@ -141,7 +141,7 @@ The Pixel theme goes further through two more theme fields.
 region. The Pixel theme sets it to `.Mono`, so transcripts and code stay
 legible while the chrome stays pixel.
 - An application opens a region with `frame_reading_begin` and closes it with
-  `frame_reading_end` (`fit.surface_reading_begin` / `_End`). Regions nest up
+  `frame_reading_end` (`fit.surface_reading_begin` / `fit.surface_reading_end`). Regions nest up
   to `READING_DEPTH_MAX`, and `ui_frame_finalize` asserts they are balanced.
 - `frame_font_face` returns the reading face inside a region and the chrome
   face outside. Pixel quantisation applies only while the pixel face is the
@@ -351,7 +351,7 @@ Direct `ui.button` calls return interaction while explicit UI code runs. At the
 supported Fit layer, current-build Parent values describe hierarchy without
 retaining widget state, and prepared Button actions run during render in the
 activating frame. Surface and Region controls return interaction directly inside
-that render callback; `Button_Delayed`/`Signal` intentionally bridges activation
+that render callback; `button_delayed`/`Signal` intentionally bridges activation
 to a later Builder declaration. None of the render-time paths can revise an
 already constructed prepared description.
 

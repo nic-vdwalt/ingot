@@ -12,7 +12,9 @@ from upstream commit `93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d`). Install it at
 `../tools/odin-93f71c2`) next to this checkout, or point `INGOT_ODIN_ROOT` at
 the install; `scripts/odin-toolchain.sh` puts that compiler ahead of any other
 `odin` on `PATH`, so a Homebrew or distribution Odin can coexist. Put the
-matching `odinfmt` from an ols release on `PATH` (for example `../ols`).
+separately installed OLS `odinfmt` on `PATH` (for example `../ols`); use the
+platform's `OLS_ASSET` pin in `.github/workflows` to match CI. It is not bundled
+with the pinned Odin source build.
 `python3 scripts/check-toolchain.py` confirms the pin. Clone the repository
 with its full contents, then run:
 

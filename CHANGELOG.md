@@ -7,17 +7,16 @@ Ingot uses pre-`1.0` versioning: source tags may contain documented public API
 changes, including breaking changes. Pin an exact tag and read the changelog.
 See the [versioning policy](docs/compatibility.md#versioning-policy).
 
-## Unreleased
+## v0.4.0 — source release candidate (not yet published)
 
-- Add bounded builder-owned button results with explicit availability, one-build
-  expiry, scoped identity, external storage, and overflow diagnostics.
-- Add builder-aware typed-command collection without deferred queue pointers.
-  Legacy collection and raw outputs remain supported; conflicting command-button
-  delivery options are rejected. Payload copies and other model storage remain
-  borrowed unless explicitly owned by the application.
+Proposed immutable source: `8cd2d9447d81139efd387be46378abefc6363fd0`.
+These release notes are post-pin documentation, not part of that snapshot.
+See the [release ledger](docs/releases/v0.4.0.md) for known limitations and
+pending evidence. The publication date is not yet assigned.
 
-This release renames the whole public `ingot:fit` procedure surface. Every
-consumer of `ingot:fit` must update call sites; see **Removed** below.
+Every `ingot:fit` consumer must migrate procedure calls. Other breaking changes
+include typed errors, package moves, consumer gates and mixed-layer assignments;
+see the [complete migration guide](docs/migration-0.4.0.md).
 
 ### Removed
 
@@ -51,13 +50,13 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
   and the `0.3.0` `ingot:gfx` rename. The mapping is mechanical: lowercase the
   name (`fit.Run` → `fit.run`, `fit.Virtual_List_Begin` →
   `fit.virtual_list_begin`, `fit.Fixed` → `fit.fixed`). Type names, constants,
-  and argument lists are unchanged, so a case-preserving search for `fit\.[A-Z]`
-  finds every call site. The usual one-release compatibility window is skipped
+  and argument lists are unchanged. A search for `fit\.[A-Z]` finds migration
+  candidates, including valid types and constants; do not lowercase all matches. The usual one-release compatibility window is skipped
   for the same reason as the `0.3.0` `ingot:gfx` rename: every in-repository
   consumer (examples, benchmarks, `artifacts/readme-example`) was migrated in
   the same commit, and forwarders would have kept a second PascalCase
   vocabulary alive for the very names the rule removes.
-  `scripts/check_ui_api_layers.py` now inspects snake_case public declarations
+  `odingate ui-api-layers` now inspects snake_case public declarations
   in `fit` for leaked `ui` types as well.
 - **Breaking:** `ui.Fit_Action.userdata` is renamed `user_data`, matching the
   `fit.Action` field it now aliases. Only code that names the field directly
@@ -66,6 +65,14 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
 
 ### Added
 
+- Bounded builder-owned button results with explicit availability, one-build
+  expiry, scoped identity, external storage, and overflow diagnostics.
+- Builder-aware typed-command collection without deferred queue pointers.
+  Legacy collection and raw outputs remain supported; conflicting command-button
+  delivery options are rejected. Payload copies and other model storage remain
+  borrowed unless explicitly owned by the application.
+- Bounded `Label_Text` helpers and Fit aliases for per-frame labels without
+  `core:fmt` formatting in the migrated UI and example paths.
 - `fit.button_output` explicitly names advanced deferred button outputs while
   preserving existing overloads. Added delivery contract tests, a persistent-owner
   tagged-action component recipe, and guidance for borrowed lifetimes, canonical
@@ -143,8 +150,8 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
   entries, shared with the IME and SDL window tables) and
   `platform_dragdrop_tick` takes the owning context. Geometry overflow
   reporting moved from a package global into `Renderer.overflow_reports`;
-  `context_renderer_overflow_reports` exposes it. `scripts/check_gfx_context.py`
-  gains a package-global inventory (`ALLOWED_PACKAGE_GLOBALS`) so any new
+  `context_renderer_overflow_reports` exposes it. `odingate gfx-context`
+  checks a package-global inventory so any new
   `gfx` package-scope variable fails the gate until it is reviewed, and
   `--measure` reports it under `package_globals`.
 - **Breaking:** `prefs.data_dir`, `prefs.path`, `prefs.read`, and
@@ -163,31 +170,15 @@ consumer of `ingot:fit` must update call sites; see **Removed** below.
   procedure names to raylib; the source comparison recorded in
   `THIRD_PARTY_NOTICES.md` found no translated implementation, closing that
   release-checklist item.
-- `ingot:fit` boundary types now follow a two-category rule, recorded in
-  [API layers](docs/api-layers.md#boundary-maintenance-contract). Shared
-  value vocabulary aliases its `ingot:ui` definition (`fit.Rect ::
-  ui.Rect_I32`, `fit.Color :: ui.Color`, `fit.Track :: ui.Track`,
-  `fit.Action :: ui.Fit_Action`, enums such as `Space`, `Ink`, `Theme_Role`,
-  and `Modal_Close_Reason`); each alias is listed in
-  `scripts/check_ui_api_layers.py`, and adding one is a reviewed allowlist
-  edit. Engine, host, and renderer types stay distinct `fit` projections or
-  mapped enums: `State`, `Frame_Pacing`, `Error`, `Graphics_Error`,
-  `Session_Config`, `Frame_Diagnostics`, `Renderer_Peaks`, `Transition`,
-  `Size_Options`, `Container_Surface`, `Container_Effects`,
-  `Container_Options`, `Flow_Options`, `Grid_Options`, `Attachment_Options`,
-  `Label_Options`, `Button_Options`, `Control_Options`, `Leaf_Options`, and
-  `Custom_Options`. The script rejects a public `fit` alias of `ui.Prepared_*`,
-  `ui.Ui_*`, `ui_gfx.*`, or `gfx.*` regardless of the allowlist, so the engine
-  can change those types without changing what a `fit` consumer compiles
-  against. Consumer impact: field and member names are unchanged, so existing
-  `fit` literals compile as before; assigning a `fit` option or lifecycle
-  value directly to a `ui`/`ui_gfx` parameter no longer compiles, which only
-  affects code that mixes the two packages. Enum boundaries (`Key`,
-  `Mouse_Button`, `Cursor`, `Window_Flags`, `Semantic_Role`, `State`,
-  `Frame_Pacing`, `Error`, `Graphics_Error`) convert through their backing
-  integer, pinned by `#assert` beside each declaration and by
-  `fit/boundary_contract_test.odin`, which also checks every field of each
-  projected struct.
+- Fit boundary aliases are reviewed by `odingate ui-api-layers`. Shared value
+  vocabulary and prepared layout/widget options alias their UI definitions at
+  this candidate, including `Size_Options`, `Container_Options`, `Button_Options`
+  and `Control_Options`. Host/lifecycle wrappers and mapped enums remain separate
+  where declared that way. Earlier Unreleased notes incorrectly described all
+  prepared options as distinct projections and claimed mixed-layer assignments
+  had been removed. Use the receiving layer's declared type rather than assuming
+  either blanket interchangeability or blanket incompatibility; see
+  [API layers](docs/api-layers.md#boundary-maintenance-contract).
 - Pin Odin to `dev-2026-10:93f71c2`, upstream commit
   `93f71c2751f0f8cb1d2a7a892ae4505f9af6d13d` (PR #7842), fixing the October
   release's macOS Objective-C compiler assertion (#7793). CI rebuilds this

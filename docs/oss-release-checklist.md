@@ -15,7 +15,19 @@ native binary, installer, or web bundle.
 - [ ] Review every non-owner contribution and retain its license or obtain an
   Apache-2.0-compatible grant.
 
+The [v0.4.0 source candidate](releases/v0.4.0.md) does not publish binaries or
+web bundles. These additional obligations remain outstanding; the initial
+ownership confirmations are recorded in [source publication](source-publication-checklist.md)
+and must be reviewed for the actual distribution's changes.
+
 ## Bundled artifacts
+
+- [ ] Replace the stale committed Windows libvterm archive with a verified build
+  of all current vendored patches, update provenance and notices using
+  `scripts/record-artifact-checksum.py`, and validate the replacement itself.
+  Windows CI currently tests a rebuilt file, not the candidate's committed file.
+  This is separate follow-up work; including it in v0.4.0 requires explicit
+  approval to change the immutable candidate revision.
 
 - [x] Record the exact tagged source and build inputs for every committed
   AccessKit and libvterm archive.
