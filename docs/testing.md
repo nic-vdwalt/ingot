@@ -78,8 +78,11 @@ that runs the same checker and code generator without invoking a linker.
 GitHub Actions also provisions the pinned toolchain on native Windows x64 and
 macOS arm64 runners. Windows runs `scripts/test.ps1` and `scripts/check.ps1`;
 macOS runs `scripts/test.sh -define:ODIN_TEST_THREADS=1` and `scripts/check.sh`.
-Windows keeps ordinary gfx tests parallel. Tests that mutate package-global gfx
-state use the shared test guard, while intentional assertion tests listed in
+Windows defaults ordinary gfx tests to one runner thread, matching the macOS
+native gate, to mitigate an intermittent four-thread timeout (397 of 404 tests
+completed in run 38363477486). The exact blocked call is not yet confirmed.
+Tests that mutate package-global gfx state retain the shared test guard, while
+intentional assertion tests listed in
 `scripts/gate-manifest.json` run one per supervised process. Its
 `windows_expected_assert_suites` entries own each package, isolation define,
 and test list for gfx, ui, and fit. `check_gfx_expected_asserts.py` checks every
