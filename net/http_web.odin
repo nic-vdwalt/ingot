@@ -215,6 +215,25 @@ when !INGOT_NET_SIM {
 		)
 	}
 
+	// fetcher_cancel removes not-yet-dispatched requests whose tag is in
+	// `tags`. Requests already handed to the browser still deliver a result.
+	// Returns the cancelled tags (context.temp_allocator).
+	fetcher_cancel :: proc(f: ^Fetcher, tags: []u64) -> []u64 {
+		assert(f != nil)
+		if len(tags) == 0 do return nil
+		out := make([dynamic]u64, 0, len(tags), context.temp_allocator)
+		for index := 0; index < len(f.pending); {
+			if !tag_in(tags, f.pending[index].tag) {
+				index += 1
+				continue
+			}
+			append(&out, f.pending[index].tag)
+			pending_destroy(&f.pending[index])
+			ordered_remove(&f.pending, index)
+		}
+		return out[:]
+	}
+
 	@(private = "file")
 	request_clone :: proc(request: Http_Request) -> Http_Request {
 		assert(request.path != "")

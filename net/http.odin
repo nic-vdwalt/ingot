@@ -155,55 +155,190 @@ when !INGOT_NET_SIM {
 		ok: bool,
 	) {
 		if !valid_request(request) do return {}, false
-		ep: cnet.Endpoint
-		when HTTP_STRESS {
-			ep = cnet.Endpoint {
-				port = port,
-			}
-		} else {
-			if addr, addr_ok := cnet.parse_ip4_address(host); addr_ok {
-				ep = cnet.Endpoint {
-					address = addr,
-					port    = port,
-				}
-			} else {
-				resolved, err := cnet.resolve_ip4(host)
-				if err != nil do return {}, false
-				ep = resolved
-				ep.port = port
-			}
-		}
+		if request.maximum_body > u64(max(int) - MAXIMUM_HEADER_BYTES) do return {}, false
+		if f != nil do return fetch_request(f, idx, host, port, request, allocator)
+		ep, resolve_ok := http_resolve(host, port)
+		if !resolve_ok do return {}, false
 		sock, dial_ok := http_net_dial(ep)
 		if !dial_ok do return {}, false
-		if f != nil {
-			sync.mutex_lock(&f.sock_mutex)
-			if !sync.atomic_load(&f.running) {
-				sync.mutex_unlock(&f.sock_mutex)
-				http_net_close(sock)
-				return {}, false
-			}
-			f.active_socks[idx] = sock
-			f.active_open[idx] = true
-			sync.mutex_unlock(&f.sock_mutex)
-		}
-		defer if f != nil {
-			sync.mutex_lock(&f.sock_mutex)
-			if f.active_open[idx] {
-				http_net_close(f.active_socks[idx])
-				f.active_open[idx] = false
-			}
-			sync.mutex_unlock(&f.sock_mutex)
-		} else {
-			http_net_close(sock)
-		}
-
-		wire := build_request(host, port, request)
+		defer http_net_close(sock)
+		wire := build_request(host, port, request, false)
 		if len(wire) == 0 do return {}, false
 		if !send_all(sock, wire) do return {}, false
 		http_net_set_recv_timeout(sock, resolve_receive_timeout(request.receive_timeout))
-		if request.maximum_body > u64(max(int) - MAXIMUM_HEADER_BYTES) do return {}, false
+		maximum := request_maximum_body(request)
+		read, read_ok := http_read_response(sock, maximum, false)
+		if !read_ok do return {}, false
+		return parse_http_response(read.data, maximum, allocator)
+	}
+
+	// fetch_request runs one request on worker `idx`'s kept-alive connection,
+	// dialling when there is none. A kept-alive socket the server closed while
+	// idle (uvicorn drops them after 5 s) fails before any response byte
+	// arrives; an idempotent request then redials and retries once.
+	// Non-idempotent requests always use a fresh connection, so they are never
+	// replayed against a server that may already have acted on them.
+	@(private = "file")
+	fetch_request :: proc(
+		f: ^Fetcher,
+		idx: int,
+		host: string,
+		port: int,
+		request: Http_Request,
+		allocator: mem.Allocator,
+	) -> (
+		Http_Response,
+		bool,
+	) {
+		assert(f != nil, "fetch_request: nil fetcher")
+		assert(idx >= 0 && idx < FETCH_WORKERS, "fetch_request: worker index out of range")
+		idempotent := request.method != .Post && request.method != .Patch
+		maximum := request_maximum_body(request)
+		wire := build_request(host, port, request, true)
+		if len(wire) == 0 do return {}, false
+		for attempt in 0 ..< 2 {
+			sock, reused, sock_ok := fetch_socket(f, idx, host, port, !idempotent || attempt > 0)
+			if !sock_ok do return {}, false
+			sent := send_all(sock, wire)
+			read: Http_Read
+			read_ok := false
+			if sent {
+				http_net_set_recv_timeout(sock, resolve_receive_timeout(request.receive_timeout))
+				read, read_ok = http_read_response(sock, maximum, true)
+			}
+			if !read_ok || !read.reusable do fetch_socket_close(f, idx)
+			if !read_ok {
+				if reused && idempotent && read.received == 0 do continue
+				return {}, false
+			}
+			response, parsed := parse_http_response(read.data, maximum, allocator)
+			// An unparseable message leaves the stream position unknown.
+			if !parsed do fetch_socket_close(f, idx)
+			return response, parsed
+		}
+		return {}, false
+	}
+
+	// fetch_socket returns worker `idx`'s connection, reusing the kept-alive one
+	// unless `fresh`. The socket lives in active_socks/active_open so
+	// fetcher_stop can close it to unblock a recv and on shutdown. The resolved
+	// endpoint is cached; a failed dial forgets it so the next dial resolves
+	// again (the host may have moved).
+	@(private = "file")
+	fetch_socket :: proc(
+		f: ^Fetcher,
+		idx: int,
+		host: string,
+		port: int,
+		fresh: bool,
+	) -> (
+		sock: cnet.TCP_Socket,
+		reused: bool,
+		ok: bool,
+	) {
+		assert(f != nil, "fetch_socket: nil fetcher")
+		assert(idx >= 0 && idx < FETCH_WORKERS, "fetch_socket: worker index out of range")
+		sync.mutex_lock(&f.sock_mutex)
+		if !sync.atomic_load(&f.running) {
+			sync.mutex_unlock(&f.sock_mutex)
+			return {}, false, false
+		}
+		if f.active_open[idx] {
+			if !fresh {
+				sock = f.active_socks[idx]
+				sync.mutex_unlock(&f.sock_mutex)
+				return sock, true, true
+			}
+			http_net_close(f.active_socks[idx])
+			f.active_open[idx] = false
+		}
+		ep, have_ep := f.endpoint, f.endpoint_ok
+		sync.mutex_unlock(&f.sock_mutex)
+		// Resolve outside the lock: a slow DNS lookup must not block
+		// fetcher_stop or other workers' socket bookkeeping.
+		if !have_ep {
+			resolved, resolve_ok := http_resolve(host, port)
+			if !resolve_ok do return {}, false, false
+			ep = resolved
+		}
+		dialed, dial_ok := http_net_dial(ep)
+		sync.mutex_lock(&f.sock_mutex)
+		defer sync.mutex_unlock(&f.sock_mutex)
+		if !dial_ok {
+			f.endpoint_ok = false
+			return {}, false, false
+		}
+		if !sync.atomic_load(&f.running) {
+			http_net_close(dialed)
+			return {}, false, false
+		}
+		f.endpoint = ep
+		f.endpoint_ok = true
+		f.active_socks[idx] = dialed
+		f.active_open[idx] = true
+		return dialed, false, true
+	}
+
+	// fetch_socket_close closes worker `idx`'s connection unless fetcher_stop
+	// already did.
+	@(private = "file")
+	fetch_socket_close :: proc(f: ^Fetcher, idx: int) {
+		assert(f != nil, "fetch_socket_close: nil fetcher")
+		assert(idx >= 0 && idx < FETCH_WORKERS, "fetch_socket_close: worker index out of range")
+		sync.mutex_lock(&f.sock_mutex)
+		defer sync.mutex_unlock(&f.sock_mutex)
+		if f.active_open[idx] {
+			http_net_close(f.active_socks[idx])
+			f.active_open[idx] = false
+		}
+	}
+
+	@(private = "file")
+	http_resolve :: proc(host: string, port: int) -> (ep: cnet.Endpoint, ok: bool) {
+		when HTTP_STRESS {
+			return cnet.Endpoint{port = port}, true
+		} else {
+			if addr, addr_ok := cnet.parse_ip4_address(host); addr_ok {
+				return cnet.Endpoint{address = addr, port = port}, true
+			}
+			resolved, err := cnet.resolve_ip4(host)
+			if err != nil do return {}, false
+			resolved.port = port
+			return resolved, true
+		}
+	}
+
+	// tigerstyle: pure
+	@(private = "file")
+	request_maximum_body :: proc(request: Http_Request) -> int {
+		assert(request.maximum_body <= u64(max(int) - MAXIMUM_HEADER_BYTES))
 		maximum := int(request.maximum_body)
 		if maximum <= 0 do maximum = DEFAULT_MAXIMUM_BODY
+		return maximum
+	}
+
+	// Http_Read is one response's raw bytes off a socket.
+	@(private = "file")
+	Http_Read :: struct {
+		data:     []u8, // context.temp_allocator; exactly one message when framed
+		received: int, // bytes received, including on failure
+		reusable: bool, // framed and the server did not ask to close
+	}
+
+	// http_read_response reads one response. With `framed`, it stops at the
+	// end of the message as given by Content-Length, chunked encoding or a
+	// bodiless status, so a kept-alive socket is not read to its close. A
+	// response with no framing falls back to reading until the server closes,
+	// and is then not reusable.
+	@(private = "file")
+	http_read_response :: proc(
+		sock: cnet.TCP_Socket,
+		maximum: int,
+		framed: bool,
+	) -> (
+		read: Http_Read,
+		ok: bool,
+	) {
 		buf: [dynamic]u8
 		buf.allocator = context.temp_allocator
 		chunk: [16384]u8
@@ -214,13 +349,106 @@ when !INGOT_NET_SIM {
 			if n > 0 {
 				ensure(n <= len(chunk))
 				append(&buf, ..chunk[:n])
-				if len(buf) > maximum + MAXIMUM_HEADER_BYTES do return {}, false
+				if len(buf) > maximum + MAXIMUM_HEADER_BYTES {
+					return Http_Read{received = len(buf)}, false
+				}
+				if framed {
+					end, close_after, complete := http_message_end(buf[:])
+					if complete {
+						assert(end <= len(buf))
+						return Http_Read {
+								data = buf[:end],
+								received = len(buf),
+								reusable = !close_after && end == len(buf),
+							},
+							true
+					}
+				}
 			}
 			if !recv_ok || n == 0 do break
 		}
-		if recv_calls >= HTTP_RECV_CALLS_MAX do return {}, false
-		if len(buf) == 0 do return {}, false
-		return parse_http_response(buf[:], maximum, allocator)
+		if recv_calls >= HTTP_RECV_CALLS_MAX || len(buf) == 0 {
+			return Http_Read{received = len(buf)}, false
+		}
+		return Http_Read{data = buf[:], received = len(buf)}, true
+	}
+
+	// http_message_end finds where the response in `data` ends. `complete` is
+	// false while more bytes are needed, and also for an unframed response
+	// (read to close). `close_after` reports the server will not reuse the
+	// connection (Connection: close, or an HTTP/1.0 reply).
+	@(private = "file")
+	http_message_end :: proc(data: []u8) -> (end: int, close_after: bool, complete: bool) {
+		limit := min(len(data), MAXIMUM_HEADER_BYTES + 4)
+		header_end := strings.index(string(data[:limit]), "\r\n\r\n")
+		if header_end < 0 do return 0, false, false
+		body_start := header_end + 4
+		lines := strings.split(string(data[:header_end]), "\r\n", context.temp_allocator)
+		if len(lines) == 0 do return 0, false, false
+		parts := strings.split(lines[0], " ", context.temp_allocator)
+		if len(parts) < 2 do return 0, false, false
+		status, status_ok := strconv.parse_int(parts[1])
+		if !status_ok do return 0, false, false
+		close_after = !strings.has_prefix(lines[0], "HTTP/1.1")
+		content_length := -1
+		chunked := false
+		for line in lines[1:] {
+			colon := strings.index(line, ":")
+			if colon <= 0 do continue
+			name := strings.to_lower(strings.trim_space(line[:colon]), context.temp_allocator)
+			value := strings.to_lower(strings.trim_space(line[colon + 1:]), context.temp_allocator)
+			switch name {
+			case "content-length":
+				if parsed, parsed_ok := strconv.parse_int(value); parsed_ok && parsed >= 0 {
+					content_length = parsed
+				}
+			case "transfer-encoding":
+				chunked = strings.contains(value, "chunked")
+			case "connection":
+				if strings.contains(value, "close") do close_after = true
+			}
+		}
+		if status == 204 || status == 304 do return body_start, close_after, true
+		if chunked {
+			chunk_end, chunk_done := http_chunked_end(data, body_start)
+			return chunk_end, close_after, chunk_done
+		}
+		if content_length < 0 do return 0, false, false
+		if len(data) - body_start < content_length do return 0, close_after, false
+		return body_start + content_length, close_after, true
+	}
+
+	// http_chunked_end walks chunk headers from `start` without copying and
+	// returns the offset just past the terminating chunk and trailers. A
+	// malformed stream reports incomplete, so the read falls back to waiting
+	// for close and parse_http_response rejects it.
+	@(private = "file")
+	http_chunked_end :: proc(data: []u8, start: int) -> (end: int, complete: bool) {
+		assert(start >= 0 && start <= len(data))
+		cursor := start
+		for _ in 0 ..< len(data) / 3 + 1 {
+			rest := string(data[cursor:])
+			line_end := strings.index(rest, "\r\n")
+			if line_end < 0 do return 0, false
+			size_text := rest[:line_end]
+			if extension := strings.index(size_text, ";"); extension >= 0 do size_text = size_text[:extension]
+			size, parsed := strconv.parse_u64(strings.trim_space(size_text), 16)
+			if !parsed do return 0, false
+			cursor += line_end + 2
+			if size == 0 {
+				for _ in 0 ..< len(data) / 2 + 1 {
+					trailer := string(data[cursor:])
+					trailer_end := strings.index(trailer, "\r\n")
+					if trailer_end < 0 do return 0, false
+					cursor += trailer_end + 2
+					if trailer_end == 0 do return cursor, true
+				}
+				return 0, false
+			}
+			if u64(len(data) - cursor) < size + 2 do return 0, false
+			cursor += int(size) + 2
+		}
+		return 0, false
 	}
 
 	@(private = "file")
@@ -264,17 +492,23 @@ when !INGOT_NET_SIM {
 	}
 
 	@(private = "file")
-	build_request :: proc(host: string, port: int, request: Http_Request) -> []u8 {
+	build_request :: proc(
+		host: string,
+		port: int,
+		request: Http_Request,
+		keep_alive: bool,
+	) -> []u8 {
 		buf: [dynamic]u8
 		buf.allocator = context.temp_allocator
 		append(
 			&buf,
 			..transmute([]u8)fmt.tprintf(
-				"%s %s HTTP/1.1\r\nHost: %s:%d\r\nConnection: close\r\nUser-Agent: ingot-net/0.2\r\n",
+				"%s %s HTTP/1.1\r\nHost: %s:%d\r\nConnection: %s\r\nUser-Agent: ingot-net/0.2\r\n",
 				method_name(request.method),
 				request.path,
 				host,
 				port,
+				"keep-alive" if keep_alive else "close",
 			),
 		)
 		for header in request.headers {
@@ -461,8 +695,14 @@ when !INGOT_NET_SIM {
 		// its idle-floor tick (gfx.request_redraw fits). Set before fetcher_start.
 		wake:            proc "contextless" (),
 		sock_mutex:      sync.Mutex,
+		// Per-worker connection, kept alive across jobs (see fetch_socket).
+		// fetcher_stop closes these both to unblock an in-flight recv and to
+		// release idle kept-alive sockets.
 		active_socks:    [FETCH_WORKERS]cnet.TCP_Socket,
 		active_open:     [FETCH_WORKERS]bool,
+		// Resolved host, guarded by sock_mutex; cleared when a dial fails.
+		endpoint:        cnet.Endpoint,
+		endpoint_ok:     bool,
 		worker_ctx:      [FETCH_WORKERS]Fetch_Worker_Ctx,
 		// Worker threads have their own context, so every cross-thread job/result
 		// allocation explicitly uses the allocator captured by fetcher_start.
@@ -606,6 +846,31 @@ when !INGOT_NET_SIM {
 			Fetch_Options{cache_path = cache_path},
 		)
 	}
+	// fetcher_cancel removes queued, not-yet-started jobs whose tag is in
+	// `tags` and releases their result slots. Jobs already picked up by a
+	// worker are unaffected and still deliver a result. Returns the tags that
+	// were cancelled (context.temp_allocator).
+	fetcher_cancel :: proc(f: ^Fetcher, tags: []u64) -> []u64 {
+		assert(f != nil)
+		if len(tags) == 0 do return nil
+		out := make([dynamic]u64, 0, len(tags), context.temp_allocator)
+		sync.mutex_lock(&f.mutex); defer sync.mutex_unlock(&f.mutex)
+		assert(f.result_slots >= len(f.jobs) + len(f.results))
+		for index := 0; index < len(f.jobs); {
+			if !tag_in(tags, f.jobs[index].tag) {
+				index += 1
+				continue
+			}
+			append(&out, f.jobs[index].tag)
+			fetch_job_destroy(&f.jobs[index], f.allocator)
+			ordered_remove(&f.jobs, index)
+			f.result_slots -= 1
+		}
+		assert(f.result_slots >= len(f.jobs) + len(f.results))
+		assert(f.result_slots >= 0)
+		return out[:]
+	}
+
 	// The returned slice uses context.temp_allocator and must not be retained.
 	// Every result body transfers to the caller and must be deleted exactly once.
 	// fetcher_stop frees only jobs and results still owned by this Fetcher.

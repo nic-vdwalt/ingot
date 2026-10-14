@@ -18,6 +18,17 @@ import "core:strings"
 // When true, this file provides the Fetcher API for every target.
 INGOT_NET_SIM :: #config(INGOT_NET_SIM, false)
 
+// tag_in reports whether `tag` appears in `tags`. Shared by every transport's
+// fetcher_cancel; both inputs are bounded by FETCH_MAXIMUM_PENDING, so a
+// linear scan is cheaper than building a set.
+@(private)
+tag_in :: proc(tags: []u64, tag: u64) -> bool {
+	for candidate in tags {
+		if candidate == tag do return true
+	}
+	return false
+}
+
 when INGOT_NET_SIM {
 
 	SIM_MAX_IN_FLIGHT :: 64 // Tiger Style: every queue has a fixed upper bound.
@@ -39,7 +50,15 @@ when INGOT_NET_SIM {
 	}
 
 	Sim_Stats :: struct {
-		sent, delivered, dropped, corrupted, duplicated, errored, truncated, rejected: u64,
+		sent,
+		delivered,
+		dropped,
+		corrupted,
+		duplicated,
+		errored,
+		truncated,
+		rejected,
+		cancelled: u64,
 	}
 
 	Sim_Message :: struct {
@@ -221,6 +240,29 @@ when INGOT_NET_SIM {
 			Http_Request{method = .Get, path = path, maximum_body = DEFAULT_MAXIMUM_BODY},
 			Fetch_Options{cache_path = cache_path},
 		)
+	}
+
+	// fetcher_cancel removes undelivered messages whose tag is in `tags` and
+	// releases their reserved result slots. Returns the cancelled tags
+	// (context.temp_allocator).
+	fetcher_cancel :: proc(f: ^Fetcher, tags: []u64) -> []u64 {
+		assert(f != nil)
+		if len(tags) == 0 do return nil
+		out := make([dynamic]u64, 0, len(tags), context.temp_allocator)
+		for index := 0; index < len(f.in_flight); {
+			if !tag_in(tags, f.in_flight[index].tag) {
+				index += 1
+				continue
+			}
+			message := f.in_flight[index]
+			ordered_remove(&f.in_flight, index)
+			append(&out, message.tag)
+			f.result_slots -= message.result_slots
+			sim_message_destroy(&message)
+			f.stats.cancelled += 1
+		}
+		assert(f.result_slots >= len(f.results))
+		return out[:]
 	}
 
 	// Advance simulated time one tick: deliver every due message through the

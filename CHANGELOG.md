@@ -9,6 +9,21 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+### Added
+
+- `net.fetcher_cancel(f, tags) -> []u64` removes queued fetcher work whose tag
+  matches and releases its result slots on native, simulated, and web
+  transports. Work already started still delivers a result.
+
+### Changed
+
+- Native fetcher workers keep one HTTP/1.1 connection alive per worker and
+  cache the resolved endpoint. Responses are framed by `Content-Length`,
+  chunked encoding, or 204/304 status. Idempotent requests retry once on a
+  fresh socket when a reused connection returns no bytes; POST and PATCH
+  always dial fresh. Requests made without a fetcher still send
+  `Connection: close`.
+
 ## [0.4.1] - 2026-10-14
 
 Tagged source: `6e87b46bff2f268b0685f9fcd17f5e4837865b49`.

@@ -49,6 +49,43 @@ loop, and never invokes the wake hook.
 jobs and results still owned by the fetcher. It does not free bodies already
 transferred by `fetcher_drain`.
 
+## Cancelling queued work
+
+`fetcher_cancel(&fetcher, tags)` withdraws requests that are still queued and
+returns the tags it actually removed (a `context.temp_allocator` slice). Their
+result slots are released immediately and no `Fetch_Result` is ever delivered
+for them. Requests a native worker has already started, or that the browser
+backend has already handed to `fetch`, are not affected and still deliver a
+result. Callers must therefore reset per-tag bookkeeping only for the returned
+tags, never for the full input list. The simulated transport cancels any
+undelivered message and counts it in `Sim_Stats.cancelled`.
+
+Use it to drop work the application no longer needs, for example map tiles that
+have scrolled out of view or belong to a zoom level the camera has left, so it
+stops occupying the bounded queue ahead of work that is still wanted.
+
+## Native connection reuse
+
+Each native `Fetcher` worker keeps its connection open between jobs. It sends
+`Connection: keep-alive` and reads exactly one framed response, using
+`Content-Length`, chunked transfer encoding, or a bodiless 204/304 status. The
+resolved host endpoint is cached on the fetcher, and a failed dial clears it so
+the next dial resolves again.
+
+- A response with no framing is read until the server closes, and that
+  connection is not reused.
+- A response carrying `Connection: close`, an HTTP/1.0 status line, or a read or
+  parse error also closes the connection.
+- A reused connection that fails before any response byte arrives (typically a
+  server closing an idle keep-alive socket) is redialled and the request
+  retried once. This applies only to idempotent methods. `Post` and `Patch`
+  always use a fresh connection, so a request is never replayed after the
+  server may have acted on it.
+- `fetcher_stop` closes every worker connection, including idle ones.
+
+The standalone host/port `http_request` and `http_get` still open one connection
+per call and send `Connection: close`.
+
 ## Result ownership
 
 The slice returned by `fetcher_drain` uses `context.temp_allocator` and is valid

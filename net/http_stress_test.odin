@@ -131,7 +131,9 @@ when HTTP_STRESS {
 			requests, completions, closes := http_stress_counts()
 			testing.expect(t, requests >= completed)
 			testing.expect_value(t, completions, completed)
-			testing.expect(t, closes >= completed)
+			// Workers keep their connection alive across jobs, so sockets close
+			// once each (at fetcher_stop), not once per completed request.
+			testing.expect(t, closes >= 1)
 		}
 	}
 
