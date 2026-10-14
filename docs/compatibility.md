@@ -20,7 +20,7 @@ The v0.4.0 Fit naming migration is an explicit exception: public procedures
 become snake_case without a compatibility window to avoid maintaining a second
 naming vocabulary. This does not broaden the exception policy for future
 removals. See the [migration guide](migration-0.4.0.md) and
-[immutable candidate ledger](releases/v0.4.0.md).
+[v0.4.0 release ledger](releases/v0.4.0.md).
 
 Every tag is a **source** tag. Ingot distributes no binaries, installers, or web
 bundles, and a tag does not authorize redistributing them; the

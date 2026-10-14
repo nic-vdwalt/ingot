@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-`v0.4.0` is the next source release candidate; publication is pending in the
-[release ledger](docs/releases/v0.4.0.md). Security fixes land on `main` first and
+`v0.4.0` is the latest published source tag. `0.4.1` is the next source release
+candidate; publication is pending in the
+[release ledger](docs/releases/0.4.1.md). Security fixes land on `main` first and
 are included in a new source tag when a release is required; existing tags are
 not moved. Older tags
 do not receive separate maintenance branches. Source availability does not imply

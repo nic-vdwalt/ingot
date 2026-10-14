@@ -9,6 +9,14 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
+## [0.4.1] — source release candidate (not yet tagged)
+
+Proposed immutable source: `6e87b46bff2f268b0685f9fcd17f5e4837865b49`.
+These release notes are post-pin documentation, not part of that snapshot.
+The tag name `0.4.1` returns to the unprefixed convention used before `v0.4.0`.
+No consumer API changes; upgrading from `v0.4.0` requires no migration. See the
+[release ledger](docs/releases/0.4.1.md) for evidence and known limitations.
+
 ### Fixed
 
 - Preserve Fit's primary consumer API while routing button overloads through
@@ -17,7 +25,6 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - Register the four missing Fit button-output assertion tests for Windows
   isolation. One manifest suite schema now drives isolation and drift checks
   across gfx, ui, and fit; Windows runtime validation remains separate.
-
 - Replace the Windows libvterm archive with the checksum-verified artifact from
   successful Windows run `38216972728`, including all four vendored robustness
   patches. Update provenance and third-party notices. This correction is not
@@ -26,13 +33,16 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   Add deterministic regression coverage and rebuild both macOS archives. The
   committed Windows archive still lacks this additional fix, so Windows CI
   rebuilds from vendored source before running terminal tests.
+- Run Windows gfx tests with one runner thread, matching the macOS gate, to
+  mitigate an intermittent four-thread timeout. Correct the Fit button key-path
+  and metrics projection test expectations that failed Windows CI.
 
-## v0.4.0 — source release candidate (not yet published)
+## [v0.4.0] - 2026-10-13
 
-Proposed immutable source: `8cd2d9447d81139efd387be46378abefc6363fd0`.
-These release notes are post-pin documentation, not part of that snapshot.
-See the [release ledger](docs/releases/v0.4.0.md) for known limitations and
-pending evidence. The publication date is not yet assigned.
+Tagged source: `38a8ce367e1a205ec7f5cb1970f8560b5d6bf284`. The tag points to
+the documentation commit that follows the originally proposed candidate
+`8cd2d9447d81139efd387be46378abefc6363fd0`; production sources are identical.
+See the [release ledger](docs/releases/v0.4.0.md) for known limitations.
 
 Every `ingot:fit` consumer must migrate procedure calls. Other breaking changes
 include typed errors, package moves, consumer gates and mixed-layer assignments;
@@ -1485,7 +1495,9 @@ Not validated:
 - Prevented a libvterm UTF-8 decode buffer overflow.
 - Validated `LoadFontFromMemory`'s caller-supplied buffer.
 
-[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.3.3...HEAD
+[Unreleased]: https://github.com/Nic-vdwalt/ingot/compare/0.4.1...HEAD
+[0.4.1]: https://github.com/Nic-vdwalt/ingot/compare/v0.4.0...0.4.1
+[v0.4.0]: https://github.com/Nic-vdwalt/ingot/compare/0.3.3...v0.4.0
 [0.3.3]: https://github.com/Nic-vdwalt/ingot/compare/0.3.2...0.3.3
 [0.3.2]: https://github.com/Nic-vdwalt/ingot/compare/0.3.1...0.3.2
 [0.3.1]: https://github.com/Nic-vdwalt/ingot/compare/0.3.0...0.3.1

@@ -1,10 +1,10 @@
 # Migrating from 0.3.3 to v0.4.0
 
-The proposed source pin is `8cd2d9447d81139efd387be46378abefc6363fd0`.
-`v0.4.0` deliberately uses a prefix absent from recent tags. Publication remains
-pending; use the exact revision until the tag exists. This guide is post-pin
-preparation, not a file contained in that snapshot. See the
-[release ledger](releases/v0.4.0.md) for evidence and limitations.
+`v0.4.0` was tagged at `38a8ce367e1a205ec7f5cb1970f8560b5d6bf284` and published
+on 2026-10-13; its `v` prefix differs from earlier and later tags. This guide
+also applies to `0.4.1`, which adds no further API changes. See the
+[v0.4.0 ledger](releases/v0.4.0.md) and [0.4.1 ledger](releases/0.4.1.md) for
+evidence and limitations.
 
 ## Upgrade checklist
 
