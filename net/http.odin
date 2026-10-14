@@ -431,7 +431,7 @@ when !INGOT_NET_SIM {
 			line_end := strings.index(rest, "\r\n")
 			if line_end < 0 do return 0, false
 			size_text := rest[:line_end]
-			if extension := strings.index(size_text, ";"); extension >= 0 do size_text = size_text[:extension]
+			if semi := strings.index(size_text, ";"); semi >= 0 do size_text = size_text[:semi]
 			size, parsed := strconv.parse_u64(strings.trim_space(size_text), 16)
 			if !parsed do return 0, false
 			cursor += line_end + 2
