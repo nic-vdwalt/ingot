@@ -8,7 +8,7 @@ or assistive-technology behavior on every supported platform. See
 [Compatibility and platforms](compatibility.md) for supported API behavior and
 [Networking](networking.md) for lifecycle and ownership.
 
-The [0.4.1 source candidate ledger](releases/0.4.1.md) separates the immutable
+The [0.4.1 source release ledger](releases/0.4.1.md) separates the immutable
 source pin from later documentation and archive work. A source tag adds no
 platform evidence: `Not recorded` rows remain so until actual revision-pinned
 results exist. Native builds do not establish GPU, accessibility or browser

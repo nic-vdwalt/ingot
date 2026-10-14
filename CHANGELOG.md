@@ -9,9 +9,9 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 
 ## Unreleased
 
-## [0.4.1] — source release candidate (not yet tagged)
+## [0.4.1] - 2026-10-14
 
-Proposed immutable source: `6e87b46bff2f268b0685f9fcd17f5e4837865b49`.
+Tagged source: `6e87b46bff2f268b0685f9fcd17f5e4837865b49`.
 These release notes are post-pin documentation, not part of that snapshot.
 The tag name `0.4.1` returns to the unprefixed convention used before `v0.4.0`.
 No consumer API changes; upgrading from `v0.4.0` requires no migration. See the

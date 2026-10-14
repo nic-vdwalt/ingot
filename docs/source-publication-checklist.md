@@ -5,9 +5,9 @@ authorize native binaries, installers, web bundles, or production-readiness
 claims; those remain governed by `oss-release-checklist.md` and
 `production-readiness.md`.
 
-The [0.4.1 candidate ledger](releases/0.4.1.md) tracks source-release
+The [0.4.1 release ledger](releases/0.4.1.md) tracks source-release
 preparation separately. The dated confirmations below are historical publication
-evidence, not fresh validation of that candidate or its committed archives.
+evidence, not fresh validation of that release or its committed archives.
 
 ## Completed technical evidence
 

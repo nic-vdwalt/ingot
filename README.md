@@ -37,8 +37,7 @@ SDL3 and pass `-define:INGOT_GFX_SDL3=true` to select the optional SDL3 host.
 - Deterministic, bounded test harnesses
 
 > [!IMPORTANT]
-> `0.4.1` is the next source release candidate, not yet tagged; `v0.4.0` is the
-> latest published tag. Pin the exact revision and read the
+> `0.4.1` is the latest published source tag. Pin it and read the
 > [release ledger](docs/releases/0.4.1.md). Upgrading from 0.3.3 requires the
 > [migration guide](docs/migration-0.4.0.md). Validate every platform you ship;
 > the committed Windows libvterm archive still lacks the REP fix.
@@ -62,12 +61,12 @@ through explicit imports; there is no umbrella runtime profile.
 
 ```sh
 git submodule add https://github.com/Nic-vdwalt/ingot.git libs/ingot
-git -C libs/ingot checkout 6e87b46bff2f268b0685f9fcd17f5e4837865b49
+git -C libs/ingot checkout 0.4.1
 odin build src -collection:ingot=libs/ingot
 ```
 
-Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION). The exact
-revision above is the proposed `0.4.1` pin; use that tag only after publication.
+Use the Odin revision recorded in [`ODIN_VERSION`](ODIN_VERSION). Tag `0.4.1`
+resolves to `6e87b46bff2f268b0685f9fcd17f5e4837865b49`.
 On Windows, add `-linker:msvc` (or `-linker:lld`) to graphics-linked build/run
 commands, including the examples below:
 

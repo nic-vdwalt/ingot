@@ -133,7 +133,7 @@ Its SHA-256 was verified against the artifact's `vterm.lib.sha256` sidecar;
 that run passed both native and SDL3 test gates with this archive.
 
 The v0.4.0 tag still contains the older unpatched archive; this replacement is
-post-release work, first included in the 0.4.1 candidate, and does not move that
+post-release work, first included in the 0.4.1 tag, and does not move that
 tag.
 
 An additional `state.c` `on_csi` REP fix ignores nonpositive saved glyph widths.
@@ -148,7 +148,7 @@ replacement is available. Windows run `38360454882` at revision
 `0114b41579db30e7287e0b996e0b3fdeab67ab0c` rebuilt and uploaded the fixed
 archive, but failed in `ui.layout_facade_button_key_paths` before reaching
 terminal tests; it is not successful Windows runtime evidence. Run
-`38367410585` at the 0.4.1 candidate
+`38367410585` at the 0.4.1 tag
 `6e87b46bff2f268b0685f9fcd17f5e4837865b49` passed with a rebuilt archive and
 uploaded it as artifact `11796654538`. The committed archive remains unchanged
 pending a validated replacement.

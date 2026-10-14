@@ -15,7 +15,7 @@ native binary, installer, or web bundle.
 - [ ] Review every non-owner contribution and retain its license or obtain an
   Apache-2.0-compatible grant.
 
-The [0.4.1 source candidate](releases/0.4.1.md) does not publish binaries or
+The [0.4.1 source release](releases/0.4.1.md) does not publish binaries or
 web bundles. These additional obligations remain outstanding; the initial
 ownership confirmations are recorded in [source publication](source-publication-checklist.md)
 and must be reviewed for the actual distribution's changes.
@@ -26,9 +26,9 @@ and must be reviewed for the actual distribution's changes.
   includes the REP zero-width fix, update provenance and notices using
   `scripts/record-artifact-checksum.py`, and validate the replacement itself.
   The current archive has the four earlier vendored patches; Windows CI tests a
-  rebuilt file, not the committed one. Candidate run `38367410585` uploaded a
-  rebuilt archive (artifact `11796654538`). Including it requires a newer pin
-  than the 0.4.1 candidate.
+  rebuilt file, not the committed one. Run `38367410585` at the 0.4.1 tag
+  uploaded a rebuilt archive (artifact `11796654538`). Including it requires a
+  later tag.
 
 - [x] Record the exact tagged source and build inputs for every committed
   AccessKit and libvterm archive.
