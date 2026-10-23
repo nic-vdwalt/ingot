@@ -65,9 +65,10 @@ owned_temporary_draw :: proc(builder: ^Builder, userdata: rawptr) {
 	outputs := cast(^i32)userdata
 	queue: Typed_Commands(u8, 1)
 	typed_commands_begin(&queue, builder)
+	assert(queue.mode == .Owned)
 	defer typed_commands_end(&queue)
 	root := column(builder)
-	_ = button_command(root, "temporary", "Temporary", &queue, u8(1))
+	_ = button_command(root, "temporary", "Temporary", cast(^Typed_Commands(u8, 1))rawptr(&queue), u8(1))
 	outputs^ = builder.inner.output_count
 }
 
