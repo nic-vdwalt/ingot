@@ -53,6 +53,8 @@ MAX_MODAL_STACK :: 8
 // Reading regions nest (a height pass that prepares a layout that draws), but
 // never deeply; the cap turns a leaked begin in a loop into an assertion.
 READING_DEPTH_MAX :: 8
+// Face pins nest no deeper than an embedded surface inside a pinned one.
+FACE_PIN_DEPTH_MAX :: 4
 
 Ui_Frame_Phase :: enum u8 {
 	Closed,
@@ -92,6 +94,11 @@ Ui_Frame :: struct {
 	// reading_depth counts open reading regions. While positive, text draws
 	// and measures in the theme's reading face instead of its chrome face.
 	reading_depth:                  i32,
+	// face_pins is the stack of faces pinned by frame_face_pin_begin. The top
+	// pin wins over both theme faces, for content such as an embedded editor
+	// whose face must not follow the theme.
+	face_pins:                      [FACE_PIN_DEPTH_MAX]Font_Face,
+	face_pin_depth:                 i32,
 	text_cull_top:                  i32,
 	text_cull_bottom:               i32,
 	open_roots:                     int,
@@ -301,10 +308,30 @@ frame_reading_end :: proc(frame: ^Ui_Frame) {
 	frame.reading_depth -= 1
 }
 
+// frame_face_pin_begin pins the face text drawn or measured until the
+// matching frame_face_pin_end uses, whatever the theme's chrome and reading
+// faces are. Measurement and drawing of the same text must share the pin.
+frame_face_pin_begin :: proc(frame: ^Ui_Frame, face: Font_Face) {
+	assert(frame != nil && frame.open, "frame_face_pin_begin: invalid frame")
+	assert(face >= min(Font_Face) && face <= max(Font_Face), "frame_face_pin_begin: bad face")
+	assert(frame.face_pin_depth >= 0, "frame_face_pin_begin: negative depth")
+	assert(frame.face_pin_depth < FACE_PIN_DEPTH_MAX, "frame_face_pin_begin: too deep")
+	frame.face_pins[frame.face_pin_depth] = face
+	frame.face_pin_depth += 1
+}
+
+frame_face_pin_end :: proc(frame: ^Ui_Frame) {
+	assert(frame != nil && frame.open, "frame_face_pin_end: invalid frame")
+	assert(frame.face_pin_depth > 0, "frame_face_pin_end: no open face pin")
+	frame.face_pin_depth -= 1
+}
+
 // frame_font_face is the face text drawn at this point of the frame uses.
 frame_font_face :: proc(frame: ^Ui_Frame) -> Font_Face {
 	assert(frame != nil && frame.runtime != nil, "frame_font_face: invalid frame")
 	assert(frame.reading_depth >= 0, "frame_font_face: negative depth")
+	assert(frame.face_pin_depth >= 0, "frame_font_face: negative pin depth")
+	if frame.face_pin_depth > 0 do return frame.face_pins[frame.face_pin_depth - 1]
 	style := &frame.runtime.style
 	if frame.reading_depth > 0 do return style.reading_font_face
 	return style.font_face
@@ -345,6 +372,7 @@ ui_frame_begin :: proc(frame: ^Ui_Frame, runtime: ^Ui_Runtime, input: ^Ui_Input 
 	frame.font_memo_id = 0
 	frame.font_memo_epoch = runtime.font_epoch
 	frame.reading_depth = 0
+	frame.face_pin_depth = 0
 	frame.text_cull_top = min(i32)
 	frame.text_cull_bottom = max(i32)
 	frame.open_roots = 0
@@ -392,6 +420,7 @@ ui_frame_finalize :: proc(frame: ^Ui_Frame) {
 	frame.phase = .Finalize
 	assert(frame.z_count == 0, "ui_frame_finalize: unbalanced z scope")
 	assert(frame.reading_depth == 0, "ui_frame_finalize: unbalanced reading region")
+	assert(frame.face_pin_depth == 0, "ui_frame_finalize: unbalanced face pin")
 	if frame.output != nil {
 		// Report the leaking begin_scissor_mode call site: the depth alone
 		// says nothing about which view forgot to pop.

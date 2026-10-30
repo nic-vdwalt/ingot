@@ -149,6 +149,13 @@ legible while the chrome stays pixel.
 - Wrap both the measurement and the drawing of the same text in a region, or
   its cached layout will not match what is painted. Every text cache is keyed
   by Font_Id, so both faces can be in use within one frame.
+- `frame_face_pin_begin(frame, face)` / `frame_face_pin_end`
+  (`fit.surface_face_pin_begin` / `fit.surface_face_pin_end`) pin one face
+  over both theme faces, for content such as an editor grid that must never
+  follow the theme. The innermost pin wins over reading regions; pins nest up
+  to `FACE_PIN_DEPTH_MAX`, and `ui_frame_finalize` asserts they are balanced.
+- The `ui_gfx` font table holds one slot back for each face that has no font
+  yet, so a table filled by one face still serves the other.
 
 `Theme.surface_style = .Pixel` routes `draw_surface` and the fill, border and
 shadow helpers in `material.odin` to `material_pixel.odin`.

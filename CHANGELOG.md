@@ -14,8 +14,16 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
 - `net.fetcher_cancel(f, tags) -> []u64` removes queued fetcher work whose tag
   matches and releases its result slots on native, simulated, and web
   transports. Work already started still delivers a result.
+- `ui.frame_face_pin_begin(frame, face)` / `ui.frame_face_pin_end` and
+  `fit.surface_face_pin_begin` / `fit.surface_face_pin_end` pin a font face
+  over both `Theme.font_face` and `Theme.reading_font_face`, so content such
+  as an embedded editor keeps one face under every theme.
 
 ### Changed
+
+- The `ui_gfx` font table holds one slot back for each face that has no font
+  yet. A table filled by the chrome face previously handed a reading-face
+  request `Font_Id(1)`, a font of the wrong face.
 
 - Native fetcher workers keep one HTTP/1.1 connection alive per worker and
   cache the resolved endpoint. Responses are framed by `Content-Length`,

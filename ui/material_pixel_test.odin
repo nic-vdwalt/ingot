@@ -166,6 +166,32 @@ reading_region_skips_pixel_quantisation :: proc(t: ^testing.T) {
 }
 
 @(test)
+face_pin_overrides_both_theme_faces :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	pixel := theme_pixel()
+	pixel.reading_font_face = .Pixel
+	ui_runtime_set_theme(&runtime, pixel)
+	frame: Ui_Frame
+	defer ui_frame_destroy(&frame)
+	ui_frame_begin(&frame, &runtime)
+	frame_face_pin_begin(&frame, .Mono)
+	testing.expect_value(t, frame_font_face(&frame), Font_Face.Mono)
+	testing.expect_value(t, frame_text_size(&frame, 11), i32(11))
+	frame_reading_begin(&frame)
+	testing.expect_value(t, frame_font_face(&frame), Font_Face.Mono)
+	frame_face_pin_begin(&frame, .Pixel)
+	testing.expect_value(t, frame_font_face(&frame), Font_Face.Pixel)
+	frame_face_pin_end(&frame)
+	testing.expect_value(t, frame_font_face(&frame), Font_Face.Mono)
+	frame_reading_end(&frame)
+	frame_face_pin_end(&frame)
+	testing.expect_value(t, frame_font_face(&frame), Font_Face.Pixel)
+	ui_frame_end(&frame)
+}
+
+@(test)
 reading_face_change_defers_reset :: proc(t: ^testing.T) {
 	runtime: Ui_Runtime
 	ui_runtime_init(&runtime)

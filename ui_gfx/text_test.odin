@@ -68,3 +68,25 @@ test_adapter_font_limit_returns_closest_font :: proc(t: ^testing.T) {
 	testing.expect_value(t, id, ui.Font_Id(FONT_CAP))
 	testing.expect_value(t, adapter.font_count, FONT_CAP)
 }
+
+@(test)
+test_adapter_font_table_holds_a_slot_for_a_missing_face :: proc(t: ^testing.T) {
+	adapter: Adapter
+	adapter.initialized = true
+	adapter.font_count = FONT_CAP - 1
+	for index in 0 ..< FONT_CAP - 1 {
+		adapter.font_sizes[index] = i32(index + 1)
+		adapter.font_faces[index] = .Pixel
+		adapter.fonts[index] = {
+			glyphCount = 1,
+			_atlas     = u32(index + 1),
+		}
+	}
+	pixel := adapter_register_font(&adapter, .Pixel, 70, {glyphCount = 1, _atlas = 998})
+	testing.expect_value(t, pixel, ui.Font_Id(FONT_CAP - 1))
+	testing.expect_value(t, adapter.font_count, FONT_CAP - 1)
+	mono := adapter_register_font(&adapter, .Mono, 70, {glyphCount = 1, _atlas = 999})
+	testing.expect_value(t, mono, ui.Font_Id(FONT_CAP))
+	testing.expect_value(t, adapter.font_count, FONT_CAP)
+	testing.expect_value(t, adapter.font_faces[FONT_CAP - 1], ui.Font_Face.Mono)
+}

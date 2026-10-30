@@ -93,6 +93,21 @@ surface_reading_end :: proc(surface: ^Surface) {
 	ui.frame_reading_end(u.frame)
 }
 
+// surface_face_pin_begin pins the face text measured or drawn until the
+// matching surface_face_pin_end uses, regardless of the theme's faces. Use it
+// for content whose face must never follow the theme, such as an editor grid.
+surface_face_pin_begin :: proc(surface: ^Surface, face: Font_Face) {
+	assert(surface != nil, "fit.surface_face_pin_begin: nil surface")
+	u := surface_ui(surface)
+	ui.frame_face_pin_begin(u.frame, face)
+}
+
+surface_face_pin_end :: proc(surface: ^Surface) {
+	assert(surface != nil, "fit.surface_face_pin_end: nil surface")
+	u := surface_ui(surface)
+	ui.frame_face_pin_end(u.frame)
+}
+
 surface_codepoint :: proc(surface: ^Surface, value: rune, x, y, size: i32, color: Color) {
 	u := surface_ui(surface)
 	ui.draw_codepoint_frame(u.frame, value, x, y, size, ui.Color(color))

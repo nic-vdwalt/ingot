@@ -87,7 +87,7 @@ adapter_register_font :: proc(
 			return ui.Font_Id(index + 1)
 		}
 	}
-	if adapter.font_count >= FONT_CAP do return adapter_closest_font(adapter, face, size)
+	if !adapter_font_slot_free(adapter, face) do return adapter_closest_font(adapter, face, size)
 	index := adapter.font_count
 	adapter.fonts[index] = font
 	adapter.font_sizes[index] = size
@@ -96,10 +96,34 @@ adapter_register_font :: proc(
 	return ui.Font_Id(index + 1)
 }
 
+// adapter_font_slot_free reports whether a new font of face may take a table
+// slot. One slot stays held for every other face that has no font yet, so a
+// table filled by one face never leaves another without any: reading regions
+// and face pins request both faces within a single frame.
+@(private = "file")
+adapter_font_slot_free :: proc(adapter: ^Adapter, face: ui.Font_Face) -> bool {
+	assert(adapter != nil, "adapter_font_slot_free: nil adapter")
+	assert(adapter.font_count <= FONT_CAP, "adapter_font_slot_free: count over cap")
+	#assert(FONT_CAP > len(ui.Font_Face))
+	reserved := 0
+	for other in ui.Font_Face {
+		if other == face do continue
+		loaded := false
+		for index in 0 ..< adapter.font_count {
+			if adapter.font_faces[index] == other {
+				loaded = true
+				break
+			}
+		}
+		if !loaded do reserved += 1
+	}
+	return adapter.font_count + reserved < FONT_CAP
+}
+
 // adapter_closest_font is the at-capacity fallback: the loaded font of the
-// same face nearest in size. A face switch resets the table, so a full table
-// always holds at least one font of the current face; Font_Id(1) is only the
-// defensive answer if a caller interleaves faces within one frame.
+// same face nearest in size. adapter_font_slot_free holds a slot for each
+// face until it has a font, so a face always finds one of its own; Font_Id(1)
+// is only the defensive answer for a table filled outside that rule.
 @(private = "file")
 adapter_closest_font :: proc(adapter: ^Adapter, face: ui.Font_Face, size: i32) -> ui.Font_Id {
 	assert(adapter != nil && adapter.font_count > 0, "adapter_closest_font: empty table")
@@ -139,7 +163,7 @@ adapter_font_for_size :: proc(data: rawptr, face: ui.Font_Face, size: i32) -> ui
 			return ui.Font_Id(index + 1)
 		}
 	}
-	if adapter.font_count >= FONT_CAP do return adapter_closest_font(adapter, face, size)
+	if !adapter_font_slot_free(adapter, face) do return adapter_closest_font(adapter, face, size)
 	pixel_size := i32(f32(size) * adapter.font_dpi + 0.5)
 	if pixel_size < 1 do pixel_size = 1
 	file_data := FONT_DATA
