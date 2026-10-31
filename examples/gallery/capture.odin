@@ -6,9 +6,11 @@
 // hand-cropped screenshots.
 //
 // Why a render target: the swapchain is RenderAttachment-only (gfx/context.odin),
-// so gfx.save_render_texture_png can only read a render target. Rendering into a
-// fixed CAPTURE_WIDTH x CAPTURE_HEIGHT target also decouples the output from the
-// host window size and HiDPI factor.
+// so gfx.save_render_texture_png can only read a render target. The target is
+// CAPTURE_WIDTH x CAPTURE_HEIGHT layout pixels multiplied by the device pixel
+// density (2x on Retina, capped so the UI scale stays within its 3.0 limit), so
+// the output matches the display's native resolution while the layout stays
+// identical. INGOT_CAPTURE_PIXEL_SCALE=1 forces the old fixed 1x output.
 //
 // Why its own loop instead of fit.run: Builder paint is replayed by Render.
 // Wrapping the draw callback alone would capture direct draws and none of the
@@ -22,6 +24,7 @@ package main
 
 import "core:fmt"
 import "core:os"
+import "core:strconv"
 import "core:strings"
 import fit "ingot:fit"
 import rl "ingot:gfx"
@@ -30,6 +33,7 @@ import rl "ingot:gfx"
 _ :: fmt
 _ :: os
 _ :: strings
+_ :: strconv
 _ :: rl
 _ :: fit
 
@@ -52,20 +56,26 @@ when CAPTURE {
 	// the output, and above 1.0 so the gallery's intrinsic content height
 	// fills CAPTURE_HEIGHT instead of leaving dead space below the fold.
 	CAPTURE_UI_SCALE :: f32(#config(INGOT_CAPTURE_UI_SCALE, 1.5))
+	// The UI runtime clamps its scale to 3.0, which bounds the pixel density.
+	CAPTURE_MAX_UI_SCALE :: f32(3)
 	// Where the harness parks the cursor. Hover, tooltips, and pointer-driven
 	// focus rings would otherwise depend on wherever the operator left the
 	// mouse, so every shot pins it to the same inert spot in the nav gutter.
 	CAPTURE_MOUSE_X :: 8
-	CAPTURE_MOUSE_Y :: CAPTURE_HEIGHT - 8
-	// Frames each sequence step is held. Eight steps x 60 frames = 480 frames,
-	// which is 8 s of source at the 60 fps the GIF/MP4 encode assumes.
-	CAPTURE_SEQUENCE_FRAMES :: 60
+	CAPTURE_MOUSE_INSET :: 8
+	// Per-step holds at the 60 fps the GIF/MP4 encode assumes: the Showcase
+	// dwells for 2.5 s per palette, other pages flash past in 0.3 s.
+	CAPTURE_SHOWCASE_FRAMES :: 150
+	CAPTURE_SHUFFLE_FRAMES :: 18
+	CAPTURE_CLOSING_FRAMES :: 60
 	CAPTURE_MAX_SEQUENCE_FRAMES :: 4096
 
 	Capture_Shot :: struct {
 		file:    string,
 		section: Section,
 		palette: Palette,
+		// Sequence hold in frames; stills ignore it and settle instead.
+		frames:  int,
 	}
 
 	// The README set: one shot per visually distinct area, in both themes so a
@@ -75,26 +85,32 @@ when CAPTURE {
 	// by the sequence pass instead - as stills they leave half the frame empty,
 	// which reads as an unfinished framework rather than a focused one.
 	CAPTURE_SHOTS := [?]Capture_Shot {
-		{"gallery-showcase-dark.png", .Showcase, .Dark},
-		{"gallery-showcase-ingot.png", .Showcase, .Ingot},
-		{"gallery-widgets-dark.png", .Widgets, .Dark},
-		{"gallery-charts-dark.png", .Charts, .Dark},
-		{"gallery-buttons-light.png", .Buttons, .Light},
-		{"gallery-inputs-light.png", .Inputs, .Light},
-		{"gallery-stress-dark.png", .Stress, .Dark},
+		{"gallery-showcase-dark.png", .Showcase, .Dark, 0},
+		{"gallery-showcase-ingot.png", .Showcase, .Ingot, 0},
+		{"gallery-widgets-dark.png", .Widgets, .Dark, 0},
+		{"gallery-charts-dark.png", .Charts, .Dark, 0},
+		{"gallery-buttons-light.png", .Buttons, .Light, 0},
+		{"gallery-inputs-light.png", .Inputs, .Light, 0},
+		{"gallery-stress-dark.png", .Stress, .Dark, 0},
 	}
 
-	// The GIF script: every section in order using the default Ingot theme.
+	// The GIF script: mostly Showcase, moving Dark -> Pixel -> Retro Orange,
+	// with a quick shuffle through the other pages between model beats. Every
+	// page appears once; the planet's yaw follows the global frame counter, so
+	// the spin stays continuous across steps.
 	CAPTURE_SEQUENCE := [?]Capture_Shot {
-		{"", .Showcase, .Ingot},
-		{"", .Buttons, .Ingot},
-		{"", .Inputs, .Ingot},
-		{"", .Widgets, .Ingot},
-		{"", .Charts, .Ingot},
-		{"", .Markdown, .Ingot},
-		{"", .Layout, .Ingot},
-		{"", .Overlay, .Ingot},
-		{"", .Stress, .Ingot},
+		{"", .Showcase, .Dark, CAPTURE_SHOWCASE_FRAMES},
+		{"", .Buttons, .Dark, CAPTURE_SHUFFLE_FRAMES},
+		{"", .Inputs, .Dark, CAPTURE_SHUFFLE_FRAMES},
+		{"", .Widgets, .Dark, CAPTURE_SHUFFLE_FRAMES},
+		{"", .Showcase, .Pixel, CAPTURE_SHOWCASE_FRAMES},
+		{"", .Charts, .Pixel, CAPTURE_SHUFFLE_FRAMES},
+		{"", .Markdown, .Pixel, CAPTURE_SHUFFLE_FRAMES},
+		{"", .Layout, .Pixel, CAPTURE_SHUFFLE_FRAMES},
+		{"", .Showcase, .Retro_Orange, CAPTURE_SHOWCASE_FRAMES},
+		{"", .Overlay, .Retro_Orange, CAPTURE_SHUFFLE_FRAMES},
+		{"", .Stress, .Retro_Orange, CAPTURE_SHUFFLE_FRAMES},
+		{"", .Showcase, .Retro_Orange, CAPTURE_CLOSING_FRAMES},
 	}
 
 	capture_session: fit.Session
@@ -105,6 +121,16 @@ when CAPTURE {
 	capture_state_frame: int
 	capture_state_applied: bool
 	capture_sequence_frame: int
+	// Device pixels per layout pixel, fixed at startup.
+	capture_pixel_scale: f32 = 1
+	capture_width: i32 = CAPTURE_WIDTH
+	capture_height: i32 = CAPTURE_HEIGHT
+
+	// capture_pixel_scale_for clamps a display density so the scaled UI scale
+	// never exceeds the runtime's limit.
+	capture_pixel_scale_for :: proc(dpi: f32) -> f32 {
+		return clamp(dpi, 1, CAPTURE_MAX_UI_SCALE / CAPTURE_UI_SCALE)
+	}
 
 	// CAPTURE_STILL_YAW frames the planet's most detailed face for stills.
 	CAPTURE_STILL_YAW :: f32(0.6)
@@ -125,7 +151,7 @@ when CAPTURE {
 	capture_step :: proc() {
 		script := capture_script()
 		assert(capture_step_index >= 0, "capture_step: negative index")
-		rl.SetMousePosition(CAPTURE_MOUSE_X, CAPTURE_MOUSE_Y)
+		rl.SetMousePosition(CAPTURE_MOUSE_X, capture_height - CAPTURE_MOUSE_INSET)
 		if capture_step_index >= len(script) do return
 		if !capture_state_applied {
 			shot := script[capture_step_index]
@@ -137,7 +163,7 @@ when CAPTURE {
 			// progress, and chart reveals running and replays them per step.
 			reduced_motion = !capture_sequence
 			apply_gallery_theme()
-			apply_scale(CAPTURE_UI_SCALE)
+			apply_scale(CAPTURE_UI_SCALE * capture_pixel_scale)
 			fit.pane_reset(&content_pane)
 			capture_seed_inputs()
 			if capture_sequence do capture_replay_animations()
@@ -220,7 +246,9 @@ when CAPTURE {
 			os.exit(1)
 		}
 		capture_sequence_frame += 1
-		if capture_state_frame >= CAPTURE_SEQUENCE_FRAMES {
+		hold := CAPTURE_SEQUENCE[capture_step_index].frames
+		assert(hold > 0, "capture_write_sequence_frame: step without a hold")
+		if capture_state_frame >= hold {
 			capture_step_index += 1
 			capture_state_applied = false
 		}
@@ -259,14 +287,14 @@ when CAPTURE {
 		rl.ClearBackground(background)
 		gallery_build(builder, nil)
 		_ = fit.measure(builder)
-		fit.render_at(builder, {0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT})
+		fit.render_at(builder, {0, 0, capture_width, capture_height})
 		rl.EndTextureMode()
 
 		// Negative source height blits the bottom-left-origin target upright
 		// (docs/rendering.md "Render-target orientation").
 		rl.DrawTexturePro(
 			capture_target.texture,
-			{0, 0, f32(CAPTURE_WIDTH), -f32(CAPTURE_HEIGHT)},
+			{0, 0, f32(capture_width), -f32(capture_height)},
 			{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())},
 			{0, 0},
 			0,
@@ -293,19 +321,36 @@ when CAPTURE {
 			"ingot widget gallery (capture)",
 		)
 		rl.SetTargetFPS(60)
+		density := rl.GetWindowScaleDPI().x
+		scale_flag := os.get_env("INGOT_CAPTURE_PIXEL_SCALE", context.allocator)
+		defer delete(scale_flag)
+		if scale_flag != "" {
+			parsed, parsed_ok := strconv.parse_f32(scale_flag)
+			if !parsed_ok {
+				fmt.eprintfln("capture: invalid INGOT_CAPTURE_PIXEL_SCALE %q", scale_flag)
+				os.exit(1)
+			}
+			density = parsed
+		}
+		capture_pixel_scale = capture_pixel_scale_for(density)
+		capture_width = i32(f32(CAPTURE_WIDTH) * capture_pixel_scale + 0.5)
+		capture_height = i32(f32(CAPTURE_HEIGHT) * capture_pixel_scale + 0.5)
 		fit.session_init(
 			&capture_session,
-			{user_scale = CAPTURE_UI_SCALE, semantics_enabled = true},
+			{user_scale = CAPTURE_UI_SCALE * capture_pixel_scale, semantics_enabled = true},
 		)
-		capture_target = rl.LoadRenderTexture(CAPTURE_WIDTH, CAPTURE_HEIGHT)
+		capture_target = rl.LoadRenderTexture(capture_width, capture_height)
 		if capture_target.texture.id == 0 {
 			fmt.eprintln("capture: render target allocation failed")
 			os.exit(1)
 		}
 		fmt.printfln(
-			"capture: %s pass into %s",
+			"capture: %s pass into %s at %dx%d px (scale %.2f)",
 			"sequence" if capture_sequence else "stills",
 			capture_dir,
+			capture_width,
+			capture_height,
+			capture_pixel_scale,
 		)
 		rl.run(capture_frame)
 	}

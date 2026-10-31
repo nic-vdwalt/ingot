@@ -347,8 +347,14 @@ showcase_resize :: proc(surface: ^fit.Surface, state: ^Showcase_State, rect: fit
 	assert(surface != nil && state != nil, "showcase_resize: nil argument")
 	assert(rect.w > 0 && rect.h > 0, "showcase_resize: empty rect")
 	dpi := max(fit.surface_dpi_scale(surface), 1)
-	width := clamp(i32(f32(rect.w) * dpi + 0.5), 1, SHOWCASE_TARGET_EDGE_MAX)
-	height := clamp(i32(f32(rect.h) * dpi + 0.5), 1, SHOWCASE_TARGET_EDGE_MAX)
+	// Capture renders into a target already sized in device pixels.
+	when CAPTURE do dpi = 1
+	w := f32(rect.w) * dpi
+	h := f32(rect.h) * dpi
+	// One factor for both edges keeps the target's aspect equal to the rect's.
+	fit_scale := min(1, f32(SHOWCASE_TARGET_EDGE_MAX) / max(w, h))
+	width := max(i32(w * fit_scale + 0.5), 1)
+	height := max(i32(h * fit_scale + 0.5), 1)
 	if width == state.target_w && height == state.target_h do return true
 	if !gfx.resize_gpu_3d_target(&state.target, width, height) do return false
 	state.target_w, state.target_h = width, height

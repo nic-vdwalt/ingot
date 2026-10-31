@@ -2,8 +2,10 @@
 # capture-media.sh - Reproducible README stills and demo GIF/MP4.
 #
 # Builds examples/gallery with -define:INGOT_CAPTURE=true, which makes the
-# gallery render itself into a fixed 1600x1000 offscreen render target and write
-# PNGs through gfx.save_render_texture_png (see examples/gallery/capture.odin).
+# gallery render itself into a 1600x1000-layout offscreen render target at the
+# display's native pixel density (3200x2000 on Retina; set
+# INGOT_CAPTURE_PIXEL_SCALE=1 for 1x) and write PNGs through
+# gfx.save_render_texture_png (see examples/gallery/capture.odin).
 # Two passes run:
 #
 #   stills   -> docs/media/*.png   committed, optimised, byte-reproducible
@@ -27,7 +29,8 @@ trap 'rm -rf "$SEQ_DIR"' EXIT
 
 # Budgets. A README that pulls megabytes of media is a bad first impression, and
 # the stills live in git forever, so both are enforced rather than advisory.
-MAX_STILL_BYTES=$((400 * 1024))
+# Stills are captured at native density (up to 4x the pixels of 1x).
+MAX_STILL_BYTES=$((1024 * 1024))
 MAX_GIF_BYTES=$((6 * 1024 * 1024))
 
 for tool in ffmpeg magick; do
@@ -110,9 +113,10 @@ ffmpeg -y -loglevel error -framerate 60 -i "$SEQ_DIR/frame_%05d.png" -i "$SEQ_DI
 cp "$GIF" "$README_GIF"
 
 echo "== mp4 =="
-# yuv420p and an even height keep the file playable in browsers and on GitHub.
+# Native resolution. yuv420p and even dimensions keep the file playable in
+# browsers and on GitHub.
 ffmpeg -y -loglevel error -framerate 60 -i "$SEQ_DIR/frame_%05d.png" \
-	-vf "scale=1280:-2:flags=lanczos,format=yuv420p" \
+	-vf "scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos,format=yuv420p" \
 	-c:v libx264 -preset slow -crf 20 -movflags +faststart \
 	"$MP4"
 
