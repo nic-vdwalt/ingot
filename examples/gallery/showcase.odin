@@ -361,7 +361,9 @@ showcase_viewport :: proc(surface: ^fit.Surface, state: ^Showcase_State, rect: f
 	source := fit.Float_Rect{0, 0, f32(state.target_w), f32(state.target_h)}
 	dest := fit.Float_Rect{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	fit.surface_draw_texture(surface, texture.id, source, dest)
-	if interacting || showcase_animating(state) do fit.request_redraw_in(surface, 0)
+	// request_redraw, not request_redraw_in(0): the platform treats a zero
+	// deadline as "no deadline", which only advanced the planet on input.
+	if interacting || showcase_animating(state) do fit.request_redraw(surface)
 }
 
 showcase_placeholder :: proc(surface: ^fit.Surface, state: ^Showcase_State, rect: fit.Rect) {

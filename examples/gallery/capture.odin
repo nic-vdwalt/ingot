@@ -75,6 +75,8 @@ when CAPTURE {
 	// by the sequence pass instead - as stills they leave half the frame empty,
 	// which reads as an unfinished framework rather than a focused one.
 	CAPTURE_SHOTS := [?]Capture_Shot {
+		{"gallery-showcase-dark.png", .Showcase, .Dark},
+		{"gallery-showcase-ingot.png", .Showcase, .Ingot},
 		{"gallery-widgets-dark.png", .Widgets, .Dark},
 		{"gallery-charts-dark.png", .Charts, .Dark},
 		{"gallery-buttons-light.png", .Buttons, .Light},
@@ -87,6 +89,7 @@ when CAPTURE {
 	// The GIF script: every section in order using the default Ingot theme,
 	// then Terra so the motion shows both navigation and branded theming.
 	CAPTURE_SEQUENCE := [?]Capture_Shot {
+		{"", .Showcase, .Ingot},
 		{"", .Buttons, .Ingot},
 		{"", .Inputs, .Ingot},
 		{"", .Widgets, .Ingot},
@@ -106,6 +109,13 @@ when CAPTURE {
 	capture_state_frame: int
 	capture_state_applied: bool
 	capture_sequence_frame: int
+
+	// CAPTURE_STILL_YAW frames the planet's most detailed face for stills.
+	CAPTURE_STILL_YAW :: f32(0.6)
+	// CAPTURE_SEQUENCE_SPEED is the recorded spin in radians per captured
+	// frame, derived from the frame count rather than wall time so a slow
+	// machine records the same motion as a fast one.
+	CAPTURE_SEQUENCE_SPEED :: f32(0.004)
 
 	// capture_script returns the active shot table for the current pass.
 	capture_script :: proc() -> []Capture_Shot {
@@ -139,6 +149,18 @@ when CAPTURE {
 			capture_state_frame = 0
 		}
 		capture_state_frame += 1
+		capture_pin_showcase_yaw()
+	}
+
+	// capture_pin_showcase_yaw makes the planet deterministic: stills hold one
+	// yaw, and the sequence advances it per captured frame.
+	capture_pin_showcase_yaw :: proc() {
+		assert(capture_state_frame >= 0, "capture_pin_showcase_yaw: negative frame")
+		if !capture_sequence {
+			showcase.fixed_yaw = CAPTURE_STILL_YAW
+			return
+		}
+		showcase.fixed_yaw = f32(capture_sequence_frame) * CAPTURE_SEQUENCE_SPEED
 	}
 
 	// capture_replay_animations rewinds the caller-owned animation state so each
@@ -263,6 +285,8 @@ when CAPTURE {
 		sequence_flag := os.get_env("INGOT_CAPTURE_SEQUENCE", context.allocator)
 		defer delete(sequence_flag)
 		capture_sequence = sequence_flag != ""
+		// The capture loop owns a real renderer, so the planet renders live.
+		showcase.gpu_enabled = true
 
 		flags: rl.ConfigFlags = {.WINDOW_RESIZABLE, .VSYNC_HINT}
 		when ODIN_OS == .Darwin do flags += {.WINDOW_HIGHDPI}

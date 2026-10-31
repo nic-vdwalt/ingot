@@ -2,6 +2,7 @@
 package main
 
 import "core:testing"
+import "ingot:examples/gallery/imsh"
 import fit "ingot:fit"
 
 Gallery_Pilot_Test_State :: struct {
@@ -206,7 +207,7 @@ gallery_buttons_click_before_keyboard_focus :: proc(t: ^testing.T) {
 @(test)
 nav_strip_respects_scaled_width_and_sidebar_height :: proc(t: ^testing.T) {
 	scales := [?]f32{0.5, 1, 1.5, 2, 3}
-	heights := [?]i32{221, 440, 659, 878, 1316}
+	heights := [?]i32{290, 578, 866, 1154, 1730}
 	for scale, index in scales {
 		minimum := nav_sidebar_min_height_scale(scale)
 		testing.expect_value(t, minimum, heights[index])
@@ -247,15 +248,197 @@ nav_strip_never_pushes_content_below_zero :: proc(t: ^testing.T) {
 
 @(test)
 gallery_contract_keeps_sections_geometry_and_stress_scale :: proc(t: ^testing.T) {
-	testing.expect_value(t, len(Section), 9)
+	testing.expect_value(t, len(Section), 10)
 	testing.expect_value(t, len(Palette), 10)
 	testing.expect_value(t, palette, Palette.Ingot)
 	testing.expect_value(t, len(SECTION_NAMES), len(Section))
 	testing.expect_value(t, len(SECTION_LAYERS), len(Section))
 	testing.expect_value(t, len(SECTION_AXES), len(Section))
+	testing.expect_value(t, len(SECTION_BLURBS), len(Section))
+	testing.expect_value(t, len(SECTION_ICONS), len(Section))
+	testing.expect_value(t, len(SECTION_GROUPS), len(Section))
+	testing.expect_value(t, Section(0), Section.Showcase)
 	testing.expect_value(t, NARROW_WIDTH_MAX, 640)
-	testing.expect_value(t, NAV_W, 170)
+	testing.expect_value(t, NAV_W, 200)
 	testing.expect_value(t, NAV_STRIP_ROW_H, 34)
-	testing.expect_value(t, NAV_STRIP_CELL_W, 92)
+	testing.expect_value(t, NAV_STRIP_CELL_W, 116)
 	testing.expect_value(t, STRESS_BUTTONS, 1000)
+}
+
+GALLERY_TEST_INPUT :: fit.Test_Input {
+	screen_size = {900, 700},
+	dpi_scale   = 1,
+	frame_time  = 1.0 / 60.0,
+}
+
+@(private = "file")
+gallery_showcase_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
+	fit.canvas(builder, gallery_showcase_test_render, user_data)
+}
+
+@(private = "file")
+gallery_showcase_test_render :: proc(
+	surface: ^fit.Surface,
+	rect: fit.Rect,
+	user_data: rawptr,
+) -> bool {
+	_ = user_data
+	_ = draw_showcase(surface, rect.x, rect.y, rect.w)
+	return false
+}
+
+// Test_Driver has no renderer, so the Showcase must fall back to its
+// placeholder and report why rather than touching gfx.
+@(test)
+gallery_showcase_renders_placeholder_without_gpu :: proc(t: ^testing.T) {
+	driver: fit.Test_Driver
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
+	saved := showcase
+	defer showcase = saved
+	showcase = {}
+	testing.expect(
+		t,
+		fit.test_driver_frame(&driver, GALLERY_TEST_INPUT, gallery_showcase_test_draw, nil),
+	)
+	testing.expect(t, showcase.attempted, "first Showcase frame attempts the load")
+	testing.expect_value(t, showcase.load_error, Showcase_Load_Error.Disabled)
+	testing.expect(t, !showcase_ready(&showcase))
+	summary := fit.test_driver_paint_summary(&driver)
+	testing.expect(t, summary.main_text_bytes > 0, "placeholder and info text draw")
+}
+
+@(private = "file")
+gallery_explore_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
+	fit.canvas(builder, gallery_explore_test_render, user_data)
+}
+
+@(private = "file")
+gallery_explore_test_render :: proc(
+	surface: ^fit.Surface,
+	rect: fit.Rect,
+	user_data: rawptr,
+) -> bool {
+	_ = user_data
+	_ = draw_showcase_explore(surface, rect.x, rect.y, 400)
+	return false
+}
+
+@(test)
+gallery_explore_card_click_selects_section :: proc(t: ^testing.T) {
+	driver: fit.Test_Driver
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
+	saved := section
+	defer section = saved
+	section = .Showcase
+	input := GALLERY_TEST_INPUT
+	_ = fit.test_driver_frame(&driver, input, gallery_explore_test_draw, nil)
+	// At 400 px one card per row: the first card is Buttons, at the origin.
+	input.mouse_position = {20, 20}
+	input.mouse_pressed[0], input.mouse_down[0] = true, true
+	_ = fit.test_driver_frame(&driver, input, gallery_explore_test_draw, nil)
+	input.mouse_pressed[0], input.mouse_down[0], input.mouse_released[0] = false, false, true
+	_ = fit.test_driver_frame(&driver, input, gallery_explore_test_draw, nil)
+	testing.expect_value(t, section, Section.Buttons)
+}
+
+@(private = "file")
+gallery_palette_test_draw :: proc(builder: ^fit.Builder, user_data: rawptr) {
+	fit.canvas(builder, gallery_palette_test_render, user_data)
+}
+
+@(private = "file")
+gallery_palette_test_render :: proc(
+	surface: ^fit.Surface,
+	rect: fit.Rect,
+	user_data: rawptr,
+) -> bool {
+	_ = rect
+	_ = user_data
+	draw_gallery_palette(surface)
+	return false
+}
+
+@(test)
+gallery_palette_shortcut_filters_and_navigates :: proc(t: ^testing.T) {
+	driver: fit.Test_Driver
+	fit.test_driver_init(&driver)
+	defer fit.test_driver_destroy(&driver)
+	saved_section := section
+	defer section = saved_section
+	defer palette_destroy()
+	section = .Showcase
+	command_palette_open = false
+
+	shortcut := GALLERY_TEST_INPUT
+	shortcut.keys_down[int(fit.Key.Left_Control)] = true
+	shortcut.keys_pressed[int(fit.Key.K)] = true
+	_ = fit.test_driver_frame(&driver, shortcut, gallery_palette_test_draw, nil)
+	testing.expect(t, command_palette_open, "Ctrl+K opens the palette")
+
+	typed := GALLERY_TEST_INPUT
+	for r, index in "charts" do typed.characters[index] = r
+	typed.character_count = len("charts")
+	_ = fit.test_driver_frame(&driver, typed, gallery_palette_test_draw, nil)
+	testing.expect_value(t, command_palette_state.match_count, 1)
+
+	enter := GALLERY_TEST_INPUT
+	enter.keys_pressed[int(fit.Key.Enter)] = true
+	_ = fit.test_driver_frame(&driver, enter, gallery_palette_test_draw, nil)
+	testing.expect_value(t, section, Section.Charts)
+	testing.expect(t, !command_palette_open, "activation closes the palette")
+}
+
+@(test)
+gallery_palette_items_cover_every_section_once :: proc(t: ^testing.T) {
+	palette_items_build()
+	for s in Section {
+		found := 0
+		for item in palette_items {
+			if item.command == palette_section_command(s) do found += 1
+		}
+		testing.expect_value(t, found, 1)
+	}
+}
+
+@(test)
+gallery_model_asset_decodes_and_rejects_corruption :: proc(t: ^testing.T) {
+	vertices, indices, info, err := showcase_decode(PLANET_MESH)
+	defer delete(vertices)
+	defer delete(indices)
+	testing.expect_value(t, err, imsh.Error.None)
+	testing.expect_value(t, len(vertices), int(info.vertex_count))
+	testing.expect_value(t, len(indices), int(info.index_count))
+	testing.expect(t, info.index_count / 3 > 10_000, "planet keeps real detail")
+	for index in indices do testing.expect(t, index < info.vertex_count)
+
+	mesh := make([]u8, len(PLANET_MESH), context.temp_allocator)
+	copy(mesh, PLANET_MESH)
+	_, _, _, truncated := showcase_decode(mesh[:len(mesh) - 2])
+	testing.expect_value(t, truncated, imsh.Error.Size_Mismatch)
+	mesh[1] = 'X'
+	_, _, _, magic := showcase_decode(mesh)
+	testing.expect_value(t, magic, imsh.Error.Bad_Magic)
+}
+
+@(test)
+gallery_reduced_motion_stops_planet_rotation :: proc(t: ^testing.T) {
+	saved := reduced_motion
+	defer reduced_motion = saved
+	state := Showcase_State {
+		attempted   = true,
+		auto_rotate = true,
+		speed       = SHOWCASE_SPEED_DEFAULT,
+	}
+	reduced_motion = false
+	testing.expect(t, showcase_animating(&state), "rotating planet keeps requesting frames")
+	reduced_motion = true
+	testing.expect(t, !showcase_animating(&state), "reduced motion stops the spin")
+	reduced_motion = false
+	state.fixed_yaw = f32(0.6)
+	testing.expect(t, !showcase_animating(&state), "a pinned capture yaw never animates")
+	state.fixed_yaw = nil
+	state.auto_rotate = false
+	testing.expect(t, !showcase_animating(&state), "paused planet lets the gallery idle")
 }

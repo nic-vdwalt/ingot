@@ -155,6 +155,11 @@ fi
 # -disable-assert is deliberately NOT used either: it would buy another 1.7%
 # while removing every Tiger Style assertion from the shipped demo, which is
 # exactly the diagnostic signal we want when a browser kills the tab.
+#
+# Since the Showcase page, the gallery also #loads about 1.06 MB of cooked
+# assets (planet.imsh 816,438 B + planet_albedo.jpg 243,956 B), so its wasm is
+# larger than the figures above by roughly that amount. Measured after that
+# change with the default flags: 3,484,010 bytes for examples/gallery.
 # The gallery phone peak is 26,964 vertices / 31,374 indices; these capacities
 # retain more than 4x headroom while halving the resident WASM batch arrays.
 # shellcheck disable=SC2086

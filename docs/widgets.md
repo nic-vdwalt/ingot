@@ -36,7 +36,14 @@ explicit geometry or bounded begin/end protocols:
 - `Virtual_List_Begin`, `Virtual_List_Row`, `Virtual_List_End`
 - `Split_Pane`
 - `Tree`
-- command-palette filtering and caller-owned palette state
+- command palettes: `fit.surface_command_palette` / `ui.command_palette_draw`
+  draw the modal, query field, and keyboard flow over caller-owned palette state
+- navigation rows: `ui.nav_item_at`, `ui.nav_item`, `fit.surface_nav_item`,
+  and `fit.region_nav_item` (icon, label, selected state, optional badge)
+- texture paint: `fit.surface_draw_texture` composites a caller-owned GPU
+  texture or render target into ordered UI paint
+- icons: `fit.surface_icon` draws any `ui.Icon`, including the navigation and
+  tool glyphs (Globe, Search, Command, Orbit, Sun, and others)
 - time parsing/formatting helpers
 - color hexadecimal parsing/formatting helpers
 

@@ -23,6 +23,12 @@
   <a href="https://openalloy.ai/demos/ingot-gallery/">Open the interactive WebAssembly/WebGPU gallery</a>
 </p>
 
+The gallery opens on a Showcase page: a cooked, slowly rotating 3D planet
+rendered through `ingot:gfx` GPU-3D and composited into the UI with the
+texture paint command, plus a Ctrl/Cmd+K command palette. Run
+`bash scripts/capture-media.sh` to regenerate the README media, including
+`docs/media/gallery-showcase-dark.png` and `docs/media/gallery-showcase-ingot.png`.
+
 Ingot is a immediate-mode framework built on Odin's bundled
 `vendor:wgpu`. Targeting macOS/Metal, Windows/D3D12, Linux/Vulkan,
 and browser WASM/WebGPU. GLFW is currently the default native host backend, but SDL3 is available with a build flag.

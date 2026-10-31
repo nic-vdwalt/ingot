@@ -332,7 +332,8 @@ encode_vertex :: proc(
 	uv_low, uv_high: [2]f32,
 ) {
 	assert(offset + VERTEX_SIZE <= len(out), "imsh.encode_vertex: out of range")
-	assert(finite(vertex.scalar), "imsh.encode_vertex: non-finite scalar")
+	scalar_finite := finite(vertex.scalar)
+	assert(scalar_finite, "imsh.encode_vertex: non-finite scalar")
 	for axis in 0 ..< 3 {
 		raw := quantize_unorm16(vertex.position[axis], low[axis], high[axis])
 		_ = endian.put_u16(out[offset + 2 * axis:], .Little, raw)

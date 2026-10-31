@@ -15,8 +15,9 @@
 //     as native Builder leaves.
 //   - Explicit UI stays inside named islands where geometry or lifecycle is
 //     behavior: panes, charts, layout, overlays, listboxes, and the stress grid.
-//   - ingot:gfx is absent from this application UI; capture.odin alone uses it
-//     for the render-target and PNG capabilities missing from UI paint.
+//   - ingot:gfx appears in showcase.odin, which renders the planet viewport
+//     with gfx GPU-3D and composites it through fit.surface_draw_texture, and
+//     in capture.odin for render-target PNG capture.
 //   - Facade dimensions are logical and scale once; anything handed to a *_at
 //     entry point is already physical, so it goes through frame_sc first.
 package main
@@ -38,6 +39,7 @@ SMOKE :: #config(INGOT_SMOKE, false)
 CAPTURE :: #config(INGOT_CAPTURE, false)
 
 Section :: enum {
+	Showcase,
 	Buttons,
 	Inputs,
 	Widgets,
@@ -50,6 +52,7 @@ Section :: enum {
 }
 
 SECTION_NAMES := [Section]string {
+	.Showcase = "Showcase",
 	.Buttons  = "Buttons",
 	.Inputs   = "Inputs",
 	.Widgets  = "Widgets",
@@ -62,6 +65,7 @@ SECTION_NAMES := [Section]string {
 }
 
 SECTION_LAYERS := [Section]string {
+	.Showcase = "GPU 3D + FACADE",
 	.Buttons  = "FACADE LEAVES",
 	.Inputs   = "FACADE LEAVES",
 	.Widgets  = "FACADE + COMPOSITION",
@@ -74,6 +78,7 @@ SECTION_LAYERS := [Section]string {
 }
 
 SECTION_AXES := [Section]string {
+	.Showcase = "texture paint primitive",
 	.Buttons  = "framework owns geometry",
 	.Inputs   = "framework owns geometry",
 	.Widgets  = "geometry and lifecycle owner",
@@ -85,7 +90,68 @@ SECTION_AXES := [Section]string {
 	.Theme    = "palette and token resolution",
 }
 
-NAV_W :: 170
+// SECTION_BLURBS is the one-line "what this shows" caption under each
+// section title and on the Showcase explore cards.
+SECTION_BLURBS := [Section]string {
+	.Showcase = "A cooked planet rendered by a GPU-3D pass and composited into UI paint.",
+	.Buttons  = "Button styles, icon and back buttons, keyboard focus, collapsible headers.",
+	.Inputs   = "Caret-aware text inputs with undo and pills, combobox, date picker.",
+	.Widgets  = "Toggles, sliders, tabs, progress, spinners, and listboxes.",
+	.Charts   = "Line, bar, and sparkline charts with enter animations.",
+	.Markdown = "Measured markdown with tables, code blocks, and links.",
+	.Layout   = "Rows, weights, flex tracks, flow, grids, and vertical cursors.",
+	.Overlay  = "Modals, popups, and docked panels with z-ordered input routing.",
+	.Stress   = "A thousand culled buttons to keep paint and layout cost honest.",
+	.Theme    = "Pigments, surface states, inks, and tokens for every palette.",
+}
+
+SECTION_ICONS := [Section]fit.Icon {
+	.Showcase = .Globe,
+	.Buttons  = .Pointer,
+	.Inputs   = .Text_Cursor,
+	.Widgets  = .Sliders,
+	.Charts   = .Bar_Chart,
+	.Markdown = .Document,
+	.Layout   = .Layout_Grid,
+	.Overlay  = .Layers,
+	.Stress   = .Gauge,
+	.Theme    = .Swatch,
+}
+
+// Nav_Group orders the sidebar headings. Sections inside a group keep enum
+// order, so adding a section means choosing its group here and nothing else.
+Nav_Group :: enum {
+	Start,
+	Controls,
+	Content,
+	Composition,
+	System,
+}
+
+NAV_GROUP_NAMES := [Nav_Group]string {
+	.Start       = "START",
+	.Controls    = "CONTROLS",
+	.Content     = "CONTENT",
+	.Composition = "COMPOSITION",
+	.System      = "SYSTEM",
+}
+
+SECTION_GROUPS := [Section]Nav_Group {
+	.Showcase = .Start,
+	.Buttons  = .Controls,
+	.Inputs   = .Controls,
+	.Widgets  = .Controls,
+	.Charts   = .Content,
+	.Markdown = .Content,
+	.Layout   = .Composition,
+	.Overlay  = .Composition,
+	.Stress   = .System,
+	.Theme    = .System,
+}
+
+// Sidebar width: an icon column plus the longest section name ("Composition"
+// group headings, "Showcase") without truncation at 1x.
+NAV_W :: 200
 
 // Below this logical width the sidebar is not affordable: a portrait phone is
 // about 390 CSS px, and 170 of those (44%) would leave 168 px of content once
@@ -94,7 +160,7 @@ NARROW_WIDTH_MAX :: 640
 // Strip geometry. The row height is a comfortable touch target rather than a
 // desktop button height; the cell width fits the longest section name.
 NAV_STRIP_ROW_H :: 34
-NAV_STRIP_CELL_W :: 92
+NAV_STRIP_CELL_W :: 116
 NAV_SIDEBAR_ROW_H :: 28
 // The strip may take at most 1/NAV_STRIP_HEIGHT_SHARE_DEN of the height under
 // the header. At 200% on a 390px phone the full grid is one column of nine
@@ -149,7 +215,7 @@ PALETTE_NAMES := [Palette]string {
 palette := Palette.Ingot
 reduced_motion := false
 initial_theme_pending := false
-section := Section.Buttons
+section := Section.Showcase
 debug_on := false
 gallery_root: fit.Rect
 
@@ -338,6 +404,9 @@ main :: proc() {
 		capture_main()
 	} else {
 		initial_theme_pending = true
+		// The live GPU-3D viewport needs a renderer; fit.Test_Driver has none,
+		// so only the real app turns it on and tests see the placeholder.
+		showcase.gpu_enabled = true
 		_ = fit.run(
 			&app,
 			{
@@ -400,6 +469,7 @@ gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, user_data: rawptr) 
 	narrow := nav_uses_strip(surface, sw, sh - header_h)
 	nav_h := draw_nav(surface, header_h, sw, sh, narrow)
 	draw_content(surface, sw, header_h + nav_h, sh, narrow)
+	draw_gallery_palette(surface)
 
 	if settings_open {
 		res := fit.surface_scale_settings(surface, &settings_sel, stored_scale, sw, sh)
@@ -425,6 +495,8 @@ gallery_frame :: proc(surface: ^fit.Surface, root: fit.Rect, user_data: rawptr) 
 
 shutdown :: proc() {
 	input_state_destroy(&input_state)
+	showcase_destroy(&showcase)
+	palette_destroy()
 }
 
 apply_scale :: proc(scale: f32) {
@@ -440,14 +512,22 @@ gallery_scaled :: proc(value: i32, scale: f32) -> i32 {
 	return i32(f32(value) * scale + 0.5)
 }
 
+// nav_sidebar_min_height_scale mirrors draw_nav's stack: brand line, region
+// padding, separator, Search row, one heading per group, one row per section,
+// then the pinned footer (hairline, padding, icon row, padding). Below it the
+// sidebar would overlap its own footer, so the strip takes over instead.
 nav_sidebar_min_height_scale :: proc(scale: f32) -> i32 {
 	padding := gallery_scaled(8, scale)
 	gap := gallery_scaled(4, scale)
 	row_h := gallery_scaled(NAV_SIDEBAR_ROW_H, scale)
 	line_height := gallery_scaled(22, scale)
-	row_count := i32(len(Section) + len(Nav_Control))
-	item_count := row_count + 3
-	return padding * 3 + line_height + 2 + row_count * row_h + (item_count - 1) * gap
+	headings := i32(len(Nav_Group))
+	sections := i32(len(Section))
+	brand := padding + line_height
+	body := padding * 2 + 1 + gap + row_h + gap + headings * (line_height + gap)
+	rows := sections * (row_h + gap)
+	footer := 1 + padding * 2 + row_h
+	return brand + body + rows + footer
 }
 
 nav_uses_strip_scale :: proc(scale: f32, width, available_height: i32) -> bool {
@@ -533,16 +613,35 @@ nav_select_section :: proc(s: Section) {
 // lost Motion. Adding a fifth control now lands in both layouts by
 // construction.
 Nav_Control :: enum {
+	Search,
 	Theme,
 	Motion,
 	Scale,
 }
+
+NAV_CONTROL_ICONS := [Nav_Control]fit.Icon {
+	.Search = .Search,
+	.Theme  = .Swatch,
+	.Motion = .Motion,
+	.Scale  = .Zoom,
+}
+
+// The shortcut hint shown on the Search row. Apple keyboards say Cmd; the
+// browser build cannot know the host, so it shows the portable Ctrl form.
+NAV_SEARCH_BADGE :: "Cmd K" when ODIN_OS == .Darwin else "Ctrl K"
+
+// command_palette_open is the caller-owned visibility of the Ctrl/Cmd+K
+// palette. The sidebar Search row, the strip control, and the shortcut all
+// set it; the palette clears it when it closes.
+command_palette_open := false
 
 // nav_control_label returns the button text for a control. `compact` selects
 // the short form the narrow strip needs, where a full sentence would not fit
 // a phone-width cell. Pure: no frame, no side effects.
 nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
 	switch control {
+	case .Search:
+		return "Search" if compact else "Search sections and actions"
 	case .Theme:
 		// Naming the palette you are *in*, not the one the button leads to.
 		//
@@ -574,6 +673,8 @@ nav_control_label :: proc(control: Nav_Control, compact: bool) -> string {
 nav_control_activate :: proc(control: Nav_Control, surface: ^fit.Surface) {
 	assert(surface != nil, "nav_control_activate: nil surface")
 	switch control {
+	case .Search:
+		command_palette_open = true
 	case .Theme:
 		// No force-clear needed: high contrast is a palette now, so choosing
 		// another one leaves it by construction rather than by cleanup.
@@ -595,41 +696,101 @@ draw_nav :: proc(surface: ^fit.Surface, top, sw, sh: i32, narrow: bool) -> i32 {
 	theme := fit.get_theme_tokens(surface)
 	fit.fill_rect(surface, fit.Rect{0, top, w, sh - top}, theme.background_secondary)
 	fit.fill_rect(surface, fit.Rect{w - 1, top, 1, sh - top}, theme.border_subtle)
-
-	region: fit.Region
-	u := fit.region_open(
-		surface,
-		&region,
-		{0, top, w, sh - top},
-		{gap = .XS, scope = "navigation"},
-	)
-	fit.region_padding(u, .SM)
-	fit.region_label(&region, "ingot gallery", .Title)
-	fit.region_separator(&region)
-	for s in Section {
-		style := fit.Button_Style.Primary if s == section else .Ghost
-		fit.region_flex_row_begin(u, NAV_SIDEBAR_ROW_H, {fit.grow()})
-		if fit.region_button(u, SECTION_NAMES[s], SECTION_NAMES[s], style) {
-			nav_select_section(s)
-		}
-		fit.region_flex_row_end(u)
+	pad := fit.px(surface, 8)
+	row_h := fit.px(surface, NAV_SIDEBAR_ROW_H)
+	line_h := fit.get_metrics(surface).line_height
+	draw_nav_brand(surface, {pad, top + pad, w - pad * 2, line_h})
+	footer_top := sh - (1 + pad * 2 + row_h)
+	body_top := top + pad + line_h
+	if footer_top > body_top {
+		draw_nav_sections(surface, {0, body_top, w - 1, footer_top - body_top})
 	}
-	fit.region_space(u, .SM)
+	draw_nav_footer(surface, {0, footer_top, w - 1, sh - footer_top})
+	return 0
+}
+
+// draw_nav_brand is the sidebar's identity line: the accent orbit mark and
+// the gallery name, sized by the Title role rather than a literal.
+draw_nav_brand :: proc(surface: ^fit.Surface, rect: fit.Rect) {
+	assert(surface != nil, "draw_nav_brand: nil surface")
+	assert(rect.h > 0, "draw_nav_brand: empty rect")
+	if rect.w <= 0 do return
+	side := min(fit.px(surface, 18), rect.h)
+	fit.surface_icon(surface, .Orbit, {rect.x, rect.y + (rect.h - side) / 2, side, side}, .Accent)
+	text_x := rect.x + side + fit.px(surface, 8)
+	text_w := max(rect.x + rect.w - text_x, 0)
+	fit.surface_text_truncated(surface, "ingot gallery", text_x, rect.y, text_w, .Title, .Heading)
+}
+
+// draw_nav_sections lists the Search row, then each Nav_Group heading with
+// its sections in enum order. Every row is a nav item, so the selected
+// section is both visually marked and announced as selected.
+draw_nav_sections :: proc(surface: ^fit.Surface, rect: fit.Rect) {
+	assert(surface != nil, "draw_nav_sections: nil surface")
+	assert(rect.w > 0 && rect.h > 0, "draw_nav_sections: empty rect")
+	region: fit.Region
+	u := fit.region_open(surface, &region, rect, {gap = .XS, scope = "navigation"})
+	fit.region_padding(u, .SM)
 	fit.region_separator(u)
-	for control in Nav_Control {
-		fit.region_flex_row_begin(u, NAV_SIDEBAR_ROW_H, {fit.grow()})
-		if fit.region_button(u, NAV_CONTROL_IDS[control], nav_control_label(control, false)) {
-			nav_control_activate(control, surface)
+	search := Nav_Control.Search
+	label := nav_control_label(search, true)
+	if fit.region_nav_item(u, NAV_CONTROL_IDS[search], .Search, label, false, NAV_SEARCH_BADGE) {
+		nav_control_activate(search, surface)
+	}
+	for group in Nav_Group {
+		fit.region_label(u, NAV_GROUP_NAMES[group], .Note, .Muted)
+		for s in Section {
+			if SECTION_GROUPS[s] != group do continue
+			name := SECTION_NAMES[s]
+			if fit.region_nav_item(u, name, SECTION_ICONS[s], name, s == section) {
+				nav_select_section(s)
+			}
 		}
-		fit.region_flex_row_end(u)
 	}
 	_ = fit.region_close(u)
-	return 0
+}
+
+// draw_nav_footer pins the appearance controls to the bottom edge as icon
+// buttons, with the active palette named beside them. Labels come from
+// nav_control_label so the accessible names match the strip's buttons.
+draw_nav_footer :: proc(surface: ^fit.Surface, rect: fit.Rect) {
+	assert(surface != nil, "draw_nav_footer: nil surface")
+	assert(rect.w >= 0 && rect.h >= 0, "draw_nav_footer: negative rect")
+	if rect.w <= 0 || rect.h <= 1 do return
+	theme := fit.get_theme_tokens(surface)
+	fit.fill_rect(surface, fit.Rect{rect.x, rect.y, rect.w, 1}, theme.border_subtle)
+	pad := fit.px(surface, 8)
+	side := fit.px(surface, NAV_SIDEBAR_ROW_H)
+	x := rect.x + pad
+	y := rect.y + 1 + pad
+	for control in Nav_Control {
+		if control == .Search do continue
+		widget := fit.Widget_Id(0x1100 + u64(control))
+		label := nav_control_label(control, false)
+		button := fit.Rect{x, y, side, side}
+		if fit.surface_icon_button(surface, widget, NAV_CONTROL_ICONS[control], label, button) {
+			nav_control_activate(control, surface)
+		}
+		x += side + fit.px(surface, 4)
+	}
+	note_w := rect.x + rect.w - pad - (x + pad)
+	if note_w <= 0 do return
+	note_y := y + (side - fit.get_metrics(surface).line_height) / 2
+	fit.surface_text_truncated(
+		surface,
+		PALETTE_NAMES[palette],
+		x + pad,
+		note_y,
+		note_w,
+		.Note,
+		.Muted,
+	)
 }
 
 // Stable widget identities for the shared controls. Derived from the enum so a
 // new control cannot be added without one.
 NAV_CONTROL_IDS := [Nav_Control]string {
+	.Search = "search",
 	.Theme  = "theme",
 	.Motion = "motion",
 	.Scale  = "scale",
@@ -723,10 +884,10 @@ draw_nav_strip_sections :: proc(
 		return fit.grid_end(&grid)
 	}
 	for s in Section {
-		style := fit.Button_Style.Primary if s == section else .Ghost
 		rect := fit.grid_next(&grid)
 		widget := fit.Widget_Id(0x2000 + u64(s))
-		if fit.surface_button(surface, widget, SECTION_NAMES[s], rect, style) {
+		name := SECTION_NAMES[s]
+		if fit.surface_nav_item(surface, widget, SECTION_ICONS[s], name, s == section, rect) {
 			nav_select_section(s)
 		}
 	}
@@ -824,10 +985,12 @@ draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
 		fit.pane_end(surface, &content_pane, pane_rect, y, padding = 14)
 		return
 	}
-	y = draw_section_layer(surface, cx, y, cw)
+	y = draw_section_intro(surface, cx, y, cw)
 
 	end_y: i32
 	switch section {
+	case .Showcase:
+		end_y = draw_showcase(surface, cx, y, cw)
 	case .Buttons:
 		end_y = draw_buttons(surface, cx, y, cw)
 	case .Inputs:
@@ -862,17 +1025,53 @@ draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
 	fit.pane_end(surface, &content_pane, pane_rect, end_y, padding = 14)
 }
 
-draw_section_layer :: proc(surface: ^fit.Surface, x, y, w: i32) -> i32 {
-	assert(surface != nil, "draw_section_layer: nil surface")
-	band := fit.get_metrics(surface).line_height * 2
+// draw_section_intro is the one header every section shares: icon and title,
+// the "what this shows" blurb, then the API-layer pill with its ownership
+// axis. Heights derive from text metrics and the wrapped blurb, so the band
+// fits at every scale without a literal.
+draw_section_intro :: proc(surface: ^fit.Surface, x, y, w: i32) -> i32 {
+	assert(surface != nil, "draw_section_intro: nil surface")
+	assert(w > 0, "draw_section_intro: empty width")
+	metrics := fit.get_metrics(surface)
+	gap := fit.px(surface, 6)
+	title_h := metrics.line_height + fit.px(surface, 4)
+	side := min(fit.px(surface, 22), title_h)
+	fit.surface_icon(
+		surface,
+		SECTION_ICONS[section],
+		{x, y + (title_h - side) / 2, side, side},
+		.Accent,
+	)
+	title_x := x + side + fit.px(surface, 10)
+	title_w := max(x + w - title_x, 0)
+	fit.surface_text_truncated(
+		surface,
+		SECTION_NAMES[section],
+		title_x,
+		y,
+		title_w,
+		.Title,
+		.Heading,
+	)
+	cursor := y + title_h + gap
+	blurb := SECTION_BLURBS[section]
+	body_line := metrics.line_height
+	blurb_h := fit.surface_text_wrapped_height(surface, blurb, w, metrics.font_body, body_line)
+	color := fit.surface_theme_color(surface, .Secondary)
+	fit.surface_text_wrapped(surface, blurb, x, cursor, w, color, metrics.font_body, body_line)
+	cursor += blurb_h + gap
+	pill_h := fit.px(surface, 28)
 	region: fit.Region
-	fit.surface_region_begin(surface, &region, {x, y, w, band}, gap = .XS)
+	fit.surface_region_begin(surface, &region, {x, cursor, w, pill_h}, gap = .XS)
 	fit.region_row_begin(&region, 28, gap = .SM, align = .Center)
 	_ = fit.region_status_pill(&region, SECTION_LAYERS[section], .Accent)
-	fit.region_label(&region, SECTION_AXES[section], .Body, .Secondary)
+	fit.region_label(&region, SECTION_AXES[section], .Note, .Muted)
 	fit.region_row_end(&region)
 	_ = fit.surface_region_end(&region)
-	return y + band
+	cursor += pill_h + fit.px(surface, 10)
+	theme := fit.get_theme_tokens(surface)
+	fit.fill_rect(surface, fit.Rect{x, cursor, w, 1}, theme.border_subtle)
+	return cursor + 1 + fit.px(surface, 14)
 }
 
 draw_buttons :: proc(surface: ^fit.Surface, x, y0, w: i32) -> i32 {
