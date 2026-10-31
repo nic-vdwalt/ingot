@@ -106,6 +106,26 @@ frame_draw_rectangle_gradient_v :: proc(frame: ^Frame, rect: Rectangle, top, bot
 	context_draw_rectangle_gradient_v(frame_owner(frame), rect, top, bottom)
 }
 
+// frame_draw_texture_pro is the frame-seam texture draw used by UI paint
+// replay. `source` is in texture pixels; a negative height flips vertically
+// (BeginTextureMode targets need that, GPU-3D targets do not). A 3D pass must
+// be closed first because its target may be the texture sampled here, and the
+// batch would otherwise bind an attachment that is still being written.
+frame_draw_texture_pro :: proc(
+	frame: ^Frame,
+	texture: Texture2D,
+	source, dest: Rectangle,
+	tint: Color,
+) {
+	ctx := frame_owner(frame)
+	assert(
+		ctx.resources.gpu_3d.active_pass_generation == 0,
+		"frame_draw_texture_pro: active GPU 3D pass",
+	)
+	assert(source.width != 0 && source.height != 0, "frame_draw_texture_pro: empty source")
+	context_draw_texture_pro(ctx, texture, source, dest, {}, 0, tint)
+}
+
 frame_draw_line :: proc(frame: ^Frame, from, to: Vector2, thickness: f32, color: Color) {
 	context_draw_line(frame_owner(frame), from, to, thickness, color)
 }

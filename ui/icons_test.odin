@@ -72,3 +72,33 @@ unsupported_private_use_glyph_is_reported :: proc(t: ^testing.T) {
 	ui_frame_end(&frame)
 	ui_frame_destroy(&frame)
 }
+
+@(test)
+every_icon_emits_geometry_at_each_scale :: proc(t: ^testing.T) {
+	for scale in ([2]f32{1, 2}) {
+		runtime: Ui_Runtime
+		ui_runtime_init(&runtime)
+		ui_runtime_set_scale(&runtime, scale)
+		output := new(Ui_Output)
+		frame := Ui_Frame {
+			output = output,
+		}
+		ui_frame_begin(&frame, &runtime)
+		for icon in Icon {
+			before := output.main.count
+			draw_icon_frame(&frame, icon, {4, 4, i32(24 * scale), i32(24 * scale)}, {9, 9, 9, 255})
+			testing.expectf(t, output.main.count > before, "%v emits geometry at %v", icon, scale)
+			for index in before ..< output.main.count {
+				kind := output.main.commands[index].kind
+				testing.expect(t, kind != .Text && kind != .Codepoint, "icons never emit text")
+			}
+		}
+		before := output.main.count
+		draw_icon_frame(&frame, .Globe, {0, 0, 0, 0}, {9, 9, 9, 255})
+		testing.expect_value(t, output.main.count, before)
+		ui_frame_end(&frame)
+		ui_frame_destroy(&frame)
+		free(output)
+		ui_runtime_destroy(&runtime)
+	}
+}

@@ -583,3 +583,79 @@ table_tracks :: proc(columns: []Table_Column, buffer: []Track) -> []Track {
 	for column, index in columns do buffer[index] = column.track
 	return buffer[:len(columns)]
 }
+
+// surface_nav_item draws one navigation row at `rect`: accent bar when
+// selected, icon, truncated label, optional muted badge. Semantics carry
+// .Selected so the current section is announced.
+surface_nav_item :: proc(
+	surface: ^Surface,
+	widget: Widget_Id,
+	icon: Icon,
+	label: string,
+	selected: bool,
+	rect: Rect,
+	badge: string = "",
+) -> bool {
+	u := surface_ui(surface)
+	assert(widget != Widget_Id(0), "fit.surface_nav_item: zero widget")
+	assert(label != "", "fit.surface_nav_item: empty label")
+	return ui.nav_item_at(
+		u.frame,
+		rect,
+		icon,
+		label,
+		selected,
+		badge,
+		widget = ui.Widget_Id(widget),
+	)
+}
+
+region_nav_item_id :: proc(
+	region: ^Region,
+	widget: Widget_Id,
+	icon: Icon,
+	label: string,
+	selected: bool,
+	badge: string = "",
+) -> bool {
+	assert(region != nil && region.inner.open, "fit.region_nav_item: region not open")
+	return ui.nav_item(&region.inner, ui.Widget_Id(widget), icon, label, selected, badge)
+}
+
+region_nav_item_string :: proc(
+	region: ^Region,
+	key: string,
+	icon: Icon,
+	label: string,
+	selected: bool,
+	badge: string = "",
+) -> bool {
+	return region_nav_item_id(region, region_id(region, key), icon, label, selected, badge)
+}
+
+region_nav_item :: proc {
+	region_nav_item_string,
+	region_nav_item_id,
+}
+
+// surface_command_palette draws an open palette as a modal and returns the
+// activated command (or dismissal). `open`, the palette state, and the modal
+// are caller-owned; the palette closes itself and clears its query on either
+// outcome.
+surface_command_palette :: proc(
+	surface: ^Surface,
+	state: ^Command_Palette_State,
+	modal: ^Modal_State,
+	items: []Command_Palette_Item,
+	open: ^bool,
+	options: Command_Palette_Options = {},
+) -> Command_Palette_Result {
+	u := surface_ui(surface)
+	assert(state != nil && modal != nil, "fit.surface_command_palette: nil state")
+	assert(open != nil, "fit.surface_command_palette: nil open flag")
+	return ui.command_palette_draw(u.frame, state, &modal.inner, items, open, options)
+}
+
+command_palette_state_destroy :: proc(state: ^Command_Palette_State) {
+	ui.command_palette_state_destroy(state)
+}

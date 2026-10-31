@@ -147,3 +147,25 @@ surface_pane_origin_pop :: proc(surface: ^Surface) {
 	u := surface_ui(surface)
 	ui.ui_frame_pane_pop(u.frame)
 }
+
+// surface_draw_texture samples a renderer texture id (for example
+// gfx.gpu_3d_target_color_texture(&target).id) into `dest`. `source` is in
+// texture pixels: GPU-3D targets use a positive height, BeginTextureMode
+// targets a negative one. End any GPU-3D pass before calling this.
+surface_draw_texture :: proc(
+	surface: ^Surface,
+	texture: u32,
+	source, dest: Float_Rect,
+	tint: Color = {255, 255, 255, 255},
+) {
+	u := surface_ui(surface)
+	ui.draw_texture(u.frame, texture, source, dest, ui.Color(tint))
+}
+
+// surface_icon draws a vector icon resolved through a theme ink, so the glyph
+// follows every palette (including high contrast) without a literal color.
+surface_icon :: proc(surface: ^Surface, icon: Icon, rect: Rect, ink: Ink = .Primary) {
+	u := surface_ui(surface)
+	assert(rect.w >= 0 && rect.h >= 0, "fit.surface_icon: negative rect")
+	ui.draw_icon_frame(u.frame, icon, rect, ui.text_ink(u.frame, ink))
+}

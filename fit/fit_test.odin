@@ -1510,6 +1510,8 @@ fit_surface_input_focus_paint_contract_compiles :: proc(t: ^testing.T) {
 		surface_semantic
 	circle: proc(_: ^Surface, _: Point, _: f32, _: Color) = surface_fill_circle
 	clip: proc(_: ^Surface, _: Rect) = surface_clip_begin
+	texture: proc(_: ^Surface, _: u32, _: Float_Rect, _: Float_Rect, _: Color) =
+		surface_draw_texture
 	reserved: proc(
 			_: ^Surface,
 			_: Z_Order,
@@ -1522,7 +1524,7 @@ fit_surface_input_focus_paint_contract_compiles :: proc(t: ^testing.T) {
 	testing.expect(t, key_down != nil && key_repeat != nil)
 	testing.expect(t, characters != nil && clipboard != nil)
 	testing.expect(t, focus_id != nil && focus_link != nil && semantic != nil)
-	testing.expect(t, circle != nil && clip != nil && reserved != nil)
+	testing.expect(t, circle != nil && clip != nil && reserved != nil && texture != nil)
 }
 
 @(test)

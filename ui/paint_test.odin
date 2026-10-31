@@ -630,3 +630,69 @@ paint_sink_balances_clip_started_after_recording_saturates :: proc(t: ^testing.T
 	testing.expect_value(t, list.clip_count, 0)
 	testing.expect_value(t, list.clip_end_reserved, 0)
 }
+
+@(test)
+paint_texture_command_carries_source_and_applies_pane_origin :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	canvas_begin(&frame, {10, 20, 200, 100})
+	draw_texture(&frame, 7, {0, 0, 64, 32}, {5, 6, 40, 30}, {1, 2, 3, 4})
+	draw_texture(&frame, 7, {0, 0, 64, 32}, {5, 6, 0, 30}, {1, 2, 3, 4})
+	canvas_end(&frame)
+	ui_frame_end(&frame)
+	found := 0
+	for index in 0 ..< output.main.count {
+		command := output.main.commands[index]
+		if command.kind != .Texture do continue
+		found += 1
+		testing.expect_value(t, command.texture, u32(7))
+		testing.expect_value(t, command.rect, Rect{15, 26, 40, 30})
+		testing.expect_value(t, paint_texture_source(command), Rect{0, 0, 64, 32})
+		testing.expect_value(t, command.color, Color{1, 2, 3, 4})
+	}
+	// The zero-width destination is a degenerate drop, not a command.
+	testing.expect_value(t, found, 1)
+	testing.expect(t, frame.degenerate_drops >= 1)
+}
+
+@(test)
+paint_texture_command_counts_as_dropped_at_capacity :: proc(t: ^testing.T) {
+	list := new(Paint_List)
+	defer free(list)
+	list.count = PAINT_COMMAND_CAP
+	command := Paint_Command {
+		kind    = .Texture,
+		rect    = {0, 0, 4, 4},
+		p1      = {4, 4},
+		texture = 1,
+	}
+	testing.expect(t, !paint_push(list, command))
+	testing.expect_value(t, list.dropped_commands, 1)
+}
+
+@(test)
+paint_texture_command_follows_overlay_z_scope :: proc(t: ^testing.T) {
+	runtime: Ui_Runtime
+	ui_runtime_init(&runtime)
+	defer ui_runtime_destroy(&runtime)
+	output := new(Ui_Output)
+	defer free(output)
+	frame: Ui_Frame
+	frame.output = output
+	ui_frame_begin(&frame, &runtime)
+	z_scope_begin(&frame, Z_PANEL)
+	draw_texture(&frame, 3, {0, 0, 8, -8}, {0, 0, 8, 8}, {255, 255, 255, 255})
+	z_scope_end(&frame)
+	ui_frame_end(&frame)
+	testing.expect_value(t, output.main.count, 0)
+	testing.expect_value(t, output.overlay.count, 1)
+	testing.expect_value(t, output.overlay.commands[0].kind, Paint_Kind.Texture)
+	// Negative source height (render-texture flip) survives untouched.
+	testing.expect_value(t, paint_texture_source(output.overlay.commands[0]).height, f32(-8))
+}

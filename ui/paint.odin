@@ -71,6 +71,11 @@ Paint_Kind :: enum u8 {
 	Triangle,
 	Text,
 	Codepoint,
+	// Texture samples an opaque renderer texture id (`texture`) into `rect`.
+	// The pixel source rect rides in p0 (origin) and p1 (size) rather than a new
+	// Rect field, because every byte added here costs PAINT_COMMAND_CAP times
+	// two resident lists. A negative p1.y flips the source vertically.
+	Texture,
 	Clip_Begin,
 	Clip_End,
 }
@@ -101,6 +106,9 @@ Paint_Command :: struct {
 	text_offset:  int,
 	text_length:  int,
 	clip_restore: bool,
+	// Opaque renderer texture id for .Texture; zero for every other kind. `ui`
+	// never interprets it, so the package stays independent of gfx.
+	texture:      u32,
 }
 
 Paint_List :: struct {

@@ -19,7 +19,8 @@ paint_command_apply_pane :: proc(frame: ^Ui_Frame, command: ^Paint_Command) {
 	     .Rectangle_Outline,
 	     .Rectangle_Rounded,
 	     .Rectangle_Rounded_Outline,
-	     .Rectangle_Gradient_V:
+	     .Rectangle_Gradient_V,
+	     .Texture:
 		command.rect.x += origin.x
 		command.rect.y += origin.y
 	case .Line:
@@ -185,6 +186,37 @@ draw_rectangle_gradient_v :: proc(frame: ^Ui_Frame, x, y, width, height: i32, to
 			color_end = bottom,
 		},
 	)
+}
+
+// draw_texture samples an opaque renderer texture into `dest`. `source` is in
+// texture pixels; a negative height flips vertically. The id is never
+// interpreted here, so ui stays independent of the renderer: the backend that
+// owns the id resolves it at replay, and a stale id draws nothing there.
+draw_texture :: proc(frame: ^Ui_Frame, texture: u32, source, dest: Rect, tint: Color) {
+	assert(frame != nil && frame.open, "draw_texture: invalid frame")
+	assert(texture != 0, "draw_texture: zero texture id")
+	assert(source.width != 0 && source.height != 0, "draw_texture: empty source")
+	if ui_frame_drop_degenerate(frame, dest.width <= 0 || dest.height <= 0) do return
+	layout := Rect_I32{i32(dest.x), i32(dest.y), i32(dest.width) + 1, i32(dest.height) + 1}
+	if rect_culled_frame(frame, layout) do return
+	frame_paint_push(
+		frame,
+		{
+			kind = .Texture,
+			rect = dest,
+			p0 = {source.x, source.y},
+			p1 = {source.width, source.height},
+			color = tint,
+			texture = texture,
+		},
+	)
+}
+
+// paint_texture_source reassembles the pixel source rect a .Texture command
+// carries in p0/p1 (see Paint_Kind.Texture).
+paint_texture_source :: proc(command: Paint_Command) -> Rect {
+	assert(command.kind == .Texture, "paint_texture_source: not a texture command")
+	return {command.p0.x, command.p0.y, command.p1.x, command.p1.y}
 }
 
 draw_line :: proc(frame: ^Ui_Frame, x0, y0, x1, y1: i32, color: Color) {

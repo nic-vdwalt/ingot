@@ -273,3 +273,12 @@ draw_pigment_block :: proc(surface: ^Surface, rect: Float_Rect, color: Color) {
 draw_chalk_highlight :: proc(surface: ^Surface, rect: Float_Rect, radius: Radius) {
 	surface_draw_chalk_highlight(surface, rect, radius)
 }
+
+draw_texture :: proc(
+	surface: ^Surface,
+	texture: u32,
+	source, dest: Float_Rect,
+	tint: Color = {255, 255, 255, 255},
+) {
+	surface_draw_texture(surface, texture, source, dest, tint)
+}

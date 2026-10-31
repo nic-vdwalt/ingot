@@ -235,19 +235,40 @@
       "validation": "not_recorded"
     },
     {
-      "name": "command_palette",
-      "ui": "foundation",
-      "fit_surface": "absent",
+      "name": "nav_item",
+      "ui": "complete",
+      "fit_surface": "complete",
       "fit_builder": "absent",
       "symbols": [
-        "ui.command_palette_filter"
+        "ui.nav_item_at",
+        "ui.nav_item",
+        "fit.surface_nav_item",
+        "fit.region_nav_item"
+      ],
+      "state_owner": "caller",
+      "tests": [
+        "ui/nav_item_test.odin"
+      ],
+      "example": "examples/gallery/main.odin",
+      "semantics": "Button",
+      "validation": "not_recorded"
+    },
+    {
+      "name": "command_palette",
+      "ui": "complete",
+      "fit_surface": "complete",
+      "fit_builder": "absent",
+      "symbols": [
+        "ui.command_palette_filter",
+        "ui.command_palette_draw",
+        "fit.surface_command_palette"
       ],
       "state_owner": "caller",
       "tests": [
         "ui/command_palette_test.odin"
       ],
-      "example": "",
-      "semantics": "None",
+      "example": "examples/gallery/main.odin",
+      "semantics": "List_Box",
       "validation": "not_recorded"
     },
     {
@@ -338,13 +359,19 @@
     },
     {
       "name": "image",
-      "ui": "absent",
-      "fit_surface": "absent",
+      "ui": "complete",
+      "fit_surface": "complete",
       "fit_builder": "absent",
-      "symbols": [],
+      "symbols": [
+        "ui.draw_texture",
+        "fit.surface_draw_texture"
+      ],
       "state_owner": "caller",
-      "tests": [],
-      "example": "",
+      "tests": [
+        "ui/paint_test.odin",
+        "ui_gfx/paint_test.odin"
+      ],
+      "example": "examples/gallery/showcase.odin",
       "semantics": "None",
       "validation": "not_recorded"
     },

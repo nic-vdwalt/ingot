@@ -128,6 +128,29 @@ offscreen blend model. The selected mode is available through renderer
 diagnostics. Do not globally change batch color math to compensate for a
 platform that exposes only unpremultiplied surface composition.
 
+### Texture paint command
+
+UI code can place any renderer texture inside a widget rectangle with
+`ui.draw_texture(frame, texture_id, source, dest, tint)`, or
+`fit.surface_draw_texture` / `fit.draw_texture`. The id stays opaque to `ui`.
+`ui_gfx` replays the command through `gfx.frame_draw_texture_pro`, which keeps
+it in declaration order with the surrounding UI geometry. Clips, pane origins,
+and z scopes apply to it like any other paint, so a 3D view inside a card
+scrolls with its pane and stays underneath modals and popups.
+
+`source` is measured in texture pixels. The flip rule depends on what produced
+the texture:
+
+- GPU-3D targets (`gpu_3d_target_color_texture(&target).id`) are written
+  upright, so use a positive source height.
+- `BeginTextureMode` render textures follow the convention above, so use a
+  negative source height.
+
+End any GPU-3D pass before pushing the command. `frame_draw_texture_pro`
+asserts that no pass is active. A GPU-3D pass rendered earlier in the same UI
+callback is safe: its submission reaches the queue before the frame's 2D pass.
+`examples/gallery/showcase.odin` uses this pattern.
+
 ## Explicit GPU 3D
 
 Depth attachments are fixed when a render pass begins. `BeginMode3D` therefore

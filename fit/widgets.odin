@@ -177,6 +177,10 @@ Markdown_Result :: struct {
 	link_target:    string,
 }
 Confirm_Choice :: ui.Confirm_Choice
+Command_Palette_Item :: ui.Command_Palette_Item
+Command_Palette_State :: ui.Command_Palette_State
+Command_Palette_Result :: ui.Command_Palette_Result
+Command_Palette_Options :: ui.Command_Palette_Options
 Modal_State :: struct {
 	inner: ui.Modal_State,
 }

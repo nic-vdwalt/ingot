@@ -258,8 +258,10 @@ test_driver_geometry_count :: proc(list: ^ui.Paint_List) -> int {
 	assert(list != nil, "fit test driver: nil paint list")
 	count := 0
 	for index in 0 ..< list.count {
-		kind := list.commands[index].kind
-		if kind != .Text && kind != .Codepoint && kind != .Clip_Begin && kind != .Clip_End {
+		// A texture quad is geometry: it covers pixels exactly as a rectangle does.
+		#partial switch list.commands[index].kind {
+		case .Text, .Codepoint, .Clip_Begin, .Clip_End:
+		case:
 			count += 1
 		}
 	}

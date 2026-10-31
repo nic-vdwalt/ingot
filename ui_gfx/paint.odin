@@ -214,6 +214,14 @@ replay_command :: proc(adapter: ^Adapter, list: ^ui.Paint_List, command: ui.Pain
 		replay_text_command(adapter, list, command)
 	case .Codepoint:
 		replay_codepoint_command(adapter, command)
+	case .Texture:
+		rl.frame_draw_texture_pro(
+			adapter.gfx_frame,
+			rl.Texture2D{id = command.texture},
+			rect_to_gfx(ui.paint_texture_source(command)),
+			rect_to_gfx(command.rect),
+			color,
+		)
 	case .Clip_Begin:
 		replay_clip_begin_command(adapter, command)
 	case .Clip_End:
