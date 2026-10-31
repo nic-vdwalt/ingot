@@ -23,13 +23,14 @@
   <a href="https://openalloy.ai/demos/ingot-gallery/">Open the interactive WebAssembly/WebGPU gallery</a>
 </p>
 
-Ingot is a self-contained immediate-mode framework built on Odin's bundled
-`vendor:wgpu`. One renderer targets macOS/Metal, Windows/D3D12, Linux/Vulkan,
-and browser WASM/WebGPU. GLFW remains the default native host backend; install
-SDL3 and pass `-define:INGOT_GFX_SDL3=true` to select the optional SDL3 host.
+Ingot is a immediate-mode framework built on Odin's bundled
+`vendor:wgpu`. Targeting macOS/Metal, Windows/D3D12, Linux/Vulkan,
+and browser WASM/WebGPU. GLFW is currently the default native host backend, but SDL3 is available with a build flag.
+
+install SDL3 and pass `-define:INGOT_GFX_SDL3=true` to select the optional SDL3 host.
 
 - Native and web builds from one source
-- Immediate-mode UI for desktop tools
+- Immediate-mode UI.
 - Bounded named commands and contextual keyboard shortcuts
 - Bounded raw mouse, touch, and pen events with caller-owned behavior
 - Batched 2D graphics, input, audio, networking, accessibility, and terminals
