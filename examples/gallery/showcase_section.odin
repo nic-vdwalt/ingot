@@ -170,6 +170,13 @@ draw_showcase_controls :: proc(u: ^fit.Region, width: i32) {
 	)
 	_ = fit.region_tab_bar(
 		u,
+		"look",
+		SHOWCASE_LOOK_NAMES,
+		&showcase.look,
+		&showcase.look_motion,
+	)
+	_ = fit.region_tab_bar(
+		u,
 		"lighting",
 		LIGHTING_PRESET_NAMES,
 		&showcase.lighting,
@@ -212,7 +219,7 @@ draw_explore_card :: proc(surface: ^fit.Surface, s: Section, rect: fit.Rect) {
 	if rect.w <= 0 || rect.h <= 0 do return
 	area := fit.Float_Rect{f32(rect.x), f32(rect.y), f32(rect.w), f32(rect.h)}
 	interaction := fit.interact(surface, area)
-	if interaction.clicked do nav_select_section(s)
+	if interaction.clicked do section_pending = s
 	state := fit.Visual_State.Hover if interaction.hovered else .Rest
 	elevation := fit.Elevation.Lifted if interaction.hovered else .Flat
 	fit.draw_surface(surface, area, .Card, state, .MD, .Hairline, elevation)

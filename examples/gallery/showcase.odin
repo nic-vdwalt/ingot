@@ -16,8 +16,6 @@ PLANET_ALBEDO :: #load("assets/planet_albedo.jpg")
 SHOWCASE_TARGET_EDGE_MAX :: 2048
 SHOWCASE_SPEED_DEFAULT :: f32(0.12)
 SHOWCASE_SPEED_MAX :: f32(0.6)
-// Earth's axial tilt reads as "planet" at a glance without explanation.
-SHOWCASE_AXIAL_TILT :: f32(23.4 * math.PI / 180)
 SHOWCASE_PITCH_LIMIT :: f32(1.2)
 SHOWCASE_ZOOM_MIN :: f32(0.55)
 SHOWCASE_ZOOM_MAX :: f32(1.8)
@@ -25,6 +23,15 @@ SHOWCASE_ORBIT_RADIANS_PER_PX :: f32(0.008)
 SHOWCASE_RESUME_DELAY :: f64(1.5)
 SHOWCASE_DOUBLE_CLICK :: f64(0.35)
 SHOWCASE_FOVY :: f32(32)
+// Wheel events closer together than this belong to one gesture. It spans
+// macOS momentum scrolling, which keeps emitting after the fingers lift.
+SHOWCASE_WHEEL_GESTURE_GAP :: f64(0.3)
+// A fixed skew before the spin: a perfectly level ingot reads as a flat slab,
+// so it is rolled about its long axis (ROS Y) and pitched slightly about X.
+SHOWCASE_MODEL_ROLL :: f32(16 * math.PI / 180)
+SHOWCASE_MODEL_PITCH :: f32(9 * math.PI / 180)
+// Yaw offset so the model's front faces the camera at yaw 0.
+SHOWCASE_MODEL_YAW :: f32(math.PI)
 
 Showcase_Load_Error :: enum u8 {
 	None,
@@ -92,8 +99,19 @@ Showcase_State :: struct {
 	auto_rotate:   bool,
 	speed:         f32,
 	lighting:      i32,
+	// Zero when shader creation failed; draws then use the built-in shader.
+	steel:         gfx.Gpu_3D_Shader,
+	look:          i32,
 	resume_at:     f64,
 	last_click_at: f64,
+	// Wheel gesture latch: the owner is decided once, where the gesture
+	// starts, so a page scroll that carries the viewport under the pointer
+	// keeps scrolling instead of turning into a zoom.
+	wheel_last_at: f64,
+	wheel_zoom:    bool,
+	// Hover from the previous frame's viewport hit test; cleared every frame
+	// so it is false whenever the viewport was not drawn.
+	pointer_over:  bool,
 	// Capture builds pin the yaw so stills and sequences are reproducible.
 	fixed_yaw:     Maybe(f32),
 	target_w:      i32,
@@ -101,6 +119,7 @@ Showcase_State :: struct {
 	speed_slider:  fit.Slider_State,
 	toggle_motion: fit.Control_Motion_State,
 	tabs_motion:   fit.Control_Motion_State,
+	look_motion:   fit.Control_Motion_State,
 }
 
 showcase := Showcase_State {
@@ -202,6 +221,11 @@ showcase_init :: proc(state: ^Showcase_State) {
 	}
 	state.target = target
 	state.target_w, state.target_h = 64, 64
+	// A missing steel shader is cosmetic: the zero handle falls back to the
+	// built-in shader, so it is not a load error.
+	if steel, steel_ok := gfx.create_gpu_3d_shader(SHOWCASE_STEEL_SHADER); steel_ok {
+		state.steel = steel
+	}
 }
 
 showcase_destroy :: proc(state: ^Showcase_State) {
@@ -210,7 +234,9 @@ showcase_destroy :: proc(state: ^Showcase_State) {
 	if state.mesh.id != 0 do gfx.destroy_gpu_mesh(&state.mesh)
 	if state.albedo.id != 0 do gfx.UnloadTexture(state.albedo)
 	if state.target.texture.texture.id != 0 do gfx.destroy_gpu_3d_target(&state.target)
+	if state.steel.id != 0 do gfx.destroy_gpu_3d_shader(&state.steel)
 	state.albedo = {}
+	state.steel = {}
 	state.attempted = false
 }
 
@@ -254,9 +280,10 @@ showcase_input :: proc(surface: ^fit.Surface, state: ^Showcase_State, rect: fit.
 		}
 		state.last_click_at = now
 	}
+	state.pointer_over = interaction.hovered
 	if interaction.hovered {
 		wheel := fit.surface_wheel_v(surface)
-		if wheel.y != 0 {
+		if wheel.y != 0 && state.wheel_zoom {
 			state.zoom *= 1 - f32(wheel.y) * 0.08
 			changed = true
 		}
@@ -269,6 +296,21 @@ showcase_input :: proc(surface: ^fit.Surface, state: ^Showcase_State, rect: fit.
 	state.pitch = clamp(state.pitch, -SHOWCASE_PITCH_LIMIT, SHOWCASE_PITCH_LIMIT)
 	state.zoom = clamp(state.zoom, SHOWCASE_ZOOM_MIN, SHOWCASE_ZOOM_MAX)
 	return changed || interaction.held || now < state.resume_at
+}
+
+// showcase_wheel_gesture runs every frame before the content pane opens and
+// reports whether the viewport owns this frame's wheel. A gesture belongs to
+// the viewport only if it began with the pointer over it; the page pane then
+// skips that wheel so the model does not slide away mid-zoom.
+showcase_wheel_gesture :: proc(surface: ^fit.Surface, state: ^Showcase_State) -> bool {
+	assert(surface != nil && state != nil, "showcase_wheel_gesture: nil argument")
+	over := state.pointer_over
+	state.pointer_over = false
+	if fit.surface_wheel_v(surface).y == 0 do return false
+	now := fit.surface_timestamp(surface)
+	if now - state.wheel_last_at > SHOWCASE_WHEEL_GESTURE_GAP do state.wheel_zoom = over
+	state.wheel_last_at = now
+	return state.wheel_zoom
 }
 
 @(private = "file")
@@ -327,11 +369,38 @@ showcase_render :: proc(state: ^Showcase_State) {
 	gfx.set_gpu_3d_light(&pass, LIGHTING_PRESETS[preset].key)
 	gfx.set_gpu_3d_secondary_light(&pass, LIGHTING_PRESETS[preset].rim)
 	center := state.center
+	// Skew first, then spin about world up, so the tilted ingot turns in place
+	// rather than wobbling. The bounding-sphere framing covers any orientation.
 	model :=
-		linalg.matrix4_rotate_f32(SHOWCASE_AXIAL_TILT, {1, 0, 0}) *
-		linalg.matrix4_rotate_f32(state.yaw, {0, 0, 1}) *
+		linalg.matrix4_rotate_f32(state.yaw + SHOWCASE_MODEL_YAW, {0, 0, 1}) *
+		linalg.matrix4_rotate_f32(SHOWCASE_MODEL_ROLL, {0, 1, 0}) *
+		linalg.matrix4_rotate_f32(SHOWCASE_MODEL_PITCH, {1, 0, 0}) *
 		gfx.MatrixTranslate(-center.x, -center.y, -center.z)
-	gfx.draw_gpu_mesh(&pass, state.mesh, model, {color = gfx.WHITE, texture = state.albedo})
+	look := Showcase_Look(clamp(state.look, 0, i32(len(Showcase_Look)) - 1))
+	switch look {
+	case .Textured:
+		gfx.draw_gpu_mesh(&pass, state.mesh, model, {color = gfx.WHITE, texture = state.albedo})
+	case .Steel:
+		rim := STEEL_RIM
+		gfx.draw_gpu_mesh(
+			&pass,
+			state.mesh,
+			model,
+			{
+				style = .Opaque,
+				shader = state.steel,
+				color = showcase_color(STEEL_BASE),
+				color_high = showcase_color(STEEL_POLISH),
+				custom_params = {rim.x, rim.y, rim.z, 0},
+				custom_params_2 = {
+					STEEL_SCALE_CELLS / state.radius,
+					STEEL_HAMMER_CELLS / state.radius,
+					state.info.bounds_min.z,
+					state.info.bounds_max.z,
+				},
+			},
+		)
+	}
 	gfx.end_gpu_3d(&pass)
 }
 

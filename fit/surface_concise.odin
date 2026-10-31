@@ -183,8 +183,9 @@ pane_begin :: proc(
 	padding: i32 = 8,
 	keyboard: bool = true,
 	keyboard_unhovered: bool = false,
+	wheel: bool = true,
 ) -> i32 {
-	return surface_pane_begin(surface, state, rect, padding, keyboard, keyboard_unhovered)
+	return surface_pane_begin(surface, state, rect, padding, keyboard, keyboard_unhovered, wheel)
 }
 
 pane_end :: proc(

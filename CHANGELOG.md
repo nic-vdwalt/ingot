@@ -32,6 +32,12 @@ See the [versioning policy](docs/compatibility.md#versioning-policy).
   always dial fresh. Requests made without a fetcher still send
   `Connection: close`.
 
+- Every `ui.Icon` glyph is redrawn as a uniform-stroke SVG-style outline icon
+  (24-unit viewBox, 2-unit stroke, round caps and joins). The old glyphs mixed
+  filled and stroked shapes at uneven weights. Enum ordinals and call sites
+  are unchanged; icons now emit more paint commands, bounded per icon by
+  `ui.ICON_COMMANDS_MAX`.
+
 ## [0.4.1] - 2026-10-14
 
 Tagged source: `6e87b46bff2f268b0685f9fcd17f5e4837865b49`.

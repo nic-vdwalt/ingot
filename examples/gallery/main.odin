@@ -48,7 +48,6 @@ Section :: enum {
 	Layout,
 	Overlay,
 	Stress,
-	Theme,
 }
 
 SECTION_NAMES := [Section]string {
@@ -61,7 +60,6 @@ SECTION_NAMES := [Section]string {
 	.Layout   = "Layout",
 	.Overlay  = "Overlay",
 	.Stress   = "Stress",
-	.Theme    = "Theme",
 }
 
 SECTION_LAYERS := [Section]string {
@@ -74,7 +72,6 @@ SECTION_LAYERS := [Section]string {
 	.Layout   = "APPLICATION-OWNED GEOMETRY",
 	.Overlay  = "EXPLICIT LIFECYCLE",
 	.Stress   = "APPLICATION-OWNED GEOMETRY",
-	.Theme    = "APPLICATION-OWNED GEOMETRY",
 }
 
 SECTION_AXES := [Section]string {
@@ -87,13 +84,12 @@ SECTION_AXES := [Section]string {
 	.Layout   = "application owns geometry",
 	.Overlay  = "application owns lifecycle",
 	.Stress   = "application owns geometry",
-	.Theme    = "palette and token resolution",
 }
 
 // SECTION_BLURBS is the one-line "what this shows" caption under each
 // section title and on the Showcase explore cards.
 SECTION_BLURBS := [Section]string {
-	.Showcase = "A cooked planet rendered by a GPU-3D pass and composited into UI paint.",
+	.Showcase = "A cooked 3D model rendered by a GPU-3D pass and composited into UI paint.",
 	.Buttons  = "Button styles, icon and back buttons, keyboard focus, collapsible headers.",
 	.Inputs   = "Caret-aware text inputs with undo and pills, combobox, date picker.",
 	.Widgets  = "Toggles, sliders, tabs, progress, spinners, and listboxes.",
@@ -102,7 +98,6 @@ SECTION_BLURBS := [Section]string {
 	.Layout   = "Rows, weights, flex tracks, flow, grids, and vertical cursors.",
 	.Overlay  = "Modals, popups, and docked panels with z-ordered input routing.",
 	.Stress   = "A thousand culled buttons to keep paint and layout cost honest.",
-	.Theme    = "Pigments, surface states, inks, and tokens for every palette.",
 }
 
 SECTION_ICONS := [Section]fit.Icon {
@@ -115,7 +110,6 @@ SECTION_ICONS := [Section]fit.Icon {
 	.Layout   = .Layout_Grid,
 	.Overlay  = .Layers,
 	.Stress   = .Gauge,
-	.Theme    = .Swatch,
 }
 
 // Nav_Group orders the sidebar headings. Sections inside a group keep enum
@@ -146,7 +140,6 @@ SECTION_GROUPS := [Section]Nav_Group {
 	.Layout   = .Composition,
 	.Overlay  = .Composition,
 	.Stress   = .System,
-	.Theme    = .System,
 }
 
 // Sidebar width: an icon column plus the longest section name ("Composition"
@@ -602,6 +595,21 @@ nav_select_section :: proc(s: Section) {
 	assert(section == s, "nav_select_section: section not applied")
 }
 
+// Controls drawn inside the content pane cannot switch section directly:
+// nav_select_section resets the pane, and resetting it between pane_begin and
+// pane_end trips pane_end's "not begun" assertion. They queue the choice here
+// and draw_content applies it once the pane has closed.
+section_pending: Maybe(Section)
+
+nav_apply_pending :: proc(surface: ^fit.Surface) {
+	assert(surface != nil, "nav_apply_pending: nil surface")
+	s, pending := section_pending.?
+	if !pending do return
+	section_pending = nil
+	nav_select_section(s)
+	fit.request_redraw(surface)
+}
+
 // draw_nav renders the section switcher and returns the vertical space it
 // consumed. Wide viewports get the sidebar (0 vertical space, it lives beside
 // the content); narrow ones get a horizontal strip whose height the caller
@@ -967,12 +975,14 @@ draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
 	// Nothing to show: pane_begin asserts non-negative extents, and a zero
 	// pane would still clip and route input for no visible content.
 	if pane_rect.w == 0 || pane_rect.h == 0 do return
+	viewport_wheel := showcase_wheel_gesture(surface, &showcase)
 	y := fit.pane_begin(
 		surface,
 		&content_pane,
 		pane_rect,
 		padding = 14,
 		keyboard = section != .Inputs,
+		wheel = !viewport_wheel,
 	)
 	draw_page_substrate(surface, pane_rect, y, narrow)
 	inset := fit.px(surface, 8 if narrow else 18)
@@ -1019,10 +1029,9 @@ draw_content :: proc(surface: ^fit.Surface, sw, top, sh: i32, narrow: bool) {
 		end_y = draw_overlay_demo(surface, cx, y, cw)
 	case .Stress:
 		end_y = draw_stress(surface, cx, y, cw)
-	case .Theme:
-		end_y = draw_theme_section(surface, cx, y, cw)
 	}
 	fit.pane_end(surface, &content_pane, pane_rect, end_y, padding = 14)
+	nav_apply_pending(surface)
 }
 
 // draw_section_intro is the one header every section shares: icon and title,

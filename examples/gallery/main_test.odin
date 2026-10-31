@@ -207,7 +207,7 @@ gallery_buttons_click_before_keyboard_focus :: proc(t: ^testing.T) {
 @(test)
 nav_strip_respects_scaled_width_and_sidebar_height :: proc(t: ^testing.T) {
 	scales := [?]f32{0.5, 1, 1.5, 2, 3}
-	heights := [?]i32{290, 578, 866, 1154, 1730}
+	heights := [?]i32{274, 546, 818, 1090, 1634}
 	for scale, index in scales {
 		minimum := nav_sidebar_min_height_scale(scale)
 		testing.expect_value(t, minimum, heights[index])
@@ -248,7 +248,7 @@ nav_strip_never_pushes_content_below_zero :: proc(t: ^testing.T) {
 
 @(test)
 gallery_contract_keeps_sections_geometry_and_stress_scale :: proc(t: ^testing.T) {
-	testing.expect_value(t, len(Section), 10)
+	testing.expect_value(t, len(Section), 9)
 	testing.expect_value(t, len(Palette), 10)
 	testing.expect_value(t, palette, Palette.Ingot)
 	testing.expect_value(t, len(SECTION_NAMES), len(Section))
@@ -321,6 +321,7 @@ gallery_explore_test_render :: proc(
 ) -> bool {
 	_ = user_data
 	_ = draw_showcase_explore(surface, rect.x, rect.y, 400)
+	nav_apply_pending(surface)
 	return false
 }
 

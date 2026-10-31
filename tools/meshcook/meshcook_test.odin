@@ -260,3 +260,107 @@ imsh_decode_rejects_truncated_and_corrupted_files :: proc(t: ^testing.T) {
 	out: [3]u32
 	testing.expect_value(t, imsh.decode_indices(corrupt, info, out[:]), imsh.Error.Bad_Index)
 }
+
+@(test)
+test_cooked_normals_follow_cooked_faces :: proc(t: ^testing.T) {
+	near :: proc(a, b: [3]f32) -> bool {
+		return abs(a.x - b.x) < 1e-5 && abs(a.y - b.y) < 1e-5 && abs(a.z - b.z) < 1e-5
+	}
+	{
+		cooked: Cooked
+		defer delete(cooked.vertices)
+		defer delete(cooked.indices)
+		positions := [4][3]f32{{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}}
+		for position in positions {
+			append(&cooked.vertices, imsh.Vertex{position = position, normal = {1, 0, 0}})
+		}
+		append(&cooked.indices, 0, 1, 2, 0, 2, 3)
+		cooked_recompute_normals(&cooked)
+		for vertex in cooked.vertices {
+			testing.expectf(t, near(vertex.normal, {0, 0, 1}), "quad normal %v", vertex.normal)
+		}
+	}
+	{
+		// Vertex 0 joins a large +Z face, a nearly coincident -Z fold and a
+		// small +X face; the sum nearly cancels to roughly +X, so the
+		// largest-face fallback must pick +Z instead.
+		cooked: Cooked
+		defer delete(cooked.vertices)
+		defer delete(cooked.indices)
+		positions := [6][3]f32 {
+			{0, 0, 0},
+			{2, 0, 0},
+			{0, 2, 0},
+			{0, 1.95, 0},
+			{0, 1, 0},
+			{0, 0, 0.5},
+		}
+		for position in positions {
+			append(&cooked.vertices, imsh.Vertex{position = position, normal = {0, 1, 0}})
+		}
+		append(&cooked.indices, 0, 1, 2, 0, 3, 1, 0, 4, 5)
+		cooked_recompute_normals(&cooked)
+		testing.expectf(t, near(cooked.vertices[0].normal, {0, 0, 1}), "fold normal %v", cooked.vertices[0].normal)
+	}
+}
+
+@(private = "file")
+append_test_cube :: proc(src: ^Source, half: f32) {
+	corners := [8][3]f32 {
+		{-half, -half, -half},
+		{half, -half, -half},
+		{half, half, -half},
+		{-half, half, -half},
+		{-half, -half, half},
+		{half, -half, half},
+		{half, half, half},
+		{-half, half, half},
+	}
+	faces := [12][3]u32 {
+		{0, 2, 1},
+		{0, 3, 2},
+		{4, 5, 6},
+		{4, 6, 7},
+		{0, 1, 5},
+		{0, 5, 4},
+		{2, 3, 7},
+		{2, 7, 6},
+		{1, 2, 6},
+		{1, 6, 5},
+		{3, 0, 4},
+		{3, 4, 7},
+	}
+	base := u32(len(src.positions))
+	for corner in corners {
+		append(&src.positions, corner)
+		append(&src.normals, safe_normalize(corner))
+		append(&src.uvs, [2]f32{})
+		append(&src.colors, [3]f32{})
+		append(&src.submesh_of, 0)
+	}
+	for face in faces {
+		append(&src.indices, base + face.x, base + face.y, base + face.z)
+	}
+}
+
+@(test)
+test_source_keep_visible_drops_nested_shell :: proc(t: ^testing.T) {
+	arena: virtual.Arena
+	testing.expect(t, virtual.arena_init_growing(&arena) == nil)
+	defer virtual.arena_destroy(&arena)
+	context.allocator = virtual.arena_allocator(&arena)
+	src: Source
+	append_test_cube(&src, 1)
+	append_test_cube(&src, 0.9)
+	append(&src.submeshes, Source_Submesh{index_offset = 0, index_count = len(src.indices), material = -1})
+	src.bounds_min = {-1, -1, -1}
+	src.bounds_max = {1, 1, 1}
+	removed := source_keep_visible(&src)
+	testing.expect_value(t, removed, 12)
+	testing.expect_value(t, len(src.indices), 36)
+	testing.expect_value(t, len(src.positions), 8)
+	testing.expect_value(t, src.submeshes[0].index_count, 36)
+	for position in src.positions {
+		testing.expect(t, abs(position.x) == 1 && abs(position.y) == 1 && abs(position.z) == 1)
+	}
+}

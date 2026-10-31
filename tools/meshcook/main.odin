@@ -4,12 +4,14 @@
 // Usage:
 //
 //	meshcook <in.glb> <out_dir> [-inspect] [-max-triangles:N] [-max-texture:N]
-//	         [-albedo:<image>] [-name:<stem>]
+//	         [-albedo:<image>] [-name:<stem>] [-keep-hidden]
 //
 // The conversion runs once at cook time so the gallery never parses glTF at
 // runtime (docs/rendering.md: importers convert at the import/cook boundary).
 // stb_image cannot decode WebP, which EXT_texture_webp assets embed, so
 // -albedo accepts a pre-decoded PNG/JPEG of the base-color image instead.
+// Triangles no outside viewer can see are dropped before clustering
+// (visibility.odin); -keep-hidden disables that.
 package meshcook
 
 import "core:fmt"
@@ -31,6 +33,7 @@ Options :: struct {
 	max_texture:   int,
 	albedo:        string,
 	name:          string,
+	keep_hidden:   bool,
 }
 
 parse_arguments :: proc(args: []string) -> (options: Options, ok: bool) {
@@ -42,6 +45,8 @@ parse_arguments :: proc(args: []string) -> (options: Options, ok: bool) {
 		switch {
 		case arg == "-inspect":
 			options.inspect = true
+		case arg == "-keep-hidden":
+			options.keep_hidden = true
 		case strings.has_prefix(arg, "-max-triangles:"):
 			options.max_triangles = strconv.parse_int(arg[len("-max-triangles:"):]) or_return
 		case strings.has_prefix(arg, "-max-texture:"):
@@ -72,7 +77,7 @@ parse_arguments :: proc(args: []string) -> (options: Options, ok: bool) {
 usage :: proc() {
 	fmt.eprintln(
 		"usage: meshcook <in.glb> <out_dir> [-inspect] [-max-triangles:N] " +
-		"[-max-texture:N] [-albedo:<image>] [-name:<stem>]",
+		"[-max-texture:N] [-albedo:<image>] [-name:<stem>] [-keep-hidden]",
 	)
 }
 
@@ -191,6 +196,14 @@ run :: proc(options: Options) -> int {
 		return EXIT_FAILED
 	}
 	textured := len(texture_source) > 0
+	if !options.keep_hidden {
+		removed := source_keep_visible(&src)
+		fmt.printfln(
+			"visible: %d triangles kept, %d hidden removed",
+			len(src.indices) / 3,
+			removed,
+		)
+	}
 	cooked: Cooked
 	if cook_err := cook_mesh(&glb, &src, options.max_triangles, textured, &cooked);
 	   cook_err != .None {

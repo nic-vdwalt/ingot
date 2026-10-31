@@ -188,7 +188,9 @@ pane_reset :: proc(p: ^Pane) {
 // `keyboard` is true and the mouse hovers the pane, PageUp/PageDown/Home/End
 // and Up/Down arrows scroll it - leave it off for panes that host text inputs
 // (their caret owns those keys). `keyboard_unhovered` lets a modal pane that
-// owns the keyboard scroll without the pointer over it. Hit testing for
+// owns the keyboard scroll without the pointer over it. `wheel` false leaves
+// this frame's wheel to a child that has claimed the gesture (a zoomable
+// viewport) so the page does not scroll underneath it. Hit testing for
 // widgets inside the pane is clipped to the pane rect until pane_end.
 pane_begin :: proc(
 	frame: ^Ui_Frame,
@@ -197,6 +199,7 @@ pane_begin :: proc(
 	pad: i32 = 10,
 	keyboard: bool = false,
 	keyboard_unhovered: bool = false,
+	wheel: bool = true,
 ) -> (
 	cursor_y: i32,
 ) {
@@ -212,7 +215,7 @@ pane_begin :: proc(
 	local := frame_to_local(frame, mouse)
 	hovered :=
 		point_in_rect(local, {f32(x), f32(y), f32(w), f32(h)}) && !route_occluded(frame, mouse)
-	if hovered {
+	if hovered && wheel {
 		p.scroll -= get_wheel_move(frame) * f32(ui_frame_sc(frame, 24))
 	}
 	if keyboard && (hovered || keyboard_unhovered) {

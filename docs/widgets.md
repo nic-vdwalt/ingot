@@ -43,7 +43,12 @@ explicit geometry or bounded begin/end protocols:
 - texture paint: `fit.surface_draw_texture` composites a caller-owned GPU
   texture or render target into ordered UI paint
 - icons: `fit.surface_icon` draws any `ui.Icon`, including the navigation and
-  tool glyphs (Globe, Search, Command, Orbit, Sun, and others)
+  tool glyphs (Globe, Search, Command, Orbit, Sun, and others). Every glyph is
+  an SVG-style outline authored in a 24-unit viewBox (Lucide/Feather style):
+  one 2-unit stroke (never thinner than 1.5 logical px), round caps and joins,
+  and no filled shapes beyond Swatch's paint wells. The viewBox spans 80% of
+  the rect's shorter side, and each icon emits at most `ICON_COMMANDS_MAX`
+  paint commands
 - time parsing/formatting helpers
 - color hexadecimal parsing/formatting helpers
 

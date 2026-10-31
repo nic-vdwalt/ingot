@@ -504,6 +504,7 @@ surface_pane_begin :: proc(
 	padding: i32 = 8,
 	keyboard: bool = true,
 	keyboard_unhovered: bool = false,
+	wheel: bool = true,
 ) -> i32 {
 	u := surface_ui(surface)
 	assert(state != nil, "fit.surface_pane_begin: nil state")
@@ -514,6 +515,7 @@ surface_pane_begin :: proc(
 		pad = padding,
 		keyboard = keyboard,
 		keyboard_unhovered = keyboard_unhovered,
+		wheel = wheel,
 	)
 }
 

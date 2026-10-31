@@ -23,7 +23,7 @@ PALETTE_ACTION_LABELS := [Palette_Action]string {
 	.Toggle_Motion   = "Toggle reduced motion",
 	.Open_Scale      = "Open scale settings",
 	.Toggle_Debug    = "Toggle debug overlay (F12)",
-	.Toggle_Rotation = "Pause or resume planet rotation",
+	.Toggle_Rotation = "Pause or resume model rotation",
 }
 
 PALETTE_ACTION_NOTES := [Palette_Action]string {
@@ -39,7 +39,7 @@ PALETTE_ACTION_KEYWORDS := [Palette_Action]string {
 	.Toggle_Motion   = "animation accessibility",
 	.Open_Scale      = "zoom dpi size",
 	.Toggle_Debug    = "metrics fps stats",
-	.Toggle_Rotation = "planet 3d spin showcase",
+	.Toggle_Rotation = "model planet 3d spin showcase",
 }
 
 PALETTE_SECTION_LABELS := [Section]string {
@@ -52,7 +52,6 @@ PALETTE_SECTION_LABELS := [Section]string {
 	.Layout   = "Go to Layout",
 	.Overlay  = "Go to Overlay",
 	.Stress   = "Go to Stress",
-	.Theme    = "Go to Theme",
 }
 
 PALETTE_ITEM_COUNT :: len(Section) + len(Palette_Action)

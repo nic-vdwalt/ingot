@@ -82,12 +82,9 @@ when CAPTURE {
 		{"gallery-buttons-light.png", .Buttons, .Light},
 		{"gallery-inputs-light.png", .Inputs, .Light},
 		{"gallery-stress-dark.png", .Stress, .Dark},
-		{"gallery-theme-terra.png", .Theme, .Terra},
-		{"gallery-theme-pixel.png", .Theme, .Pixel},
 	}
 
-	// The GIF script: every section in order using the default Ingot theme,
-	// then Terra so the motion shows both navigation and branded theming.
+	// The GIF script: every section in order using the default Ingot theme.
 	CAPTURE_SEQUENCE := [?]Capture_Shot {
 		{"", .Showcase, .Ingot},
 		{"", .Buttons, .Ingot},
@@ -98,7 +95,6 @@ when CAPTURE {
 		{"", .Layout, .Ingot},
 		{"", .Overlay, .Ingot},
 		{"", .Stress, .Ingot},
-		{"", .Theme, .Terra},
 	}
 
 	capture_session: fit.Session
