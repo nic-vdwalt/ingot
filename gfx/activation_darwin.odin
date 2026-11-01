@@ -181,6 +181,34 @@ _platform_native_window_focus :: proc(ctx: ^Context) -> (focused, known: bool) {
 	return bool(is_key), true
 }
 
+// _platform_cursor_occluded reports whether another application's window sits
+// under the cursor, such as the Cmd+Shift+4 screenshot overlay. GLFW keeps
+// reporting the cursor position through such windows, while native AppKit
+// views receive no moves there, so input_poll freezes hover while this holds.
+@(private)
+_platform_cursor_occluded :: proc(ctx: ^Context) -> bool {
+	assert(ctx != nil, "_platform_cursor_occluded: nil context")
+	if ctx.win == nil do return false
+	window := cast(^Focus_NS_Window)context_get_window_handle(ctx)
+	if window == nil do return false
+	own := intrinsics.objc_send(NS.Integer, window, "windowNumber")
+	assert(own >= 0, "_platform_cursor_occluded: negative window number")
+	location := intrinsics.objc_send(NS.Point, Focus_NS_Event, "mouseLocation")
+	top := intrinsics.objc_send(
+		NS.Integer,
+		Focus_NS_Window,
+		"windowNumberAtPoint:belowWindowWithWindowNumber:",
+		location,
+		NS.Integer(0),
+	)
+	if top <= 0 || top == own do return false
+	// Windows owned by this process (menus, popups, IME panels) are not
+	// foreign occluders, so hovering them must not freeze the pointer.
+	application := NS.Application_sharedApplication()
+	if application == nil do return true
+	return intrinsics.objc_send(rawptr, application, "windowWithWindowNumber:", top) == nil
+}
+
 @(private)
 _platform_native_window_minimized :: proc(ctx: ^Context) -> bool {
 	if ctx == nil || ctx.win == nil do return false

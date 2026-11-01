@@ -142,7 +142,15 @@ input_poll :: proc(ctx: ^Context) {
 		_input_publish_staged_mouse(inp)
 	} else {
 		mx, my := platform_cursor_pos(ctx)
-		inp.mouse = {f32(mx), f32(my)}
+		// While another application's window covers the cursor (for example
+		// the macOS screenshot overlay), hold the previous position and drop
+		// moves so hover state and redraw activity freeze like native views.
+		if _platform_cursor_occluded(ctx) {
+			inp.mouse = inp.mouse_prev
+			pointer_drop_moves(inp)
+		} else {
+			inp.mouse = {f32(mx), f32(my)}
+		}
 		inp.mouse_delta = {inp.mouse.x - inp.mouse_prev.x, inp.mouse.y - inp.mouse_prev.y}
 	}
 	inp.wheel = inp.wheel_pending

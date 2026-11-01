@@ -42,3 +42,11 @@ _platform_native_window_focus :: proc(ctx: ^Context) -> (focused, known: bool) {
 	focus := win32.GetFocus()
 	return focus == nil || focus == hwnd || bool(win32.IsChild(hwnd, focus)), true
 }
+
+// Windows already stops delivering cursor moves to covered windows, so the
+// pointer is never treated as occluded and behaviour is unchanged.
+@(private)
+_platform_cursor_occluded :: proc(ctx: ^Context) -> bool {
+	assert(ctx != nil, "_platform_cursor_occluded: nil context")
+	return false
+}

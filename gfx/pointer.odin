@@ -97,6 +97,26 @@ pointer_publish_staged :: proc(input: ^Input) {
 	input.st_pointer_events_overflowed = false
 }
 
+// pointer_drop_moves removes published Move events in place, keeping the
+// order of the remaining events. It is used while another application's
+// window covers the cursor, because those moves are not meant for this window
+// and would otherwise keep hover state and redraw activity alive.
+@(private = "package")
+pointer_drop_moves :: proc(input: ^Input) {
+	assert(input != nil, "pointer_drop_moves: nil input")
+	count := input.pointer_event_count
+	assert(count >= 0 && count <= POINTER_EVENTS_MAX, "pointer_drop_moves: invalid count")
+	kept := 0
+	for index in 0 ..< count {
+		event := input.pointer_events[index]
+		if event.kind == .Move do continue
+		input.pointer_events[kept] = event
+		kept += 1
+	}
+	input.pointer_event_count = kept
+	assert(kept <= count, "pointer_drop_moves: count grew")
+}
+
 context_pointer_events :: proc(ctx: ^Context) -> []Pointer_Event {
 	if ctx == nil do return nil
 	assert(
