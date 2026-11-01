@@ -5,6 +5,33 @@ import "base:intrinsics"
 @(require) import "core:fmt"
 import NS "core:sys/darwin/Foundation"
 
+foreign import libproc "system:System"
+
+@(default_calling_convention = "c")
+@(private = "file")
+foreign libproc {
+	proc_listallpids :: proc(buffer: rawptr, buffer_size: i32) -> i32 ---
+	proc_name :: proc(pid: i32, buffer: rawptr, buffer_size: u32) -> i32 ---
+}
+
+@(objc_class = "NSRunningApplication")
+@(private = "file")
+Focus_NS_Running_Application :: struct {
+	using _: intrinsics.objc_object,
+}
+
+@(private = "file")
+SCREENSHOT_UI_BUNDLE :: "com.apple.screencaptureui"
+// The /usr/sbin/screencapture CLI that drives an interactive selection.
+@(private = "file")
+SCREENSHOT_SELECTION_PROCESS :: "screencapture"
+@(private = "file")
+SCREENSHOT_PIDS_MAX :: 4
+@(private = "file")
+PROCESS_PIDS_MAX :: 8192
+@(private = "file")
+PROCESS_NAME_MAX :: 64
+
 INGOT_FOCUS_TRACE :: #config(INGOT_FOCUS_TRACE, false)
 
 @(objc_class = "NSWindow")
@@ -191,6 +218,11 @@ _platform_cursor_occluded :: proc(ctx: ^Context) -> bool {
 	if ctx.win == nil do return false
 	window := cast(^Focus_NS_Window)context_get_window_handle(ctx)
 	if window == nil do return false
+	// The screenshot overlay is invisible to windowNumberAtPoint:, which
+	// reports the window beneath it, so it is detected separately. Its
+	// screencaptureui host lingers after a capture with a full-screen window
+	// still listed on screen, so only the selection CLI's lifetime counts.
+	if _darwin_screenshot_selection_active() do return true
 	own := intrinsics.objc_send(NS.Integer, window, "windowNumber")
 	assert(own >= 0, "_platform_cursor_occluded: negative window number")
 	location := intrinsics.objc_send(NS.Point, Focus_NS_Event, "mouseLocation")
@@ -207,6 +239,73 @@ _platform_cursor_occluded :: proc(ctx: ^Context) -> bool {
 	application := NS.Application_sharedApplication()
 	if application == nil do return true
 	return intrinsics.objc_send(rawptr, application, "windowWithWindowNumber:", top) == nil
+}
+
+// _darwin_screenshot_pids collects the process identifiers of running
+// screencaptureui instances. The system launches it only for a capture and
+// its floating thumbnail, so an empty result keeps the per-frame cost low.
+@(private = "file")
+_darwin_screenshot_pids :: proc(pids: ^[SCREENSHOT_PIDS_MAX]i32) -> int {
+	assert(pids != nil, "_darwin_screenshot_pids: nil output")
+	apps := intrinsics.objc_send(
+		^NS.Array,
+		Focus_NS_Running_Application,
+		"runningApplicationsWithBundleIdentifier:",
+		NS.AT(SCREENSHOT_UI_BUNDLE),
+	)
+	if apps == nil do return 0
+	count := min(int(apps->count()), SCREENSHOT_PIDS_MAX)
+	for index in 0 ..< count {
+		app := apps->object(NS.UInteger(index))
+		pids[index] = intrinsics.objc_send(i32, app, "processIdentifier")
+	}
+	assert(count >= 0 && count <= SCREENSHOT_PIDS_MAX)
+	return count
+}
+
+@(private = "file")
+_darwin_process_pids: [PROCESS_PIDS_MAX]i32
+
+// _darwin_selection_process_alive reports whether the screencapture CLI runs.
+// It lives exactly as long as a selection session, crosshair phase included,
+// whereas its windows only appear once a drag starts.
+@(private = "file")
+_darwin_selection_process_alive :: proc() -> bool {
+	listed := proc_listallpids(&_darwin_process_pids[0], size_of(_darwin_process_pids))
+	if listed <= 0 do return false
+	count := min(int(listed), PROCESS_PIDS_MAX)
+	assert(count > 0 && count <= PROCESS_PIDS_MAX)
+	for index in 0 ..< count {
+		name: [PROCESS_NAME_MAX]u8
+		length := proc_name(_darwin_process_pids[index], &name[0], PROCESS_NAME_MAX)
+		if length <= 0 do continue
+		assert(int(length) <= PROCESS_NAME_MAX)
+		if string(name[:length]) == SCREENSHOT_SELECTION_PROCESS do return true
+	}
+	return false
+}
+
+@(private = "file")
+_darwin_selection_was_active: bool
+
+// _darwin_screenshot_selection_active reports whether a Cmd+Shift+4/5
+// selection is in progress. screencaptureui starts with every session, so the
+// process table is only scanned while it runs, keeping idle frames cheap.
+@(private = "file")
+_darwin_screenshot_selection_active :: proc() -> bool {
+	pool := NS.scoped_autoreleasepool()
+	assert(pool != nil, "_darwin_screenshot_selection_active: no autorelease pool")
+	pids: [SCREENSHOT_PIDS_MAX]i32
+	count := _darwin_screenshot_pids(&pids)
+	assert(count >= 0 && count <= SCREENSHOT_PIDS_MAX)
+	active := count > 0 && _darwin_selection_process_alive()
+	when INGOT_FOCUS_TRACE {
+		if active != _darwin_selection_was_active {
+			fmt.eprintfln("[ingot focus] screenshot selection active=%v", active)
+		}
+	}
+	_darwin_selection_was_active = active
+	return active
 }
 
 @(private)
