@@ -56,6 +56,7 @@ Gfx_Allowed_Globals :: struct {
 // owner must live in Context instead; adding a name here is a review
 // decision, not a fix.
 GFX_ALLOWED_PACKAGE_GLOBALS := [?]Gfx_Allowed_Globals {
+	{"gfx/activation_darwin.odin", {"_darwin_process_pids", "_darwin_selection_was_active"}},
 	{"gfx/audio_native.odin", {"g_audio"}},
 	{"gfx/audio_web.odin", {"g_audio"}},
 	{"gfx/batch.odin", {"BATCH_SHADER"}},

@@ -155,12 +155,15 @@ source_keep_visible :: proc(src: ^Source) -> int {
 		}
 		count := len(kept.indices) - offset
 		if count == 0 do continue
-		append(&kept.submeshes, Source_Submesh {
-			index_offset = offset,
-			index_count = count,
-			material = part.material,
-			has_color = part.has_color,
-		})
+		append(
+			&kept.submeshes,
+			Source_Submesh {
+				index_offset = offset,
+				index_count = count,
+				material = part.material,
+				has_color = part.has_color,
+			},
+		)
 	}
 	removed := (len(src.indices) - len(kept.indices)) / 3
 	if len(kept.indices) == 0 do return 0

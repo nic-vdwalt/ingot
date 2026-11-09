@@ -32,8 +32,8 @@ showcase_color :: proc(rgb: [3]f32) -> gfx.Color {
 
 // SHOWCASE_STEEL_SHADER shades the model as forged steel: the pass's key and
 // rim lights with a Blinn-Phong lobe, a procedural studio reflection, a
-// polished working face, and object-space mill scale and hammer marks so the surface detail turns with
-// the model. Normals are faced toward the viewer, so a flipped triangle
+// polished working face, and object-space mill scale and hammer marks so the
+// surface detail turns with the model. Normals are faced toward the viewer, so a flipped triangle
 // cannot read as a hole. The uniform layout mirrors GPU_3D_SHADER.
 //
 // Inputs: color = base steel, color_high = polished steel, custom_params.rgb
@@ -187,8 +187,9 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let fill = normalize(u.secondary_light_direction.xyz);
     let key_ndl = max(dot(n, key), 0.0);
     let fill_ndl = max(dot(n, fill), 0.0);
-    let key_spec = pow(max(dot(n, normalize(v + key)), 0.0), shininess) * (shininess + 8.0) / 25.0;
-    let fill_spec = pow(max(dot(n, normalize(v + fill)), 0.0), shininess) * (shininess + 8.0) / 25.0;
+    let spec_norm = (shininess + 8.0) / 25.0;
+    let key_spec = pow(max(dot(n, normalize(v + key)), 0.0), shininess) * spec_norm;
+    let fill_spec = pow(max(dot(n, normalize(v + fill)), 0.0), shininess) * spec_norm;
     // Studio reflection: dark floor, bright softbox overhead, a cool horizon.
     let r = reflect(-v, n);
     let blur = roughness * roughness;

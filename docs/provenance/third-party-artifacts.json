@@ -147,6 +147,18 @@
           "sha256": "13f2cb734b2c0c63a47a5aa3d1faab0d06ed5c44e388a2b92dc5688133cbc336"
         }
       ]
+    },
+    {
+      "name": "Gallery README demo GIF",
+      "version": "2026-10-31",
+      "source": "examples/gallery",
+      "build": "scripts/capture-media.sh at native display density within MAX_GIF_BYTES",
+      "artifacts": [
+        {
+          "path": "docs/media/ingot-gallery.gif",
+          "sha256": "395e11a7644e4087292d7f04c96c9b875540a89216decb7109fa7364c8a0551b"
+        }
+      ]
     }
   ]
 }

@@ -168,13 +168,7 @@ draw_showcase_controls :: proc(u: ^fit.Region, width: i32) {
 		min(width, 260),
 		"Rotation speed",
 	)
-	_ = fit.region_tab_bar(
-		u,
-		"look",
-		SHOWCASE_LOOK_NAMES,
-		&showcase.look,
-		&showcase.look_motion,
-	)
+	_ = fit.region_tab_bar(u, "look", SHOWCASE_LOOK_NAMES, &showcase.look, &showcase.look_motion)
 	_ = fit.region_tab_bar(
 		u,
 		"lighting",

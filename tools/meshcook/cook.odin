@@ -552,7 +552,10 @@ cluster_accumulate :: proc(src: ^Source, clusters: ^Cluster_Map) -> []imsh.Verte
 // arbitrary direction; the cooked faces are what the GPU actually shades.
 @(private)
 cooked_recompute_normals :: proc(cooked: ^Cooked) {
-	assert(cooked != nil && len(cooked.indices) % 3 == 0, "cooked_recompute_normals: bad cooked mesh")
+	assert(
+		cooked != nil && len(cooked.indices) % 3 == 0,
+		"cooked_recompute_normals: bad cooked mesh",
+	)
 	// Vertices split only by a uv seam share a bit-identical position, so
 	// keying by exact position keeps seams smooth.
 	slot_of := make(map[[3]f32]int, len(cooked.vertices), context.temp_allocator)

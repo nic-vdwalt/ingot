@@ -187,7 +187,10 @@ cook_is_deterministic_and_respects_budget :: proc(t: ^testing.T) {
 	defer virtual.arena_destroy(&arena)
 	context.allocator = virtual.arena_allocator(&arena)
 
-	// A 64 x 64 grid sphere (8,064 triangles) cooked into a 2,000 budget.
+	// A 64 x 64 grid sphere (8,064 triangles) cooked into a 3,000 budget. The
+	// coarsest grid (COOK_GRID_MIN) still keeps ~2,035, so a tighter budget
+	// would be unreachable rather than a test of the search.
+	budget :: 3000
 	src: Source
 	rings, slices := 64, 64
 	for ring in 0 ..= rings {
@@ -221,9 +224,9 @@ cook_is_deterministic_and_respects_budget :: proc(t: ^testing.T) {
 	src.bounds_max = {1, 1, 1}
 	glb: Glb
 	first, second: Cooked
-	testing.expect_value(t, cook_mesh(&glb, &src, 2000, false, &first), Cook_Error.None)
-	testing.expect_value(t, cook_mesh(&glb, &src, 2000, false, &second), Cook_Error.None)
-	testing.expect(t, len(first.indices) / 3 <= 2000, "triangle budget respected")
+	testing.expect_value(t, cook_mesh(&glb, &src, budget, false, &first), Cook_Error.None)
+	testing.expect_value(t, cook_mesh(&glb, &src, budget, false, &second), Cook_Error.None)
+	testing.expect(t, len(first.indices) / 3 <= budget, "triangle budget respected")
 	for index in first.indices do testing.expect(t, int(index) < len(first.vertices))
 	testing.expect_value(t, len(first.file_bytes), len(second.file_bytes))
 	testing.expect(
@@ -300,7 +303,8 @@ test_cooked_normals_follow_cooked_faces :: proc(t: ^testing.T) {
 		}
 		append(&cooked.indices, 0, 1, 2, 0, 3, 1, 0, 4, 5)
 		cooked_recompute_normals(&cooked)
-		testing.expectf(t, near(cooked.vertices[0].normal, {0, 0, 1}), "fold normal %v", cooked.vertices[0].normal)
+		normal := cooked.vertices[0].normal
+		testing.expectf(t, near(normal, {0, 0, 1}), "fold normal %v", normal)
 	}
 }
 
@@ -352,7 +356,11 @@ test_source_keep_visible_drops_nested_shell :: proc(t: ^testing.T) {
 	src: Source
 	append_test_cube(&src, 1)
 	append_test_cube(&src, 0.9)
-	append(&src.submeshes, Source_Submesh{index_offset = 0, index_count = len(src.indices), material = -1})
+	index_count := len(src.indices)
+	append(
+		&src.submeshes,
+		Source_Submesh{index_offset = 0, index_count = index_count, material = -1},
+	)
 	src.bounds_min = {-1, -1, -1}
 	src.bounds_max = {1, 1, 1}
 	removed := source_keep_visible(&src)
