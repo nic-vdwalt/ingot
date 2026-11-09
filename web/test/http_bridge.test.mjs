@@ -152,13 +152,9 @@ test("streams complete newline-delimited chunks in order", async () => {
 	new Uint8Array(memory.buffer).set(url, 8);
 	const id = http.ingot_http_stream_request(8, url.length, 1024);
 	await settle();
-	assert.equal(http.ingot_http_stream_chunk_len(id), 4);
-	assert.equal(http.ingot_http_stream_chunk_copy(id, 1024, 4), 4);
-	assert.equal(new TextDecoder().decode(new Uint8Array(memory.buffer, 1024, 4)), "one\n");
-	await settle();
-	assert.equal(http.ingot_http_stream_chunk_len(id), 12);
-	assert.equal(http.ingot_http_stream_chunk_copy(id, 1024, 12), 12);
-	assert.equal(new TextDecoder().decode(new Uint8Array(memory.buffer, 1024, 12)), "partial-two\n");
+	assert.equal(http.ingot_http_stream_chunk_len(id), 16);
+	assert.equal(http.ingot_http_stream_chunk_copy(id, 1024, 16), 16);
+	assert.equal(new TextDecoder().decode(new Uint8Array(memory.buffer, 1024, 16)), "one\npartial-two\n");
 	await settle();
 	assert.equal(http.ingot_http_poll(id), 1);
 	assert.equal(http.ingot_http_stream_release(id), 1);

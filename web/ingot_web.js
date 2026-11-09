@@ -111,36 +111,50 @@ let semanticSliderRectsNext = [];
 	function httpImports(wmi) {
 		if (wmi) wasmMemoryInterface = wmi;
 		const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+		const STREAM_READAHEAD_BYTES = 8 * 1024 * 1024;
+		const STREAM_IDLE_TIMEOUT_MS = 120000;
+		const armStreamIdle = (slot) => {
+			if (slot.timeout) clearTimeout(slot.timeout);
+			slot.timeout = setTimeout(() => slot.controller.abort(), STREAM_IDLE_TIMEOUT_MS);
+		};
 		const streamRead = (slot) => {
-			if (!slot || !slot.reader || slot.chunk.length > 0 || slot.state !== 0) return;
+			if (!slot || !slot.reader || slot.reading || slot.state !== 0) return;
+			if (slot.queued >= STREAM_READAHEAD_BYTES) return;
+			slot.reading = true;
 			slot.reader.read().then(({ done, value }) => {
+				slot.reading = false;
+				if (slot.state !== 0) return;
+				armStreamIdle(slot);
 				if (done) {
-					slot.chunk = slot.carry;
+					if (slot.carry.length > 0) {
+						slot.queue.push(slot.carry);
+						slot.queued += slot.carry.length;
+					}
 					slot.carry = new Uint8Array();
 					slot.state = 1;
 					clearTimeout(slot.timeout);
 					return;
 				}
-				if (!(value instanceof Uint8Array) || value.length === 0) {
-					streamRead(slot);
-					return;
+				if (value instanceof Uint8Array && value.length > 0) {
+					if (slot.received > slot.maximumBody - value.length) {
+						throw new Error("response too large");
+					}
+					slot.received += value.length;
+					const merged = new Uint8Array(slot.carry.length + value.length);
+					merged.set(slot.carry);
+					merged.set(value, slot.carry.length);
+					const newline = merged.lastIndexOf(10);
+					if (newline < 0) {
+						slot.carry = merged;
+					} else {
+						slot.queue.push(merged.subarray(0, newline + 1));
+						slot.queued += newline + 1;
+						slot.carry = merged.slice(newline + 1);
+					}
 				}
-				if (slot.received > slot.maximumBody - value.length) {
-					throw new Error("response too large");
-				}
-				slot.received += value.length;
-				const merged = new Uint8Array(slot.carry.length + value.length);
-				merged.set(slot.carry);
-				merged.set(value, slot.carry.length);
-				const newline = merged.lastIndexOf(10);
-				if (newline < 0) {
-					slot.carry = merged;
-					streamRead(slot);
-					return;
-				}
-				slot.chunk = merged.slice(0, newline + 1);
-				slot.carry = merged.slice(newline + 1);
+				streamRead(slot);
 			}).catch(() => {
+				slot.reading = false;
 				slot.state = 2;
 				clearTimeout(slot.timeout);
 			});
@@ -183,12 +197,12 @@ let semanticSliderRectsNext = [];
 				const id = httpSlots.findIndex((slot) => slot === null);
 				if (id < 0 || maximumBody <= 0) return -1;
 				const slot = {
-					state: 0, status: 0, body: new Uint8Array(), chunk: new Uint8Array(),
+					state: 0, status: 0, body: new Uint8Array(), queue: [], queued: 0, reading: false,
 					carry: new Uint8Array(), controller: new AbortController(), reader: null,
 					received: 0, maximumBody, timeout: null,
 				};
 				httpSlots[id] = slot;
-				slot.timeout = setTimeout(() => slot.controller.abort(), 120000);
+				armStreamIdle(slot);
 				fetch(wasmText(urlPointer, urlLength), {
 					method: "GET", credentials: "same-origin", signal: slot.controller.signal,
 				}).then((response) => {
@@ -204,14 +218,23 @@ let semanticSliderRectsNext = [];
 			},
 			ingot_http_stream_chunk_len: (id) => {
 				const slot = httpSlots[id];
-				return slot ? slot.chunk.length : -1;
+				return slot ? slot.queued : -1;
 			},
 			ingot_http_stream_chunk_copy: (id, destination, capacity) => {
 				const slot = httpSlots[id];
-				if (!slot || capacity < slot.chunk.length) return -1;
-				const count = slot.chunk.length;
-				if (count > 0) wasmBytes(destination, count).set(slot.chunk);
-				slot.chunk = new Uint8Array();
+				if (!slot || capacity < slot.queued) return -1;
+				const count = slot.queued;
+				if (count > 0) {
+					const out = wasmBytes(destination, count);
+					let offset = 0;
+					for (const part of slot.queue) {
+						out.set(part, offset);
+						offset += part.length;
+					}
+				}
+				slot.queue = [];
+				slot.queued = 0;
+				if (slot.state === 0) armStreamIdle(slot);
 				streamRead(slot);
 				return count;
 			},
